@@ -1,0 +1,99 @@
+# depslib dependency file v1.0
+1581809833 source:d:\codes\sqlite-gui\main.cpp
+	<string>
+	<map>
+	<windows.h>
+	<commctrl.h>
+	<richedit.h>
+	<stdio.h>
+	<tchar.h>
+	<ctime>
+	"resource.h"
+	"sqlite3.h"
+
+1581809368 d:\codes\sqlite-gui\resource.h
+
+1581809417 source:d:\codes\sqlite-gui\resource.rc
+	<windows.h>
+	<commctrl.h>
+	<richedit.h>
+	"resource.h"
+
+1562796420 d:\codes\sqlite-gui\sqlite3.h
+	<stdarg.h>
+
+1584185004 source:d:\codes\sqlite-gui\src\resource.rc
+	<windows.h>
+	<commctrl.h>
+	<richedit.h>
+	"resource.h"
+
+1584146533 d:\codes\sqlite-gui\src\resource.h
+
+1584059775 source:d:\codes\sqlite-gui\src\prefs.cpp
+	<ctime>
+	"prefs.h"
+	"sqlite3.h"
+
+1583508579 d:\codes\sqlite-gui\src\prefs.h
+	<stdio.h>
+	<windows.h>
+	<tchar.h>
+
+1583506689 d:\codes\sqlite-gui\src\sqlite3.h
+	<stdarg.h>
+
+1584144064 source:d:\codes\sqlite-gui\src\main.cpp
+	"global.h"
+	"resource.h"
+	"prefs.h"
+	"utils.h"
+	"tools.h"
+	"dialogs.h"
+
+1583970008 d:\codes\sqlite-gui\src\main.h
+
+1584107302 d:\codes\sqlite-gui\src\utils.h
+	<tchar.h>
+	<windows.h>
+	"sqlite3.h"
+
+1584106786 source:d:\codes\sqlite-gui\src\utils.cpp
+	<windows.h>
+	<stdio.h>
+	"utils.h"
+
+1584146652 source:d:\codes\sqlite-gui\src\tools.cpp
+	"global.h"
+	"resource.h"
+	"tools.h"
+	"utils.h"
+
+1584133260 d:\codes\sqlite-gui\src\global.h
+	<windows.h>
+	<windowsx.h>
+	<commctrl.h>
+	<richedit.h>
+	<stdio.h>
+	<tchar.h>
+	<ctime>
+	<sys/stat.h>
+	<locale.h>
+	"sqlite3.h"
+
+1584146603 d:\codes\sqlite-gui\src\tools.h
+	<windows.h>
+
+1584124915 d:\codes\sqlite-gui\src\dialogs.h
+	<windows.h>
+
+1584146321 source:d:\codes\sqlite-gui\src\dialogs.cpp
+	"resource.h"
+	"global.h"
+	"prefs.h"
+	"utils.h"
+	"dialogs.h"
+
+1583593229 d:\codes\sqlite-gui\include\sqlite3.h
+	<stdarg.h>
+
