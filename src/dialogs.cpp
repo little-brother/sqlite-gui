@@ -5,6 +5,12 @@
 #include"dialogs.h"
 
 namespace dialogs {
+	WNDPROC cbOldEditDataEdit, cbOldAddTableCell;
+	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("null"), TEXT("blob"), TEXT("json"), 0};
+
 	BOOL CALLBACK cbDlgAdd (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -23,16 +29,23 @@ namespace dialogs {
 
 				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_UPDATE | ENM_KEYEVENTS);
 				SetParent(hAutoComplete, hDlgEditorWnd);
-
 				setEditorFont(hDlgEditorWnd);
-				LoadString(GetModuleHandle(NULL), IDS_CREATE_DDL + type, buf, 255);
-				SetWindowText(hDlgEditorWnd, buf);
 				SetWindowLong(hDlgEditorWnd, GWL_USERDATA, type);
+				ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_SHOW);
+
 				SetFocus(hDlgEditorWnd);
 			}
 			break;
 
 			case WM_COMMAND: {
+				if (wParam == IDC_DLG_EXAMPLE) {
+					HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+					TCHAR buf[1024];
+					int type = GetWindowLong(hDlgEditorWnd, GWL_USERDATA);
+					LoadString(GetModuleHandle(NULL), IDS_CREATE_DDL + type, buf, 1024);
+					SetWindowText(hDlgEditorWnd, buf);
+				}
+
 				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
 					updateHighlighting((HWND)lParam);
 
@@ -80,6 +93,267 @@ namespace dialogs {
 			case WM_CLOSE:
 				EndDialog(hWnd, DLG_CANCEL);
 				break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgAddTable (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+
+				const TCHAR* colNames[] = {TEXT("#"), TEXT("Name"), TEXT("Type"), TEXT("PK"), TEXT("NN"), TEXT("UQ"), TEXT("Default"), TEXT("Check"), 0};
+				int colWidths[] = {30, 145, 60, 30, 30, 30, 0, 0, 0};
+
+				for (int i = 0; colNames[i]; i++) {
+					LVCOLUMN lvc = {0};
+					lvc.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM | LVCF_FMT;
+					lvc.iSubItem = i;
+					lvc.pszText = (TCHAR*)colNames[i];
+					lvc.cchTextMax = _tcslen(colNames[i]) + 1;
+					lvc.cx = colWidths[i];
+					lvc.fmt = colWidths[i] < 80 ? LVCFMT_CENTER : LVCFMT_LEFT;
+					ListView_InsertColumn(hListWnd, i, &lvc);
+				}
+
+				LVCOLUMN lvc = {mask: LVCF_FMT, fmt: LVCFMT_RIGHT};
+				ListView_SetColumn(hListWnd, 0, &lvc);
+
+				SendMessage(hWnd, WMU_ADD_ROW, 0, 0);
+				ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+				if (wParam == IDC_DLG_OK) {
+					int rowCount = ListView_GetItemCount(hListWnd);
+					bool isWithoutRowid = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISWITHOUT_ROWID));
+					int pkCount = 0;
+					TCHAR pk16[1024] = {0};
+					for (int i = 0; i < rowCount; i++) {
+						TCHAR colName16[255];
+						TCHAR isPK[2];
+						ListView_GetItemText(hListWnd, i, 1, colName16, 255);
+						ListView_GetItemText(hListWnd, i, 3, isPK, 2);
+						if (_tcslen(colName16) > 0 && _tcslen(isPK)) {
+							if (_tcslen(pk16))
+								_tcscat(pk16, TEXT("\",\""));
+							_tcscat(pk16, colName16);
+							pkCount++;
+						}
+					}
+
+					TCHAR columns16[MAX_QUERY_LENGTH] = {0};
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						TCHAR* row[8] = {0};
+						for (int colNo = 0; colNo < 8; colNo++) {
+							row[colNo] = new TCHAR[512]{0};
+							ListView_GetItemText(hListWnd, rowNo, colNo, row[colNo], 512);
+						}
+
+						if (!_tcslen(row[1]))
+							continue;
+
+						TCHAR colDefinition16[2048];
+						// name type [NOT NULL] [DEFAULT ...] [CHECK(...)] [PRIMARY KEY] [AUTOINCREMENT] [UNIQUE]
+						_stprintf(colDefinition16, TEXT("\"%s\" %s%s%s%s%s%s%s%s%s%s"),
+							row[1], // name
+							row[2], // type
+							_tcslen(row[4]) ? TEXT(" not null") : TEXT(""),
+							_tcslen(row[6]) ? TEXT(" default \"") : TEXT(""),
+							_tcslen(row[6]) ? row[6] : TEXT(""),
+							_tcslen(row[6]) ? TEXT("\"") : TEXT(""),
+							_tcslen(row[7]) ? TEXT(" check(") : TEXT(""),
+							_tcslen(row[7]) ? row[7] : TEXT(""),
+							_tcslen(row[7]) ? TEXT(")") : TEXT(""),
+							!_tcslen(row[3]) || pkCount > 1 ? TEXT("") : !_tcscmp(TEXT("integer"), row[2]) && !isWithoutRowid ? TEXT(" primary key autoincrement")	: TEXT(" primary key"),
+							_tcslen(row[5]) ? TEXT(" unique") : TEXT("")
+							);
+
+						if (_tcslen(columns16))
+							_tcscat(columns16, TEXT(",\n"));
+						_tcscat(columns16, colDefinition16);
+
+						for (int i = 0; i < 8; i++)
+							delete [] row[i];
+					}
+
+					TCHAR tblName16[255] = {0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, tblName16, 255);
+
+					TCHAR query16[MAX_QUERY_LENGTH] = {0};
+					_stprintf(query16, TEXT("create table \"%s\" (\n%s%s%s%s\n)%s"),
+						tblName16,
+						columns16,
+						pkCount > 1 ? TEXT(", primary key(\"") : TEXT(""),
+						pkCount > 1 ? pk16 : TEXT(""),
+						pkCount > 1 ? TEXT("\")") : TEXT(""),
+						isWithoutRowid ? TEXT(" without rowid") : TEXT("")
+					);
+
+					if(executeCommandQuery(query16))
+						EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+
+				if (wParam == IDC_DLG_MORE) {
+					RECT rc;
+					GetWindowRect(hWnd, &rc);
+					SetWindowPos(hWnd, 0, 0, 0, rc.right - rc.left + 250, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+
+					GetWindowRect(hListWnd, &rc);
+					SetWindowPos(hListWnd, 0, 0, 0, rc.right - rc.left + 250, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+
+					LVCOLUMN lvc = {mask: LVCF_WIDTH, fmt: 0, cx: 125};
+					ListView_SetColumn(hListWnd, 6, &lvc);
+					ListView_SetColumn(hListWnd, 7, &lvc);
+
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_MORE), SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISWITHOUT_ROWID), SW_SHOW);
+				}
+
+				if (wParam == IDC_DLG_ROW_ADD)
+					SendMessage(hWnd, WMU_ADD_ROW, 0, 0);
+
+				if (wParam == IDC_DLG_ROW_DEL) {
+					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+					if (pos != -1) {
+						ListView_DeleteItem(hListWnd, pos);
+						SendMessage(hWnd, WMU_UPDATE_ROWNO, 0, 0);
+						ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+					}
+				}
+
+				if (wParam == IDC_DLG_ROW_UP || wParam == IDC_DLG_ROW_DOWN) {
+					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+					if (pos == -1 || (pos == 0 && wParam == IDC_DLG_ROW_UP) || (pos == ListView_GetItemCount(hListWnd) - 1 && wParam == IDC_DLG_ROW_DOWN))
+						return true;
+
+					pos = wParam == IDC_DLG_ROW_UP ? pos - 1 : pos;
+
+					HWND hHeader = ListView_GetHeader(hListWnd);
+					for (int i = 0; i < Header_GetItemCount(hHeader); i++) {
+						TCHAR buf[255]{0};
+						ListView_GetItemText(hListWnd, pos, i, buf, 255);
+						LVITEM lvi = {0};
+						lvi.mask = LVIF_TEXT;
+						lvi.iItem = pos + 2;
+						lvi.iSubItem = i;
+						lvi.pszText = buf;
+						lvi.cchTextMax = 255;
+						if (i == 0)
+							ListView_InsertItem(hListWnd, &lvi);
+						else
+							ListView_SetItem(hListWnd, &lvi);
+					}
+					ListView_DeleteItem(hListWnd, pos);
+					if (wParam == IDC_DLG_ROW_DOWN)
+						ListView_SetItemState (hListWnd, pos + 1, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+
+					SendMessage(hWnd, WMU_UPDATE_ROWNO, 0, 0);
+				}
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->code == (DWORD)NM_CLICK && pHdr->hwndFrom == GetDlgItem(hWnd, IDC_DLG_COLUMNS)) {
+					HWND hListWnd = pHdr->hwndFrom;
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+
+					if (ia->iItem == -1)
+						return true;
+
+					RECT rect;
+					ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
+					int h = rect.bottom - rect.top;
+					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
+
+					TCHAR buf[1024];
+					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_QUERY_LENGTH);
+
+					if (ia->iSubItem > 0 && w < 60) {
+						ListView_SetItemText(hListWnd, ia->iItem, ia->iSubItem, (TCHAR*)(_tcslen(buf) ? TEXT("") : TEXT("v")));
+						return true;
+					}
+
+					HWND hCell = 0;
+					if (ia->iSubItem == 2) {
+						hCell = CreateWindow(WC_COMBOBOX, buf, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, rect.left, rect.top - 4, w + 18, 200, hListWnd, NULL, GetModuleHandle(0), NULL);
+						ComboBox_AddString(hCell, TEXT(""));
+						for (int i = 0; DATATYPES16[i]; i++)
+							ComboBox_AddString(hCell, DATATYPES16[i]);
+						ComboBox_SetCurSel(hCell, 0);
+					}
+
+					if (ia->iSubItem == 1 || ia->iSubItem == 6 || ia->iSubItem == 7) {
+						hCell = CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | WS_TABSTOP, rect.left, rect.top, w, h - 1, hListWnd, 0, GetModuleHandle(NULL), NULL);
+						int end = GetWindowTextLength(hCell);
+						SendMessage(hCell, EM_SETSEL, end, end);
+					}
+
+					SendMessage(hCell, WM_SETFONT, (LPARAM)hDefFont, true);
+					SetWindowLong(hCell, GWL_USERDATA, MAKELPARAM(ia->iItem, ia->iSubItem));
+					cbOldAddTableCell = (WNDPROC)SetWindowLong(hCell, GWL_WNDPROC, (LONG)cbNewAddTableCell);
+					SetFocus(hCell);
+				}
+
+				if (wParam == IDC_DLG_EDITOR) {
+					MSGFILTER * pF = (MSGFILTER*)lParam;
+					if (pHdr->code == EN_MSGFILTER) { // KEYDOWN
+						if (pF->wParam == VK_RETURN && GetAsyncKeyState(VK_CONTROL)) {
+							PostMessage(hWnd, WM_COMMAND, IDC_DLG_OK, 0);
+							pF->wParam = 0;
+							return true;
+						}
+
+						return processAutoComplete(pF);
+					}
+				}
+			}
+			break;
+
+			case WMU_ADD_ROW: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+
+				LVITEM lvi = {0};
+				lvi.mask = LVIF_TEXT;
+				lvi.iSubItem = 0;
+				lvi.iItem = ListView_GetItemCount(hListWnd);
+				lvi.pszText = (TCHAR*)TEXT("");
+				lvi.cchTextMax = 1;
+				ListView_InsertItem(hListWnd, &lvi);
+				SendMessage(hWnd, WMU_UPDATE_ROWNO, 0, 0);
+			}
+			break;
+
+			case WMU_UPDATE_ROWNO: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+				for (int i = 0; i < ListView_GetItemCount(hListWnd); i++) {
+					TCHAR buf[32];
+					_itot(i + 1, buf, 10);
+					LVITEM lvi = {0};
+					lvi.mask = LVIF_TEXT;
+					lvi.iSubItem = 0;
+					lvi.iItem = i;
+					lvi.pszText = buf;
+					lvi.cchTextMax = 32;
+					ListView_SetItem(hListWnd, &lvi);
+				}
+			}
+			break;
+
+			case WM_DESTROY:
+				SetParent(hAutoComplete, hEditorWnd);
+				break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
 
 		}
 
@@ -102,7 +376,7 @@ namespace dialogs {
 				int type = abs(tv.lParam);
 
 				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				TCHAR buf[65546];
+				TCHAR buf[MAX_QUERY_LENGTH];
 				_stprintf(buf, TEXT("Edit %s \"%s\""), TYPES16[type], name16);
 				SetWindowText(hWnd, buf);
 
@@ -400,40 +674,31 @@ namespace dialogs {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == GetDlgItem(hWnd, IDC_DLG_QUERYLIST)) {
 					HWND hListWnd = pHdr->hwndFrom;
-					POINT p;
-					GetCursorPos(&p);
-					ScreenToClient(hListWnd, &p);
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 
-					LVHITTESTINFO hti;
-					hti.pt.x = p.x;
-					hti.pt.y = p.y;
-					int lResult = ListView_SubItemHitTest (hListWnd, &hti);
+					RECT rect;
+					ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
+					int h = rect.bottom - rect.top;
+					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
 
-					if (lResult!=-1){
-						RECT rect;
-						ListView_GetSubItemRect(hListWnd, hti.iItem, hti.iSubItem, LVIR_BOUNDS, &rect);
-						int h = rect.bottom - rect.top;
-						int w = rect.right - rect.left;
+					TCHAR buf[MAX_QUERY_LENGTH];
+					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_QUERY_LENGTH);
 
-						TCHAR buf[MAX_QUERY_LENGTH];
-						ListView_GetItemText(hListWnd, hti.iItem, hti.iSubItem, buf, MAX_QUERY_LENGTH);
+					bool isRichEdit = GetAsyncKeyState(VK_CONTROL) || _tcslen(buf) > 100 || _tcschr(buf, TEXT('\n'));
+					HWND hEdit = isRichEdit ?
+						CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), buf, WS_CHILD | WS_VISIBLE | ES_WANTRETURN | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL, rect.left, rect.top - 2, 300, 150, hListWnd, 0, GetModuleHandle(NULL), NULL):
+						CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w < 100 ? 100 : w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
 
-						bool isRichEdit = GetAsyncKeyState(VK_CONTROL) || _tcslen(buf) > 100 || _tcschr(buf, TEXT('\n'));
-						HWND hEdit = isRichEdit ?
-							CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), buf, WS_CHILD | WS_VISIBLE | ES_WANTRETURN | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL, rect.left, rect.top - 2, 300, 150, hListWnd, 0, GetModuleHandle(NULL), NULL):
-							CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w < 100 ? 100 : w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
+					SetWindowLong(hEdit, GWL_USERDATA, ia->iSubItem);
+					int end = GetWindowTextLength(hEdit);
+					SendMessage(hEdit, EM_SETSEL, end, end);
+					if (isRichEdit)
+						setEditorFont(hEdit);
+					else
+						SendMessage(hEdit, WM_SETFONT, (LPARAM)hDefFont, true);
+					SetFocus(hEdit);
 
-						SetWindowLong(hEdit, GWL_USERDATA, hti.iSubItem);
-						int end = GetWindowTextLength(hEdit);
-						SendMessage(hEdit, EM_SETSEL, end, end);
-						if (isRichEdit)
-							setEditorFont(hEdit);
-						else
-							SendMessage(hEdit, WM_SETFONT, (LPARAM)hDefFont, true);
-						SetFocus(hEdit);
-
-						cbOldListItemEdit = (WNDPROC)SetWindowLong(hEdit, GWL_WNDPROC, (LONG)cbNewListItemEdit);
-					}
+					cbOldEditDataEdit = (WNDPROC)SetWindowLong(hEdit, GWL_WNDPROC, (LONG)cbNewEditDataEdit);
 				}
 
 				if (pHdr->code == LVN_KEYDOWN && pHdr->hwndFrom == GetDlgItem(hWnd, IDC_DLG_QUERYLIST)) {
@@ -800,11 +1065,8 @@ namespace dialogs {
 				SetWindowText(hWnd, buf);
 
 				HWND hColType = GetDlgItem(hWnd, IDC_DLG_COLTYPE);
-				ComboBox_AddString(hColType, TEXT("INTEGER"));
-				ComboBox_AddString(hColType, TEXT("REAL"));
-				ComboBox_AddString(hColType, TEXT("TEXT"));
-				ComboBox_AddString(hColType, TEXT("NULL"));
-				ComboBox_AddString(hColType, TEXT("BLOB"));
+				for (int i = 0; DATATYPES16[i]; i++)
+					ComboBox_AddString(hColType, DATATYPES16[i]);
 				ComboBox_SetCurSel(hColType, 0);
 			}
 			break;
@@ -943,5 +1205,119 @@ namespace dialogs {
 		}
 
 		return false;
+	}
+
+	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam));
+
+		switch(msg){
+			case WM_KILLFOCUS: {
+				DestroyWindow(hWnd);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					int style = GetWindowLong(hWnd, GWL_STYLE);
+					if((style & ES_MULTILINE) == ES_MULTILINE && GetAsyncKeyState(VK_CONTROL))
+						break;
+
+					HWND hListWnd = GetParent(hWnd);
+					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+					if (pos != -1) {
+						int size = GetWindowTextLength(hWnd);
+						TCHAR* value16 = new TCHAR[size + 1]{0};
+						GetWindowText(hWnd, value16, size + 1);
+
+						TCHAR column16[64];
+						HDITEM hdi = {0};
+						hdi.mask = HDI_TEXT;
+						hdi.pszText = column16;
+						hdi.cchTextMax = 64;
+
+						HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
+						int colNo = GetWindowLong(hWnd, GWL_USERDATA);
+						if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
+							TCHAR query16[256];
+							_stprintf(query16, TEXT("update \"%s\" set %s = ?1 where rowid = ?2"), editTableData16, column16);
+
+							ListView_GetItemText(hListWnd, pos, 0, column16, 64);
+							long rowid =  _tcstol(column16, NULL, 10);
+
+							char* query8 = utils::utf16to8(query16);
+							char* value8 = utils::utf16to8(value16);
+
+							sqlite3_stmt *stmt;
+							if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+								utils::sqlite3_bind_variant(stmt, 1, value8);
+								sqlite3_bind_int64(stmt, 2, rowid);
+
+								if (SQLITE_DONE == sqlite3_step(stmt)) {
+									int iSubItem = GetWindowLong(hWnd, GWL_USERDATA);
+									ListView_SetItemText(hListWnd, pos, iSubItem, value16);
+								}
+							}
+							sqlite3_finalize(stmt);
+
+							delete [] query8;
+							delete [] value8;
+						}
+
+						delete [] value16;
+					}
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+				}
+
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam);
+	}
+
+	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldAddTableCell, hWnd, msg, wParam, lParam));
+
+		switch(msg){
+			case WM_KILLFOCUS: {
+				TCHAR cls[256] = {0};
+				GetClassName(hWnd, cls, 256);
+				if (!_tcscmp(cls, WC_COMBOBOX))
+					SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
+				HWND parent = GetParent(hWnd);
+				DestroyWindow(hWnd);
+
+				InvalidateRect(parent, 0, TRUE);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+				}
+
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WMU_SAVE_DATA: {
+				HWND hListWnd = GetParent(hWnd);
+				LPARAM data = GetWindowLong(hWnd, GWL_USERDATA);
+				int size = GetWindowTextLength(hWnd);
+				TCHAR* value16 = new TCHAR[size + 1]{0};
+				GetWindowText(hWnd, value16, size + 1);
+				ListView_SetItemText(hListWnd, LOWORD(data), HIWORD(data), value16);
+				delete [] value16;
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldAddTableCell, hWnd, msg, wParam, lParam);
 	}
 }

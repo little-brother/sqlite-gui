@@ -6,7 +6,7 @@
 #define IDD_TOOL_EXPORT_CSV        16
 #define IDD_TOOL_EXPORT_SQL        17
 #define IDD_TOOL_IMPORT_CSV        18
-
+#define IDD_ADD_TABLE              19
 
 #define IDA_ACCEL                  77
 
@@ -51,7 +51,14 @@
 #define IDC_DLG_ISUNIQUE           144
 #define IDC_DLG_ISNOTNULL          145
 
+#define IDC_DLG_ROW_ADD            150
+#define IDC_DLG_ROW_DEL            151
+#define IDC_DLG_ROW_UP             152
+#define IDC_DLG_ROW_DOWN           153
+#define IDC_DLG_ISWITHOUT_ROWID      154
+#define IDC_DLG_MORE               155
 
+#define IDC_DLG_EXAMPLE            190
 #define IDC_DLG_OK                 191
 #define IDC_DLG_CANCEL             192
 
@@ -65,11 +72,11 @@
 #define IDC_MENU_VIEW              212
 #define IDC_MENU_INDEX             213
 #define IDC_MENU_TRIGGER           214
+#define IDC_MENU_COLUMN            215
 
 #define IDC_ROW_LABEL              300
 #define IDC_ROW_EDIT               400
 #define IDC_ROW_SWITCH             500
-
 
 #define IDM_OPEN        		   1401
 #define IDM_CLOSE        		   1402
@@ -139,4 +146,8 @@
 #define WM_UPDATE_TABLE_DATA       WM_USER + 2
 #define WM_UPDATE_QUERYLIST        WM_USER + 3
 #define WM_SOURCE_UPDATED          WM_USER + 4
+#define WMU_SAVE_DATA              WM_USER + 5
+#define WMU_ADD_ROW                WM_USER + 6
+#define WMU_UPDATE_ROWNO           WM_USER + 7
+
 

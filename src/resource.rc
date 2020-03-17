@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 0, 9, 0, 0
+FILEVERSION 0, 9, 1, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "0.9.0\000"
+			VALUE "FileVersion", "0.9.1\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "0.9.0\000"
+			VALUE "ProductVersion", "0.9.1\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -29,6 +29,7 @@ IDD_ADDEDIT DIALOGEX 50,50,500,300
  FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL | WS_CHILD,1,1,498,273,WS_EX_STATICEDGE
+	PUSHBUTTON "Example",IDC_DLG_EXAMPLE,5,282,50,14, WS_TABSTOP | NOT WS_VISIBLE
     PUSHBUTTON "Cancel",IDC_DLG_CANCEL,445,282,50,14, WS_TABSTOP
     PUSHBUTTON "Execute",IDC_DLG_OK,390,282,50,14, WS_TABSTOP
 END
@@ -42,6 +43,28 @@ BEGIN
 	LTEXT "ListViewHandle", IDC_DLG_USERDATA, 0,0,0,0, WS_CHILD
 	PUSHBUTTON "OK",IDC_DLG_OK,0,0,60,14, WS_TABSTOP
     PUSHBUTTON "Cancel",IDC_DLG_CANCEL,0,0,60,14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_ADD_TABLE DIALOGEX 50,50,230,200
+ STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME
+ CAPTION "Add table"
+ FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Name", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
+	EDITTEXT IDC_DLG_TABLENAME, 40, 5, 153, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD
+	PUSHBUTTON ">>",IDC_DLG_MORE,200,5,23,14, WS_TABSTOP
+	AUTOCHECKBOX "Without rowid", IDC_DLG_ISWITHOUT_ROWID, 290, 5, 100, 16, BS_NOTIFY | NOT WS_VISIBLE
+
+	CONTROL "", IDC_DLG_COLUMNS, WC_LISTVIEW, WS_VISIBLE | WS_TABSTOP | WS_CHILD | LVS_AUTOARRANGE | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL,5,25, 220, 120, WS_EX_STATICEDGE
+
+	PUSHBUTTON "Add",IDC_DLG_ROW_ADD,5,150,30,14, WS_TABSTOP
+	PUSHBUTTON "Delete",IDC_DLG_ROW_DEL,40,150,30,14, WS_TABSTOP
+	PUSHBUTTON "Up",IDC_DLG_ROW_UP,160,150,30,14, WS_TABSTOP
+	PUSHBUTTON "Down",IDC_DLG_ROW_DOWN,195,150,30,14, WS_TABSTOP
+
+	PUSHBUTTON "OK",IDC_DLG_OK,100,181,60,14, WS_TABSTOP
+    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,165,181,60,14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -232,6 +255,15 @@ BEGIN
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_COLUMN MENU
+BEGIN
+	POPUP "Column"
+	BEGIN
+		MENUITEM "Rename", IDM_RENAME
+	END
+END
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_VIEW MENU
 BEGIN
 	POPUP "View"
@@ -315,10 +347,10 @@ END
 
 STRINGTABLE
 BEGIN
-	IDS_CREATE_TABLE  "create table mytable (\n  ""id"" integer primary key autoincrement,\n  ""name"" text not null,\n  ""salary"" real check(salary > 0)\n)"
+	IDS_CREATE_TABLE  ""
 	IDS_CREATE_VIEW "create view myview\nas\nselect * from mytable"
-	IDS_CREATE_INDEX "create index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
-	IDS_CREATE_TRIGGER "create trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
+	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
+	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
 	IDS_ABOUT "Sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020\nlb.im@ya.ru"
 	IDS_TIPS "* To create a new database, enter the desired name in the ""Open"" dialog\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar\n\n" \
@@ -326,7 +358,7 @@ BEGIN
 		"* Use Tab button to toggle to next result\n\n" \
 		"* Hold Ctrl when click by a cell in Data Edit dialog to edit the value as a multiline text. Use Ctrl + Enter to add new line.\n\n" \
 		"* SQLite supports a limited subset of ALTER. So there is not GUI allows rename/remove/reorder column to an existing table or something like this.\n\n" \
-		"Cons\n* BLOB is unsupported\n* Only utf-8 supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit"
+		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit"
 END
 
 IDI_LOGO ICON "resources/logo.ico"

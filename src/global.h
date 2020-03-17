@@ -19,6 +19,7 @@
 #define VIEW                        2
 #define INDEX                       3
 #define TRIGGER                     4
+#define COLUMN                      5
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -39,7 +40,7 @@ extern sqlite3 *db;
 extern HWND  hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hAutoComplete;
 
 extern HTREEITEM treeItems[5]; // 0 - current
-extern HMENU treeMenus[5]; // 0 - add/refresh menu
+extern HMENU treeMenus[6]; // 0 - add/refresh menu
 extern TCHAR treeEditName[255];
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 
@@ -49,16 +50,7 @@ extern const TCHAR *TYPES16u[5];
 extern const TCHAR *TYPES16p[5];
 
 extern HFONT hDefFont;
-extern WNDPROC cbOldTreeItemEdit, cbOldListItemEdit;
-
-LRESULT CALLBACK cbMainWindow (HWND, UINT, WPARAM, LPARAM);
-
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
-int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-
-LRESULT CALLBACK cbNewTreeItemEdit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK cbNewTreeItemEdit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK cbNewListItemEdit(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 struct ListViewCell {
    HWND hListWnd;
@@ -71,14 +63,12 @@ extern HMENU hEditDataMenu;
 
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
-void updateHighlighting(HWND hEditorWnd);
 
+void updateHighlighting(HWND hEditorWnd);
 bool processAutoComplete(MSGFILTER* pF);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
 TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type);
-
-
 #endif

@@ -5,13 +5,11 @@
 #include "tools.h"
 #include "dialogs.h"
 
-
 const char *TYPES8[5] = {"current", "table", "view", "index", "trigger"};
 const TCHAR *TYPES16[5] = {TEXT("current"), TEXT("table"), TEXT("view"), TEXT("index"), TEXT("trigger")};
 const TCHAR *TYPES16u[5] = {TEXT("CURRENT"), TEXT("TABLE"), TEXT("VIEW"), TEXT("INDEX"), TEXT("TRIGGER")};
 const TCHAR *TYPES16p[5] = {TEXT(""), TEXT("Tables"), TEXT("Views"), TEXT("Indexes"), TEXT("Triggers")};
 const TCHAR *transactionStates[] = {TEXT(" IN TRANSACTION "),TEXT("")};
-
 
 // AutoComplete
 const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), TEXT('\0')};
@@ -27,7 +25,7 @@ char *recents[100] = {0};
 bool isEditorChange = false;
 
 HTREEITEM treeItems[5]; // 0 - current
-HMENU treeMenus[5]; // 0 - add/refresh menu
+HMENU treeMenus[6]; // 0 - add/refresh menu, 5 - column
 TCHAR treeEditName[255];
 TCHAR editTableData16[255]; // filled on DataEdit Dialog
 
@@ -41,7 +39,8 @@ bool isMoveY = false;
 int top = 0;
 
 
-WNDPROC cbOldTreeItemEdit, cbOldListItemEdit;
+WNDPROC cbOldTreeItemEdit;
+LRESULT CALLBACK cbNewTreeItemEdit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 void executeMultiQuery(bool isPlan = false);
 void executeQuery(TCHAR* query);
@@ -54,8 +53,8 @@ void updateTree(int type = 0);
 void updateSizes(bool isPadding = false);
 void updateTransactionState();
 
-
-
+LRESULT CALLBACK cbMainWindow (HWND, UINT, WPARAM, LPARAM);
+int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
 	setlocale(LC_ALL, "");
@@ -116,7 +115,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.1"));
 
     hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -151,6 +150,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_TRIGGER));
 	treeMenus[TRIGGER] = GetSubMenu(hMenu, 0);
+
+	hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_COLUMN));
+	treeMenus[COLUMN] = GetSubMenu(hMenu, 0);
 
 	EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
 	setEditorFont(hEditorWnd);
@@ -295,7 +297,7 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 				ti.hItem = treeItems[0];
 				ti.mask = TVIF_PARAM;
 				TreeView_GetItem(hTreeWnd, &ti);
-				if (ti.lParam)
+				if (ti.lParam) // Root elements have negative values
 					TrackPopupMenu(treeMenus[ti.lParam > 0 ? ti.lParam : 0], TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, x, y, 0, hMainWnd, NULL);
 			}
 		}
@@ -397,7 +399,18 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 				(void)TreeView_EditLabel(hTreeWnd, treeItems[0]);
 
 			if (cmd == IDM_ADD) {
-				int rc = DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgAdd);
+				TV_ITEM tv;
+				tv.mask = TVIF_HANDLE | TVIF_PARAM;
+				tv.hItem = treeItems[0];
+
+				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam)
+					return 0;
+
+				int type = abs(tv.lParam);
+
+				int rc = type == TABLE  ?
+					DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable) :
+					DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgAdd);
 				if (rc != DLG_CANCEL)
 					updateTree(rc);
 			}
@@ -589,24 +602,52 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 				const NMTVDISPINFO * pMi = (LPNMTVDISPINFO)lParam;
 				HWND hEdit = TreeView_GetEditControl(hTreeWnd);
 				cbOldTreeItemEdit = (WNDPROC) SetWindowLongPtr(hEdit, GWL_WNDPROC, (LONG_PTR)&cbNewTreeItemEdit);
+
 				_tcscpy(treeEditName, pMi->item.pszText);
+				SetWindowText(hEdit, _tcstok(pMi->item.pszText, TEXT(":")));
 			}
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == TVN_ENDLABELEDIT) {
-				const NMTVDISPINFO * pMi = (LPNMTVDISPINFO)lParam;
+				NMTVDISPINFO * pMi = (LPNMTVDISPINFO)lParam;
 				int type = pMi->item.lParam;
-				if (pMi->item.pszText != NULL && _tcslen(pMi->item.pszText) > 0) {
-						TCHAR query[32000];
-						if (type > 1) {
-							const TCHAR* ddl = getDDL(treeEditName, pMi->item.lParam);
-							TCHAR* newDdl = utils::replace(ddl, treeEditName, pMi->item.pszText, _tcslen(TEXT("create ")) + _tcslen(TYPES16u[type]));
-							_stprintf(query, TEXT("drop %s \"%s\"; %s;"), TYPES16[type], treeEditName, newDdl);
-							delete [] ddl;
-							delete [] newDdl;
 
-						} else {
-							_stprintf(query, TEXT("alter table \"%s\" rename to \"%s\""), treeEditName, pMi->item.pszText);
-						}
+				if (pMi->item.pszText != NULL && _tcslen(pMi->item.pszText) > 0) {
+					TCHAR query[32000];
+					if (type == COLUMN) {
+						TCHAR tblname16[255];
+						HTREEITEM hParent = TreeView_GetParent(hTreeWnd, treeItems[0]);
+						TVITEM ti;
+						ti.hItem = hParent;
+						ti.mask = TVIF_PARAM | TVIF_TEXT;
+						ti.pszText = tblname16;
+						ti.cchTextMax = 255;
+						TreeView_GetItem(hTreeWnd, &ti);
+						if (ti.lParam != 1)
+							break;
+
+						TCHAR* colname16 = _tcstok(treeEditName, TEXT(":"));
+						colname16 = colname16 ? _tcstok (NULL, TEXT(":")) : 0;
+
+						_stprintf(query, TEXT("alter table \"%s\" rename column \"%s\" to \"%s\""), tblname16, treeEditName, pMi->item.pszText);
+						if (!executeCommandQuery(query))
+							return false;
+
+						TCHAR item16[300] = {0};
+						_stprintf(item16, TEXT("%s:%s"), pMi->item.pszText, colname16);
+						pMi->item.pszText = item16;
+						pMi->item.cchTextMax = _tcslen(item16) + 1;
+						return true;
+					}
+
+					if (type == 1) {
+						_stprintf(query, TEXT("alter table \"%s\" rename to \"%s\""), treeEditName, pMi->item.pszText);
+					} else if (type > 1) {
+						const TCHAR* ddl = getDDL(treeEditName, pMi->item.lParam);
+						TCHAR* newDdl = utils::replace(ddl, treeEditName, pMi->item.pszText, _tcslen(TEXT("create ")) + _tcslen(TYPES16u[type]));
+						_stprintf(query, TEXT("drop %s \"%s\"; %s;"), TYPES16[type], treeEditName, newDdl);
+						delete [] ddl;
+						delete [] newDdl;
+					}
 					return executeCommandQuery(query);
 				} else {
 					return false;
@@ -670,77 +711,6 @@ LRESULT CALLBACK cbNewTreeItemEdit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         return (DLGC_WANTALLKEYS | CallWindowProc(cbOldTreeItemEdit, hwnd, uMsg, wParam, lParam));
 
     return CallWindowProc(cbOldTreeItemEdit, hwnd, uMsg, wParam, lParam);
-}
-
-LRESULT CALLBACK cbNewListItemEdit(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-	if (uMsg == WM_GETDLGCODE)
-		return (DLGC_WANTALLKEYS | CallWindowProc(cbOldListItemEdit, hWnd, uMsg, wParam, lParam));
-
-	switch(uMsg){
-		case WM_KILLFOCUS: {
-			DestroyWindow(hWnd);
-		}
-		break;
-
-		case WM_KEYDOWN: {
-			if (wParam == VK_RETURN) {
-				int style = GetWindowLong(hWnd, GWL_STYLE);
-				if((style & ES_MULTILINE) == ES_MULTILINE && GetAsyncKeyState(VK_CONTROL))
-					break;
-
-				HWND hListWnd = GetParent(hWnd);
-				int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
-				if (pos != -1) {
-					int size = GetWindowTextLength(hWnd);
-					TCHAR* value16 = new TCHAR[size + 1]{0};
-					GetWindowText(hWnd, value16, size + 1);
-
-					TCHAR column16[64];
-					HDITEM hdi = {0};
-					hdi.mask = HDI_TEXT;
-					hdi.pszText = column16;
-					hdi.cchTextMax = 64;
-
-					HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
-					int colNo = GetWindowLong(hWnd, GWL_USERDATA);
-					if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
-						TCHAR query16[256];
-						_stprintf(query16, TEXT("update \"%s\" set %s = ?1 where rowid = ?2"), editTableData16, column16);
-
-						ListView_GetItemText(hListWnd, pos, 0, column16, 64);
-						long rowid =  _tcstol(column16, NULL, 10);
-
-						char* query8 = utils::utf16to8(query16);
-						char* value8 = utils::utf16to8(value16);
-
-						sqlite3_stmt *stmt;
-						if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-							utils::sqlite3_bind_variant(stmt, 1, value8);
-							sqlite3_bind_int64(stmt, 2, rowid);
-
-							if (SQLITE_DONE == sqlite3_step(stmt)) {
-								int iSubItem = GetWindowLong(hWnd, GWL_USERDATA);
-								ListView_SetItemText(hListWnd, pos, iSubItem, value16);
-							}
-						}
-						sqlite3_finalize(stmt);
-
-						delete [] query8;
-						delete [] value8;
-					}
-
-					delete [] value16;
-				}
-				SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-
-			if (wParam == VK_ESCAPE)
-				SendMessage(hWnd, WM_CLOSE, 0, 0);
-		}
-		break;
-	}
-
-	return CallWindowProc(cbOldListItemEdit, hWnd, uMsg, wParam, lParam);
 }
 
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort) {
@@ -1218,7 +1188,7 @@ void updateTree(int type) {
 		if (!_tcscmp(type16, TEXT("table")) || !_tcscmp(type16, TEXT("view"))) {
 			TCHAR* column16 = _tcstok (columns16, TEXT(","));
 			while (column16 != NULL) {
-				TreeView_AddItem(column16, hItem, 0);
+				TreeView_AddItem(column16, hItem, !_tcscmp(type16, TEXT("table")) ? COLUMN : 0);
 				column16 = _tcstok (NULL, TEXT(","));
 			}
 		}
@@ -1466,6 +1436,7 @@ void updateHighlighting(HWND hWnd) {
 					text[pos] != TEXT(';') &&
 					text[pos] != TEXT('(') &&
 					text[pos] != TEXT(')') &&
+					text[pos] != TEXT(',') &&
 					pos < size);
 
 				TCHAR* buf = new TCHAR[pos - start + 1]{0};
