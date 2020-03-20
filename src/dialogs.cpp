@@ -201,19 +201,21 @@ namespace dialogs {
 					EndDialog(hWnd, DLG_CANCEL);
 
 				if (wParam == IDC_DLG_MORE) {
+					HWND hBtn = GetDlgItem(hWnd, IDC_DLG_MORE);
+					bool isOpen = GetWindowLong(hBtn, GWL_USERDATA);
+					SetWindowLong(hBtn, GWL_USERDATA, !isOpen);
+					SetWindowText(hBtn, isOpen ? TEXT(">>") : TEXT("<<"));
+
 					RECT rc;
 					GetWindowRect(hWnd, &rc);
-					SetWindowPos(hWnd, 0, 0, 0, rc.right - rc.left + 250, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+					SetWindowPos(hWnd, 0, 0, 0, rc.right - rc.left + (isOpen ? -250 : 250), rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
 
 					GetWindowRect(hListWnd, &rc);
-					SetWindowPos(hListWnd, 0, 0, 0, rc.right - rc.left + 250, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+					SetWindowPos(hListWnd, 0, 0, 0, rc.right - rc.left + (isOpen ? -250 : 250), rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
 
-					LVCOLUMN lvc = {mask: LVCF_WIDTH, fmt: 0, cx: 125};
+					LVCOLUMN lvc = {mask: LVCF_WIDTH, fmt: 0, cx: + (isOpen ? 0 : 125)};
 					ListView_SetColumn(hListWnd, 6, &lvc);
 					ListView_SetColumn(hListWnd, 7, &lvc);
-
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_MORE), SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISWITHOUT_ROWID), SW_SHOW);
 				}
 
 				if (wParam == IDC_DLG_ROW_ADD)
@@ -370,7 +372,7 @@ namespace dialogs {
 				tv.pszText = name16;
 				tv.cchTextMax = 256;
 
-				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam)
+				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam || tv.lParam == COLUMN)
 					return EndDialog(hWnd, -1);
 
 				int type = abs(tv.lParam);

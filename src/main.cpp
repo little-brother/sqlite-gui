@@ -115,7 +115,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.1"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.2"));
 
     hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -625,15 +625,15 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 						if (ti.lParam != 1)
 							break;
 
-						TCHAR* colname16 = _tcstok(treeEditName, TEXT(":"));
-						colname16 = colname16 ? _tcstok (NULL, TEXT(":")) : 0;
+						TCHAR* colDesc16 = _tcstok(treeEditName, TEXT(":"));
+						colDesc16 = colDesc16 ? _tcstok (NULL, TEXT(":")) : 0;
 
 						_stprintf(query, TEXT("alter table \"%s\" rename column \"%s\" to \"%s\""), tblname16, treeEditName, pMi->item.pszText);
-						if (!executeCommandQuery(query))
+						if (_tcscmp(treeEditName, pMi->item.pszText) && !executeCommandQuery(query))
 							return false;
 
 						TCHAR item16[300] = {0};
-						_stprintf(item16, TEXT("%s:%s"), pMi->item.pszText, colname16);
+						_stprintf(item16, TEXT("%s:%s"), pMi->item.pszText, colDesc16);
 						pMi->item.pszText = item16;
 						pMi->item.cchTextMax = _tcslen(item16) + 1;
 						return true;
@@ -966,7 +966,9 @@ void openDb(const TCHAR* path) {
 					if (isLoad)
 						_tcscat(extensions, TEXT(", "));
 
-					_tcscat(extensions, ffd.cFileName);
+					TCHAR filename16[256]{0};
+					_tsplitpath(ffd.cFileName, NULL, NULL, filename16, NULL);
+					_tcscat(extensions, filename16);
 					isLoad = true;
 				}
 				delete [] file8;
@@ -1394,7 +1396,7 @@ void updateHighlighting(HWND hWnd) {
 	GetWindowText(hWnd, text, size + 1);
 
 	CHARFORMAT cf = {0};
-	cf.cbSize = sizeof(CHARFORMAT2) ;
+	cf.cbSize = sizeof(CHARFORMAT) ;
 	SendMessage(hWnd, EM_GETCHARFORMAT, SCF_DEFAULT, (LPARAM) &cf);
 	cf.dwMask = CFM_COLOR | CFM_BOLD;
 	cf.dwEffects = 0;
@@ -1488,7 +1490,7 @@ void updateHighlighting(HWND hWnd) {
 		from = from < 0 ? 0 : from;
 		to = from > to ? from : to;
 
-		cf.crTextColor = colors[mode] ;
+		cf.crTextColor = colors[mode];
 		cf.dwEffects = mode == 1 ? CFM_BOLD : 0;
 		SendMessage(hWnd, EM_SETSEL, from, to);
 		SendMessage(hWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf);

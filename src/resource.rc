@@ -10,9 +10,9 @@ FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "0.9.1\000"
+			VALUE "FileVersion", "0.9.2\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "0.9.1\000"
+			VALUE "ProductVersion", "0.9.2\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -349,15 +349,15 @@ STRINGTABLE
 BEGIN
 	IDS_CREATE_TABLE  ""
 	IDS_CREATE_VIEW "create view myview\nas\nselect * from mytable"
-	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
-	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
+	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
+	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
 	IDS_ABOUT "Sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020\nlb.im@ya.ru"
 	IDS_TIPS "* To create a new database, enter the desired name in the ""Open"" dialog\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar\n\n" \
 		"* Do you need a new version of sqlite or a standard extension like json1?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Use Tab button to toggle to next result\n\n" \
 		"* Hold Ctrl when click by a cell in Data Edit dialog to edit the value as a multiline text. Use Ctrl + Enter to add new line.\n\n" \
-		"* SQLite supports a limited subset of ALTER. So there is not GUI allows rename/remove/reorder column to an existing table or something like this.\n\n" \
+		"* SQLite supports a limited subset of ALTER. So there is not GUI allows remove/reorder column to an existing table or something like this.\n\n" \
 		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit"
 END
 
