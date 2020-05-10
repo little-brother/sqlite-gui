@@ -678,8 +678,11 @@ namespace dialogs {
 					HWND hListWnd = pHdr->hwndFrom;
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 
+					if (ia->iItem == -1)
+						return SendMessage(hWnd, WM_COMMAND, IDC_DLG_QUERYADD, 0);
+
 					RECT rect;
-					ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
+					int rc = ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
 					int h = rect.bottom - rect.top;
 					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
 
@@ -721,7 +724,6 @@ namespace dialogs {
 			break;
 
 			case WM_COMMAND: {
-
 				if (wParam == IDOK) { // User push Enter
 					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);

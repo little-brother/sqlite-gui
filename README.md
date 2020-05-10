@@ -1,6 +1,10 @@
 Sqlite-gui is an another one GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks](http://www.codeblocks.org/).  
 Recent binaries are available at [Releases page](https://github.com/little-brother/sqlite-gui/releases).
 
+
+If you have any problems, comments or suggestions, just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.
+
+
 ### Features
 * Syntax highlighting and code completion
 * Store an execution history and user gists

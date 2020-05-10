@@ -9,7 +9,7 @@
 	</File>
 	<File name="src\dialogs.cpp" open="1" top="0" tabpos="12" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="7490" topLine="187" />
+			<Cursor1 position="22773" topLine="669" />
 		</Cursor>
 	</File>
 	<File name="src\dialogs.h" open="1" top="0" tabpos="10" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -19,27 +19,17 @@
 	</File>
 	<File name="src\global.h" open="1" top="0" tabpos="11" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="736" topLine="0" />
+			<Cursor1 position="1809" topLine="31" />
 		</Cursor>
 	</File>
-	<File name="src\main.cpp" open="1" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
+	<File name="src\main.cpp" open="1" top="1" tabpos="2" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="35103" topLine="933" />
-		</Cursor>
-	</File>
-	<File name="src\utils.cpp" open="1" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="2680" topLine="110" />
+			<Cursor1 position="6428" topLine="95" />
 		</Cursor>
 	</File>
 	<File name="src\prefs.cpp" open="1" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="47" topLine="0" />
-		</Cursor>
-	</File>
-	<File name="src\utils.h" open="1" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="423" topLine="0" />
 		</Cursor>
 	</File>
 	<File name="src\prefs.h" open="0" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -52,9 +42,9 @@
 			<Cursor1 position="1043" topLine="30" />
 		</Cursor>
 	</File>
-	<File name="src\resource.rc" open="1" top="1" tabpos="3" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+	<File name="src\resource.rc" open="1" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="13121" topLine="320" />
+			<Cursor1 position="385" topLine="45" />
 		</Cursor>
 	</File>
 	<File name="src\tools.cpp" open="1" top="0" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -65,6 +55,16 @@
 	<File name="src\tools.h" open="1" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="389" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="src\utils.cpp" open="1" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2680" topLine="110" />
+		</Cursor>
+	</File>
+	<File name="src\utils.h" open="1" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="423" topLine="0" />
 		</Cursor>
 	</File>
 </CodeBlocks_layout_file>
