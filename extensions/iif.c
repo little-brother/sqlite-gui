@@ -1,3 +1,4 @@
+// Obsolete. Implemented in SQLite 3.32
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <assert.h>
