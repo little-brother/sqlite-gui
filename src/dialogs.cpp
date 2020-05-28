@@ -682,7 +682,7 @@ namespace dialogs {
 						return SendMessage(hWnd, WM_COMMAND, IDC_DLG_QUERYADD, 0);
 
 					RECT rect;
-					int rc = ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
+					ListView_GetSubItemRect(hListWnd, ia->iItem, ia->iSubItem, LVIR_BOUNDS, &rect);
 					int h = rect.bottom - rect.top;
 					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
 
