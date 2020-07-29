@@ -2,6 +2,7 @@
 #include "resource.h"
 #include "tools.h"
 #include "utils.h"
+#include "prefs.h"
 
 namespace tools {
 	const TCHAR* DELIMITERS[5] = {TEXT(";"), TEXT(","), TEXT("\t"), TEXT("|"), TEXT("|||")};
@@ -26,12 +27,12 @@ namespace tools {
 				HWND hDelimiter = GetDlgItem(hWnd, IDC_DLG_DELIMITER);
 				for (int i = 0; i < 5; i++)
 					ComboBox_AddString(hDelimiter, i != 2 ? DELIMITERS[i] : TEXT("Tab"));
-				ComboBox_SetCurSel(hDelimiter, 0);
+				ComboBox_SetCurSel(hDelimiter, prefs::get("csv-export-delimiter"));
 
 				HWND hNewLine = GetDlgItem(hWnd, IDC_DLG_NEWLINE);
 				ComboBox_AddString(hNewLine, TEXT("Windows"));
 				ComboBox_AddString(hNewLine, TEXT("Unix"));
-				ComboBox_SetCurSel(hNewLine, 0);
+				ComboBox_SetCurSel(hNewLine, prefs::get("csv-export-is-unix-line"));
 			}
 			break;
 			case WM_CLOSE:
@@ -54,7 +55,8 @@ namespace tools {
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
 
 					bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
-					const TCHAR* delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
+					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
+					const TCHAR* delimiter16 = DELIMITERS[iDelimiter];
 					bool isUnixNewLine = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_NEWLINE));
 
 					TCHAR sql16[256] = {0};
@@ -64,10 +66,10 @@ namespace tools {
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
 						while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
-							TCHAR* line16 = new TCHAR[MAX_QUERY_LENGTH]{0};
+							TCHAR* line16 = new TCHAR[MAX_TEXT_LENGTH]{0};
 							for(int i = 0; i < sqlite3_column_count(stmt); i++) {
 								if (i != 0)
-									_tcscat(line16, delimiter);
+									_tcscat(line16, delimiter16);
 								TCHAR* value16 = utils::utf8to16(isColumns ? (char *)sqlite3_column_name(stmt, i) : (char *)sqlite3_column_text(stmt, i));
 								_tcscat(line16, value16);
 								delete [] value16;
@@ -81,6 +83,10 @@ namespace tools {
 					sqlite3_finalize(stmt);
 					fclose(f);
 					delete [] sql8;
+
+
+					prefs::set("csv-export-delimiter", iDelimiter);
+					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
 
 					EndDialog(hWnd, DLG_OK);
 				}
@@ -123,7 +129,7 @@ namespace tools {
 					}
 
 					TCHAR path16[MAX_PATH];
-					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0")))
+					if (!utils::saveFile(path16, TEXT("SQL files\0*.sql\0All\0*.*\0")))
 						return true;
 
 					FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));
@@ -184,7 +190,7 @@ namespace tools {
 							if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
 								_ftprintf(f, TEXT("-- %s\r\n"), table16);
 
-								TCHAR header16[MAX_QUERY_LENGTH]{0};
+								TCHAR header16[MAX_TEXT_LENGTH]{0};
 								_stprintf(header16, TEXT("insert into \"%s\" ("), table16);
 
 								int colCount = sqlite3_column_count(stmt);
@@ -198,7 +204,7 @@ namespace tools {
 								_tcscat(header16, TEXT(") values ("));
 
 								while(SQLITE_ROW == sqlite3_step(stmt)) {
-									TCHAR line16[MAX_QUERY_LENGTH]{0};
+									TCHAR line16[MAX_TEXT_LENGTH]{0};
 									_tcscpy(line16, header16);
 
 									for (int i = 0; i < colCount; i++) {
@@ -250,23 +256,26 @@ namespace tools {
 	BOOL CALLBACK cbDlgImportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), BST_CHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), prefs::get("csv-import-is-columns") ? BST_CHECKED : BST_UNCHECKED);
 
 				HWND hDelimiter = GetDlgItem(hWnd, IDC_DLG_DELIMITER);
 				for (int i = 0; i < 5; i++)
 					ComboBox_AddString(hDelimiter, i != 2 ? DELIMITERS[i] : TEXT("Tab"));
-				ComboBox_SetCurSel(hDelimiter, 0);
+				ComboBox_SetCurSel(hDelimiter, prefs::get("csv-import-delimiter"));
 
 				HWND hEncoding = GetDlgItem(hWnd, IDC_DLG_ENCODING);
 				ComboBox_AddString(hEncoding, TEXT("UTF-8")); // CP_UTF8
 				ComboBox_AddString(hEncoding, TEXT("ANSI")); // CP_ACP
-				ComboBox_SetCurSel(hEncoding, 0);
+				ComboBox_SetCurSel(hEncoding, prefs::get("csv-import-encoding"));
 
 				TCHAR name16[256];
 				_tsplitpath((TCHAR*)lParam, NULL, NULL, name16, NULL);
 				for(int i = 0; name16[i]; i++)
 					name16[i] = _totlower(name16[i]);
-				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
+				TCHAR tmpname16[257] = {0};
+				tmpname16[0] = TEXT('$');
+				_tcscat(tmpname16, name16);
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, tmpname16);
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 
 				SendMessage(hWnd, WM_SOURCE_UPDATED, 0, 0);
@@ -359,16 +368,18 @@ namespace tools {
 					SendMessage(hWnd, WM_SOURCE_UPDATED, 0, 0);
 
 				if (wParam == IDC_DLG_OK) {
-					const TCHAR* delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
-					int isUTF8 = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING)) == 0;
+					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
+					const TCHAR* delimiter = DELIMITERS[iDelimiter];
+					int iEncoding = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING));
+					int isUTF8 = iEncoding == 0;
 					bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
 					HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
 					HWND hHeader = ListView_GetHeader(hPreviewWnd);
 					int colCount = Header_GetItemCount(hHeader);
 
 					TCHAR buf16[256]{0};
-					TCHAR create16[MAX_QUERY_LENGTH]{0};
-					TCHAR insert16[MAX_QUERY_LENGTH]{0};
+					TCHAR create16[MAX_TEXT_LENGTH]{0};
+					TCHAR insert16[MAX_TEXT_LENGTH]{0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
 					_stprintf(create16, TEXT("create table \"%s\" ("), buf16);
 					_stprintf(insert16, TEXT("insert into \"%s\" ("), buf16);
@@ -469,10 +480,12 @@ namespace tools {
 					if (isAutoTransaction)
 						sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
 
-					if (rc)
-
+					if (rc) {
+						prefs::set("csv-import-encoding", iEncoding);
+						prefs::set("csv-import-delimiter", iDelimiter);
+						prefs::set("csv-import-is-columns", +isColumns);
 						EndDialog(hWnd, DLG_OK);
-
+					}
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)

@@ -4,7 +4,7 @@
 #define _WIN32_IE	0x0500
 
 #define MAX_RESULT_COUNT 32
-#define MAX_QUERY_LENGTH 32000
+#define MAX_TEXT_LENGTH 32000
 
 #define ACTION_SETDEFFONT           1
 #define ACTION_DESTROY              2

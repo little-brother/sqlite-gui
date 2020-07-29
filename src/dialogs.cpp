@@ -145,7 +145,7 @@ namespace dialogs {
 						}
 					}
 
-					TCHAR columns16[MAX_QUERY_LENGTH] = {0};
+					TCHAR columns16[MAX_TEXT_LENGTH] = {0};
 					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
 						TCHAR* row[8] = {0};
 						for (int colNo = 0; colNo < 8; colNo++) {
@@ -183,7 +183,7 @@ namespace dialogs {
 					TCHAR tblName16[255] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, tblName16, 255);
 
-					TCHAR query16[MAX_QUERY_LENGTH] = {0};
+					TCHAR query16[MAX_TEXT_LENGTH] = {0};
 					_stprintf(query16, TEXT("create table \"%s\" (\n%s%s%s%s\n)%s"),
 						tblName16,
 						columns16,
@@ -276,7 +276,7 @@ namespace dialogs {
 					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
 
 					TCHAR buf[1024];
-					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_QUERY_LENGTH);
+					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_TEXT_LENGTH);
 
 					if (ia->iSubItem > 0 && w < 60) {
 						ListView_SetItemText(hListWnd, ia->iItem, ia->iSubItem, (TCHAR*)(_tcslen(buf) ? TEXT("") : TEXT("v")));
@@ -378,7 +378,7 @@ namespace dialogs {
 				int type = abs(tv.lParam);
 
 				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				TCHAR buf[MAX_QUERY_LENGTH];
+				TCHAR buf[MAX_TEXT_LENGTH];
 				_stprintf(buf, TEXT("Edit %s \"%s\""), TYPES16[type], name16);
 				SetWindowText(hWnd, buf);
 
@@ -460,7 +460,7 @@ namespace dialogs {
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 				SetWindowPos(hWnd, 0, prefs::get("x") + 40, prefs::get("y") + 80, prefs::get("width") - 80, prefs::get("height") - 120,  SWP_NOZORDER);
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
-				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Execution history queries") : TEXT("Gists"));
+				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Gists"));
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				SetFocus(hListWnd);
@@ -511,8 +511,8 @@ namespace dialogs {
 					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
 					if (kd->wVKey == VK_DELETE && pos != -1) {
 						int idx = GetWindowLong(hWnd, GWL_USERDATA);
-						TCHAR query16[MAX_QUERY_LENGTH];
-						ListView_GetItemText(hListWnd, pos, 1, query16, MAX_QUERY_LENGTH);
+						TCHAR query16[MAX_TEXT_LENGTH];
+						ListView_GetItemText(hListWnd, pos, 1, query16, MAX_TEXT_LENGTH);
 
 						char* query8 = utils::utf16to8(query16);
 						prefs::deleteQuery(idx == IDM_HISTORY ? "history" : "gists", query8);
@@ -537,8 +537,8 @@ namespace dialogs {
 					if (iPos == -1)
 						break;
 
-					TCHAR buf[MAX_QUERY_LENGTH];
-					ListView_GetItemText(hListWnd, iPos, 1, buf, MAX_QUERY_LENGTH);
+					TCHAR buf[MAX_TEXT_LENGTH];
+					ListView_GetItemText(hListWnd, iPos, 1, buf, MAX_TEXT_LENGTH);
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)buf);
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)(buf[_tcslen(buf) - 1] != TEXT(';') ? TEXT(";\n") : TEXT("\n")));
 					EndDialog(hWnd, DLG_OK);
@@ -651,7 +651,7 @@ namespace dialogs {
 				char* table8 = utils::utf16to8(editTableData16);
 				char* filter8 = utils::utf16to8(filter16);
 
-				char query8[MAX_QUERY_LENGTH];
+				char query8[MAX_TEXT_LENGTH];
 				sprintf(query8, "select *, rowid rowid from %s %s", table8, filter8 && strlen(filter8) ? filter8 : "1 = 1");
 
 				sqlite3_stmt *stmt;
@@ -686,13 +686,13 @@ namespace dialogs {
 					int h = rect.bottom - rect.top;
 					int w = ListView_GetColumnWidth(hListWnd, ia->iSubItem);
 
-					TCHAR buf[MAX_QUERY_LENGTH];
-					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_QUERY_LENGTH);
+					TCHAR buf[MAX_TEXT_LENGTH];
+					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, MAX_TEXT_LENGTH);
 
 					bool isRichEdit = GetAsyncKeyState(VK_CONTROL) || _tcslen(buf) > 100 || _tcschr(buf, TEXT('\n'));
 					HWND hEdit = isRichEdit ?
 						CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), buf, WS_CHILD | WS_VISIBLE | ES_WANTRETURN | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL, rect.left, rect.top - 2, 300, 150, hListWnd, 0, GetModuleHandle(NULL), NULL):
-						CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w < 100 ? 100 : w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
+						CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
 
 					SetWindowLong(hEdit, GWL_USERDATA, ia->iSubItem);
 					int end = GetWindowTextLength(hEdit);
@@ -847,9 +847,9 @@ namespace dialogs {
 				HWND hListWnd = (HWND)GetWindowLong(GetDlgItem(hWnd, IDC_DLG_USERDATA), GWL_USERDATA);
 				int colCount = HIWORD(GetWindowLong(hWnd, GWL_USERDATA));
 
-				TCHAR val[MAX_QUERY_LENGTH];
+				TCHAR val[MAX_TEXT_LENGTH];
 				for (int i = 0; i < colCount; i++) {
-					ListView_GetItemText(hListWnd, currCell.iItem, i, val, MAX_QUERY_LENGTH);
+					ListView_GetItemText(hListWnd, currCell.iItem, i, val, MAX_TEXT_LENGTH);
 					HWND hEdit = GetDlgItem(hWnd, IDC_ROW_EDIT + i);
 					SetWindowText(hEdit, val);
 				}
@@ -899,7 +899,7 @@ namespace dialogs {
 				if (wParam == IDOK) {
 					int id = GetDlgCtrlID(GetFocus());
 					if (id >= IDC_ROW_EDIT && wParam < IDC_ROW_EDIT + 100)
-						SendMessage(hWnd, WM_NEXTDLGCTL, 0, 0);
+						return GetAsyncKeyState(VK_CONTROL) ? SendMessage(hWnd, WM_COMMAND, IDC_DLG_OK, 0) : SendMessage(hWnd, WM_NEXTDLGCTL, 0, 0);
 				}
 
 				if (wParam == IDC_DLG_OK) {
@@ -947,7 +947,7 @@ namespace dialogs {
 						values8[i] = utils::utf16to8(values16[i]);
 					}
 
-					char* sql8 = new char[MAX_QUERY_LENGTH]{0};
+					char* sql8 = new char[MAX_TEXT_LENGTH]{0};
 					char buf8[256];
 					sprintf(buf8, mode == ROW_ADD ? "insert into \"%s\" (" : "update \"%s\" set ", table8);
 					strcat(sql8, buf8);

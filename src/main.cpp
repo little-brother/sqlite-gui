@@ -20,7 +20,7 @@ const TCHAR *TABLES[1024] = {0};
 sqlite3 *db;
 HWND hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hDialog, hSortingResultWnd, hAutoComplete; // hTab.lParam is current ListView HWND
 HMENU hMainMenu, hDbMenu, hEditorMenu, hResultMenu, hEditDataMenu;
-TCHAR tabTooltips[MAX_RESULT_COUNT][MAX_QUERY_LENGTH];
+TCHAR tabTooltips[MAX_RESULT_COUNT][MAX_TEXT_LENGTH];
 char *recents[100] = {0};
 bool isEditorChange = false;
 
@@ -86,6 +86,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		return EXIT_FAILURE;
 	}
 
+
+
     hMainWnd = CreateWindowEx (0, TEXT("sqlite-gui-class"), TEXT("sqlite-gui"), WS_OVERLAPPEDWINDOW,
 		prefs::get("x"), prefs::get("y"), prefs::get("width"), prefs::get("height"),
 		HWND_DESKTOP, 0, hInstance, NULL);
@@ -115,7 +117,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.4"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.5"));
 
     hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -461,30 +463,47 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
 			// ToDo: Send explicitly LVM_GETITEMTEXT to get text length
 			if (cmd == IDM_RESULT_COPY_CELL) {
-				TCHAR buf[MAX_QUERY_LENGTH];
-				ListView_GetItemText(currCell.hListWnd, currCell.iItem, currCell.iSubItem, buf, MAX_QUERY_LENGTH);
+				TCHAR buf[MAX_TEXT_LENGTH];
+				ListView_GetItemText(currCell.hListWnd, currCell.iItem, currCell.iSubItem, buf, MAX_TEXT_LENGTH);
 				utils::setClipboardText(buf);
 			}
 
-			if (cmd == IDM_RESULT_COPY_ROW) {
+			if (cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT) {
 				HWND hListWnd = currCell.hListWnd;
 				HWND hHeader =  ListView_GetHeader(hListWnd);
 
 				int colCount = (int)SendMessage(hHeader, HDM_GETITEMCOUNT, 0, 0L);
-				int rowCount = ListView_GetSelectedCount(hListWnd);
+				int rowCount = cmd == IDM_RESULT_COPY_ROW ? ListView_GetSelectedCount(hListWnd) : ListView_GetItemCount(hListWnd);
+				int searchNext = cmd == IDM_RESULT_COPY_ROW ? LVNI_SELECTED : LVNI_ALL;
+				const TCHAR* delimiter16 = cmd == IDM_RESULT_COPY_ROW ? tools::DELIMITERS[0] : tools::DELIMITERS[prefs::get("csv-export-delimiter")];
+				const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
 
 				if (colCount && rowCount) {
-					TCHAR *res = new TCHAR[MAX_QUERY_LENGTH * colCount * rowCount]{0};
-					TCHAR buf[MAX_QUERY_LENGTH] = {0};
+					TCHAR *res = new TCHAR[MAX_TEXT_LENGTH * colCount * rowCount]{0};
+					TCHAR buf[MAX_TEXT_LENGTH] = {0};
 					int rowNo = -1;
-					while((rowNo = ListView_GetNextItem(hListWnd, rowNo, LVNI_SELECTED)) != -1) {
+					while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
 						for(int colNo = 0; colNo < colCount; colNo++) {
-							ListView_GetItemText(hListWnd, rowNo, colNo, buf, MAX_QUERY_LENGTH);
+							ListView_GetItemText(hListWnd, rowNo, colNo, buf, MAX_TEXT_LENGTH);
 							_tcscat(res, buf);
-							_tcscat(res, colNo != colCount - 1 ? TEXT("\t") : TEXT("\r\n"));
+							_tcscat(res, colNo != colCount - 1 ? delimiter16 : newLine16);
 						}
 					}
-					utils::setClipboardText(res);
+
+					if (cmd == IDM_RESULT_COPY_ROW)
+						utils::setClipboardText(res);
+
+					TCHAR path16[MAX_PATH] = {0};
+					if (cmd == IDM_RESULT_EXPORT && utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"))) {
+						FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));
+						if (f) {
+							_ftprintf(f, res);
+							fclose(f);
+						} else {
+							MessageBox(hwnd, TEXT("Error to open file"), NULL, MB_OK);
+						}
+					}
+
 					delete [] res;
 				}
 			}
@@ -502,14 +521,14 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
 			if (cmd == IDM_ABOUT) {
-				TCHAR buf[1000];
-				LoadString(GetModuleHandle(NULL), IDS_ABOUT, buf, 1000);
+				TCHAR buf[MAX_TEXT_LENGTH];
+				LoadString(GetModuleHandle(NULL), IDS_ABOUT, buf, MAX_TEXT_LENGTH);
 				MessageBox(hMainWnd, buf, TEXT("About"), MB_OK);
 			}
 
 			if (cmd == IDM_TIPS) {
-				TCHAR buf[1000];
-				LoadString(GetModuleHandle(NULL), IDS_TIPS, buf, 1000);
+				TCHAR buf[MAX_TEXT_LENGTH];
+				LoadString(GetModuleHandle(NULL), IDS_TIPS, buf, MAX_TEXT_LENGTH);
 				MessageBox(hMainWnd, buf, TEXT("Tips"), MB_OK);
 			}
 
@@ -657,7 +676,7 @@ LRESULT CALLBACK cbMainWindow (HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 			if (pHdr->code == TTN_GETDISPINFO) {
 				LPTOOLTIPTEXT pTtt = (LPTOOLTIPTEXT) lParam;
 				if (pTtt->hdr.idFrom < MAX_RESULT_COUNT) {
-					SendMessage(pTtt->hdr.hwndFrom, TTM_SETMAXTIPWIDTH, 0, MAX_QUERY_LENGTH);
+					SendMessage(pTtt->hdr.hwndFrom, TTM_SETMAXTIPWIDTH, 0, MAX_TEXT_LENGTH);
 					pTtt->lpszText = tabTooltips[pTtt->hdr.idFrom];
 				}
 			}

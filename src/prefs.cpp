@@ -5,17 +5,21 @@
 namespace prefs {
 	sqlite3 *db;
 
-	const int ICOUNT = 14;
+	const int ICOUNT = 19;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
-		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename"
+		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename",
+		"csv-export-is-unix-line", "csv-export-delimiter",
+		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns"
 	};
 
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000,
-		1, 1, 1, 1, 0
+		1, 1, 1, 1, 0,
+		0, 0,
+		0, 0, 1
 	};
 
 	int get(const char* name) {
@@ -56,6 +60,7 @@ namespace prefs {
 
 		bool res = SQLITE_OK == sqlite3_step(stmt);
 		sqlite3_finalize(stmt);
+
 		return res;
 	}
 

@@ -115,7 +115,7 @@
 
 #define IDM_RESULT_COPY_CELL       1610
 #define IDM_RESULT_COPY_ROW        1611
-
+#define IDM_RESULT_EXPORT          1612
 
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
