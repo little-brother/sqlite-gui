@@ -66,6 +66,7 @@ void setTreeFont(HWND hWnd);
 
 void updateHighlighting(HWND hEditorWnd);
 bool processAutoComplete(MSGFILTER* pF);
+bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);

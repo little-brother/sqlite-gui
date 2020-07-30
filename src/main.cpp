@@ -53,6 +53,9 @@ void updateTree(int type = 0);
 void updateSizes(bool isPadding = false);
 void updateTransactionState();
 
+WNDPROC cbOldAutoComplete;
+LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 LRESULT CALLBACK cbMainWindow (HWND, UINT, WPARAM, LPARAM);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
@@ -86,8 +89,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		return EXIT_FAILURE;
 	}
 
-
-
     hMainWnd = CreateWindowEx (0, TEXT("sqlite-gui-class"), TEXT("sqlite-gui"), WS_OVERLAPPEDWINDOW,
 		prefs::get("x"), prefs::get("y"), prefs::get("width"), prefs::get("height"),
 		HWND_DESKTOP, 0, hInstance, NULL);
@@ -117,7 +118,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.5"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 0.9.6"));
 
     hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -183,6 +184,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
     SetFocus(hEditorWnd);
 	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hEditorWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
+	cbOldAutoComplete = (WNDPROC)SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
 
 	while (GetMessage(&msg, NULL, 0, 0)) {
 		if (TranslateAccelerator(hMainWnd, hAccel, &msg))
@@ -846,10 +848,10 @@ void executeQuery(TCHAR* query) {
 			SetWindowText(hResultWnd, text);
 			sqlite3_finalize(stmt);
 		} else {
+
 			char *err8 = (char*)sqlite3_errmsg(db);
 			TCHAR* err16 = utils::utf8to16(err8);
 			SetWindowText(hResultWnd, err16);
-			sqlite3_free(err8);
 			delete [] err16;
 		}
 	}
@@ -890,7 +892,6 @@ bool executeCommandQuery(const TCHAR* query) {
 		MessageBox(hMainWnd, err16, TEXT("Error"), MB_OK);
 		delete [] err16;
 	}
-	sqlite3_free(err8);
 	delete [] sql8;
 
 	if (isAutoTransaction)
@@ -1002,7 +1003,7 @@ void openDb(const TCHAR* path) {
 
 	if (!PRAGMAS[0]) {
 		sqlite3_stmt *stmt;
-		int rc = sqlite3_prepare_v2(db, "select 'pragma_' || name || '()' from pragma_pragma_list()", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "select name from pragma_pragma_list()", -1, &stmt, 0);
 		int rowNo = 0;
 		while (rc == SQLITE_OK && SQLITE_ROW == sqlite3_step(stmt)) {
 			PRAGMAS[rowNo] = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
@@ -1391,7 +1392,6 @@ int setListViewData(HWND hListWnd, sqlite3_stmt *stmt) {
 		lvi.cchTextMax = _tcslen(msg16) + 1;
 		ListView_InsertItem(hListWnd, &lvi);
 
-		sqlite3_free(err8);
 		delete [] err16;
 		delete [] msg16;
 	}
@@ -1428,11 +1428,12 @@ void updateHighlighting(HWND hWnd) {
 	int rCount = 0;
 	int mode = 0; // 0 - casual, 1 - keyword, 2 - quotted string, 3 - comment
 	COLORREF colors[4] = {RGB(0, 0, 0), RGB(0, 0, 200), RGB(0, 200, 0), RGB(255,0,0)};
+	TCHAR breakers[] = TEXT(" \"'\n-;:(),=<>");
 
 	while (pos < size) {
 		mode = text[pos] == TEXT('-') && (pos < size - 1) && text[pos + 1] == TEXT('-') ? 3 :
 			text[pos] == TEXT('"') || text[pos] == TEXT('\'') ? 2 :
-			text[pos] == TEXT(';') || text[pos] == TEXT('\n') ? 0 :
+			_tcschr(breakers, text[pos]) ? 0 :
 			1;
 
 		int start = pos;
@@ -1448,17 +1449,7 @@ void updateHighlighting(HWND hWnd) {
 				do {
 					rCount += text[pos] == TEXT('\r');
 					pos++;
-				} while (
-					text[pos] != TEXT(' ') &&
-					text[pos] != TEXT('"') &&
-					text[pos] != TEXT('\'') &&
-					text[pos] != TEXT('\n') &&
-					text[pos] != TEXT('-') &&
-					text[pos] != TEXT(';') &&
-					text[pos] != TEXT('(') &&
-					text[pos] != TEXT(')') &&
-					text[pos] != TEXT(',') &&
-					pos < size);
+				} while (!_tcschr(breakers, text[pos]) && pos < size);
 
 				TCHAR* buf = new TCHAR[pos - start + 1]{0};
 				for(int i = 0; i < pos - start; i++)
@@ -1526,6 +1517,14 @@ bool processAutoComplete(MSGFILTER* pF) {
 	bool isKeyDown = pF->lParam & (1U << 31);
 	HWND hParent = pF->nmhdr.hwndFrom;
 
+	bool res = processAutoComplete(hParent, key, isKeyDown);
+	if (res)
+		pF->wParam = 0; // Stop propagation
+
+	return res;
+}
+
+bool processAutoComplete(HWND hParent, int key, bool isKeyDown) {
 	if (IsWindowVisible(hAutoComplete)) {
 		if (isKeyDown) {
 			if (key == VK_ESCAPE)
@@ -1550,10 +1549,8 @@ bool processAutoComplete(MSGFILTER* pF) {
 			}
 		}
 
-		if (key == VK_ESCAPE || key == VK_UP || key == VK_DOWN || key == VK_RETURN) {
-			pF->wParam = 0; // Stop propagation
+		if (key == VK_ESCAPE || key == VK_UP || key == VK_DOWN || key == VK_RETURN)
 			return true;
-		}
 	}
 
 	if (!isKeyDown)
@@ -1573,12 +1570,10 @@ bool processAutoComplete(MSGFILTER* pF) {
 	TCHAR cbuf[2] = {0}; // next one char
 	TEXTRANGE ctr = {chrg: {cpMin: crPos, cpMax: crPos + 1}, lpstrText: cbuf};
 	SendMessage(hParent, EM_GETTEXTRANGE, 0, (LPARAM)&ctr);
-	if (cbuf[0] != 0 && cbuf[0] != TEXT(' ') && cbuf[0] != TEXT('(') && cbuf[0] != TEXT(')'))
-		return false;
 
-
+	TCHAR breakers[] = TEXT(" \"'\n-;:(),=<>");
 	int start = size;
-	while (start > 0 && buf[start - 1] != TEXT(' ') && buf[start - 1] != TEXT('\n') && buf[start - 1] != TEXT(';') && buf[start - 1] != TEXT('"') && buf[start - 1] != TEXT('\''))
+	while(start > 0 && !_tcschr(breakers, buf[start - 1]))
 		start--;
 
 	TCHAR word[size - start + 1] = {0};
@@ -1595,71 +1590,80 @@ bool processAutoComplete(MSGFILTER* pF) {
 		}
 	};
 
-	if (wLen > 1) {
-		if (word[wLen - 1] == TEXT('.')) { // tablename. or aliasname.
-			word[wLen - 1] = 0;
-			wLen--;
 
-			size_t tLen = GetWindowTextLength(hParent);
-			TCHAR* text = new TCHAR[tLen + 1]{0};
-			GetWindowText(hParent, text, tLen + 1);
+	if (wLen > 1 && word[wLen - 1] == TEXT('.')) { // tablename. or aliasname.
+		word[wLen - 1] = 0;
+		wLen--;
 
-			for (int i = 0; TABLES[i]; i++)	{
-				bool isSuitable = false;
-				isSuitable = _tcslen(TABLES[i]) == wLen && !_tcscmp(TABLES[i], word);
+		size_t tLen = GetWindowTextLength(hParent);
+		TCHAR* text = new TCHAR[tLen + 1]{0};
+		GetWindowText(hParent, text, tLen + 1);
 
-				size_t tbl_aLen = _tcslen(TABLES[i]) + wLen;
-				TCHAR* tbl_a = new TCHAR[tbl_aLen + 1 + 1 + 2] {0};
+		for (int i = 0; TABLES[i]; i++)	{
+			bool isSuitable = false;
+			isSuitable = _tcslen(TABLES[i]) == wLen && !_tcscmp(TABLES[i], word);
 
-				if (!isSuitable) {
-					_stprintf(tbl_a, TEXT("%s %s"), TABLES[i], word); // tablename alias
-					TCHAR* p = _tcsstr(text, tbl_a);
-					isSuitable = p && // found
-						(_tcslen(p) == tLen || (!_istalpha((p - tbl_aLen)[0]) || !_istdigit((p - tbl_aLen)[0]))) &&// not xxxtablename alias
-						(p + tbl_aLen == 0 || (!_istalpha((p + tbl_aLen)[0]) || !_istdigit((p + tbl_aLen)[0]))); // not tablename aliasxxx
-				}
+			size_t tbl_aLen = _tcslen(TABLES[i]) + wLen;
+			TCHAR* tbl_a = new TCHAR[tbl_aLen + 1 + 1 + 2] {0};
 
-				if(!isSuitable) {
-					_stprintf(tbl_a, TEXT("\"%s\" %s"), TABLES[i], word); // "tablename" alias
-					TCHAR* p = _tcsstr(text, tbl_a);
-					isSuitable = p && // found
-						(_tcslen(p) == tLen || (!_istalpha((p - tbl_aLen)[0]) || !_istdigit((p - tbl_aLen)[0]))) &&// not "xxxtablename" alias
-						(p + tbl_aLen == 0 || (!_istalpha((p + tbl_aLen)[0]) || !_istdigit((p + tbl_aLen)[0]))); // not "tablename" aliasxxx
-				}
-				delete [] tbl_a;
-
-
-				if (isSuitable) {
-					char* table8 = utils::utf16to8(TABLES[i]);
-					sqlite3_stmt *stmt;
-					sqlite3_prepare_v2(db, "select name from pragma_table_info(?1) order by cid", -1, &stmt, 0);
-					sqlite3_bind_text(stmt, 1, table8, strlen(table8), SQLITE_TRANSIENT);
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* column16 =  utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
-						int pos = ListBox_AddString(hAutoComplete, column16);
-						ListBox_SetItemData(hAutoComplete, pos, 0);
-						delete [] column16;
-					}
-					sqlite3_finalize(stmt);
-
-					delete [] table8;
-					break;
-				}
+			if (!isSuitable) {
+				_stprintf(tbl_a, TEXT("%s %s"), TABLES[i], word); // tablename alias
+				TCHAR* p = _tcsstr(text, tbl_a);
+				isSuitable = p && // found
+					(_tcslen(p) == tLen || (!_istalpha((p - tbl_aLen)[0]) || !_istdigit((p - tbl_aLen)[0]))) &&// not xxxtablename alias
+					(p + tbl_aLen == 0 || (!_istalpha((p + tbl_aLen)[0]) || !_istdigit((p + tbl_aLen)[0]))); // not tablename aliasxxx
 			}
-		} else {
+
+			if(!isSuitable) {
+				_stprintf(tbl_a, TEXT("\"%s\" %s"), TABLES[i], word); // "tablename" alias
+				TCHAR* p = _tcsstr(text, tbl_a);
+				isSuitable = p && // found
+					(_tcslen(p) == tLen || (!_istalpha((p - tbl_aLen)[0]) || !_istdigit((p - tbl_aLen)[0]))) &&// not "xxxtablename" alias
+					(p + tbl_aLen == 0 || (!_istalpha((p + tbl_aLen)[0]) || !_istdigit((p + tbl_aLen)[0]))); // not "tablename" aliasxxx
+			}
+			delete [] tbl_a;
+
+
+			if (isSuitable) {
+				char* table8 = utils::utf16to8(TABLES[i]);
+				sqlite3_stmt *stmt;
+				sqlite3_prepare_v2(db, "select name from pragma_table_info(?1) order by cid", -1, &stmt, 0);
+				sqlite3_bind_text(stmt, 1, table8, strlen(table8), SQLITE_TRANSIENT);
+				while (SQLITE_ROW == sqlite3_step(stmt)) {
+					TCHAR* column16 =  utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+					int pos = ListBox_AddString(hAutoComplete, column16);
+					ListBox_SetItemData(hAutoComplete, pos, 0);
+					delete [] column16;
+				}
+				sqlite3_finalize(stmt);
+
+				delete [] table8;
+				break;
+			}
+		}
+	}
+
+	TCHAR* b = _tcsstr(buf, TEXT("pragma "));
+	if (b && (_tcslen(b) == 7 + _tcslen(word))) {
+		for (int i = 0; PRAGMAS[i]; i++)
+			addString(hAutoComplete, PRAGMAS[i]);
+	} else if (wLen > 0) {
 			for (int i = 0; TABLES[i]; i++)
 				addString(hAutoComplete, TABLES[i]);
 
 			for (int i = 0; FUNCTIONS[i]; i++)
 				addString(hAutoComplete, FUNCTIONS[i]);
 
-			for (int i = 0; PRAGMAS[i]; i++)
-				addString(hAutoComplete, PRAGMAS[i]);
-
 			for (int i = 0; SQL_KEYWORDS[i]; i++)
 				addString(hAutoComplete, SQL_KEYWORDS[i]);
-		}
+	} else {
+		TCHAR* pFrom = _tcsstr(buf, TEXT("from "));
+		TCHAR* pJoin = _tcsstr(buf, TEXT("join "));
+		if ((pFrom && _tcslen(pFrom) == 5) || (pJoin && _tcslen(pJoin) == 5))
+			for (int i = 0; TABLES[i]; i++)
+				addString(hAutoComplete, TABLES[i]);
 	}
+
 	int h = SendMessage(hAutoComplete, LB_GETITEMHEIGHT, 0, 0);
 	int iCount = ListBox_GetCount(hAutoComplete);
 	RECT rc = {0};
@@ -1670,9 +1674,16 @@ bool processAutoComplete(MSGFILTER* pF) {
 	rc.bottom += GetSystemMetrics(SM_CXEDGE) * 2;
 	SetWindowPos(hAutoComplete, 0, 0, 0, rc.right, rc.bottom > 150 ? 150 : rc.bottom, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-	if (!ShowWindow(hAutoComplete, iCount > 0 ? SW_SHOW : SW_HIDE))
+	ShowWindow(hAutoComplete, iCount > 0 ? SW_SHOW : SW_HIDE);
+	if (iCount)
 		SetWindowPos(hAutoComplete, 0, p.x - 10, p.y + 20, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	ListBox_SetCurSel(hAutoComplete, 0);
 
 	return false;
+}
+
+LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	return (msg == WM_LBUTTONDBLCLK || (msg == WM_KEYUP && wParam == VK_RETURN)) ?
+		processAutoComplete(hEditorWnd, VK_RETURN, true) :
+		CallWindowProc(cbOldAutoComplete, hWnd, msg, wParam, lParam);
 }

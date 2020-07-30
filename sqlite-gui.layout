@@ -9,7 +9,7 @@
 	</File>
 	<File name="src\dialogs.cpp" open="1" top="0" tabpos="12" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="22937" topLine="670" />
+			<Cursor1 position="3352" topLine="1281" />
 		</Cursor>
 	</File>
 	<File name="src\dialogs.h" open="1" top="0" tabpos="10" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -19,12 +19,12 @@
 	</File>
 	<File name="src\global.h" open="1" top="0" tabpos="11" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="1044" topLine="13" />
+			<Cursor1 position="1819" topLine="31" />
 		</Cursor>
 	</File>
-	<File name="src\main.cpp" open="1" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
+	<File name="src\main.cpp" open="1" top="1" tabpos="2" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="7547" topLine="100" />
+			<Cursor1 position="7192" topLine="81" />
 		</Cursor>
 	</File>
 	<File name="src\prefs.cpp" open="1" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -39,17 +39,17 @@
 	</File>
 	<File name="src\resource.h" open="1" top="0" tabpos="5" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="3838" topLine="95" />
+			<Cursor1 position="2879" topLine="62" />
 		</Cursor>
 	</File>
 	<File name="src\resource.rc" open="1" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="14026" topLine="323" />
+			<Cursor1 position="9273" topLine="182" />
 		</Cursor>
 	</File>
-	<File name="src\tools.cpp" open="1" top="1" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+	<File name="src\tools.cpp" open="1" top="0" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="602" topLine="69" />
+			<Cursor1 position="9801" topLine="0" />
 		</Cursor>
 	</File>
 	<File name="src\tools.h" open="1" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -59,7 +59,7 @@
 	</File>
 	<File name="src\utils.cpp" open="1" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="3219" topLine="110" />
+			<Cursor1 position="3516" topLine="110" />
 		</Cursor>
 	</File>
 	<File name="src\utils.h" open="1" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">

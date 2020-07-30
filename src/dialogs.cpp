@@ -775,7 +775,6 @@ namespace dialogs {
 							char *err8 = (char*)sqlite3_errmsg(db);
 							TCHAR* err16 = utils::utf8to16(err8);
 							MessageBox(hMainWnd, err16, TEXT("Error"), MB_OK);
-							sqlite3_free(err8);
 							delete [] err16;
 						}
 						sqlite3_finalize(stmt);
@@ -1037,7 +1036,6 @@ namespace dialogs {
 						TCHAR* err16 = utils::utf8to16(err8);
 						MessageBox(hWnd, err16, NULL, 0);
 						delete [] err16;
-						sqlite3_free(err8);
 					}
 
 					for (int i = 0; i < colCount; i++) {
@@ -1106,7 +1104,6 @@ namespace dialogs {
 						delete [] err16;
 					}
 
-					sqlite3_free(err8);
 					delete [] query8;
 
 					if (isOk) {

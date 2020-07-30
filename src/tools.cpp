@@ -272,10 +272,9 @@ namespace tools {
 				_tsplitpath((TCHAR*)lParam, NULL, NULL, name16, NULL);
 				for(int i = 0; name16[i]; i++)
 					name16[i] = _totlower(name16[i]);
-				TCHAR tmpname16[257] = {0};
-				tmpname16[0] = TEXT('$');
-				_tcscat(tmpname16, name16);
-				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, tmpname16);
+
+				_tcscat(name16, TEXT("_tmp"));
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 
 				SendMessage(hWnd, WM_SOURCE_UPDATED, 0, 0);
@@ -473,7 +472,6 @@ namespace tools {
 						char *err8 = (char*)sqlite3_errmsg(db);
 						TCHAR* err16 = utils::utf8to16(err8);
 						MessageBox(hWnd, err16, NULL, MB_OK);
-						sqlite3_free(err8);
 						delete [] err16;
 					}
 

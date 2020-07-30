@@ -195,7 +195,6 @@ namespace prefs {
 		if (SQLITE_OK != rc) {
 			char *err8 = (char*)sqlite3_errmsg(db);
 			printf("\nERROR: %s\n",err8);
-			sqlite3_free(err8);
 			sqlite3_finalize(stmt);
 			return 0;
 		}
