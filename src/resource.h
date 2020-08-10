@@ -1,12 +1,14 @@
 #define IDD_ADDEDIT                11
-#define IDD_QUERYLIST              12
-#define IDD_ROW                    13
-#define IDD_ADD_COLUMN             14
-#define IDD_SETTINGS               15
-#define IDD_TOOL_EXPORT_CSV        16
-#define IDD_TOOL_EXPORT_SQL        17
-#define IDD_TOOL_IMPORT_CSV        18
-#define IDD_ADD_TABLE              19
+#define IDD_EDITDATA               12
+#define IDD_QUERYLIST              13
+#define IDD_ROW                    14
+#define IDD_ADD_COLUMN             15
+#define IDD_SETTINGS               16
+#define IDD_TOOL_EXPORT_CSV        17
+#define IDD_TOOL_EXPORT_SQL        18
+#define IDD_TOOL_IMPORT_CSV        19
+#define IDD_TOOL_GENERATE_DATA     20
+#define IDD_ADD_TABLE              21
 
 #define IDA_ACCEL                  77
 
@@ -43,6 +45,8 @@
 #define IDC_DLG_RESTORE_EDITOR     127
 #define IDC_DLG_USE_HIGHLIGHT      128
 #define IDC_DLG_USE_LEGACY         129
+#define IDC_DLG_ROW_LIMIT          130
+#define IDC_DLG_EXIT_BY_ESCAPE     131
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141
@@ -55,8 +59,22 @@
 #define IDC_DLG_ROW_DEL            151
 #define IDC_DLG_ROW_UP             152
 #define IDC_DLG_ROW_DOWN           153
-#define IDC_DLG_ISWITHOUT_ROWID      154
+#define IDC_DLG_ISWITHOUT_ROWID    154
 #define IDC_DLG_MORE               155
+
+#define IDC_DLG_GEN_ISTRUNCATE     160
+#define IDC_DLG_GEN_ROW_COUNT      161
+#define IDC_DLG_GEN_COLUMNS        170
+#define IDC_DLG_GEN_COLUMN         171
+#define IDC_DLG_GEN_COLUMN_NAME    172
+#define IDC_DLG_GEN_COLUMN_TYPE    173
+#define IDC_DLG_GEN_OPTION         174
+#define IDC_DLG_GEN_OPTION_LABEL   180
+#define IDC_DLG_GEN_OPTION_START   181
+#define IDC_DLG_GEN_OPTION_END     182
+#define IDC_DLG_GEN_OPTION_TABLE   183
+#define IDC_DLG_GEN_OPTION_COLUMN  184
+#define IDC_DLG_GEN_OPTION_MULTIPLIER  185
 
 #define IDC_DLG_EXAMPLE            190
 #define IDC_DLG_OK                 191
@@ -77,6 +95,7 @@
 #define IDC_ROW_LABEL              300
 #define IDC_ROW_EDIT               400
 #define IDC_ROW_SWITCH             500
+
 
 #define IDM_OPEN        		   1401
 #define IDM_CLOSE        		   1402
@@ -99,12 +118,12 @@
 #define IDM_CHECK_INTEGRITY        1524
 #define IDM_CHECK_FOREIGN_KEY      1525
 #define IDM_VACUUM                 1526
+#define IDM_GENERATE_DATA          1527
 
 #define IDM_HELP                   1530
 #define IDM_ABOUT                  1531
 #define IDM_HOMEPAGE               1532
 #define IDM_TIPS                   1533
-
 
 #define IDM_NEXTRESULT             1590
 
@@ -142,12 +161,18 @@
 #define IDS_ABOUT                  10010
 #define IDS_TIPS                   10011
 
-#define WM_SET_DLG_ROW_DATA        WM_USER + 1
-#define WM_UPDATE_TABLE_DATA       WM_USER + 2
-#define WM_UPDATE_QUERYLIST        WM_USER + 3
-#define WM_SOURCE_UPDATED          WM_USER + 4
+#define IDT_EDIT_DATA              70000
+
+#define WMU_SET_DLG_ROW_DATA       WM_USER + 1
+#define WMU_UPDATE_TABLE_DATA      WM_USER + 2
+#define WMU_UPDATE_QUERYLIST       WM_USER + 3
+#define WMU_SOURCE_UPDATED         WM_USER + 4
 #define WMU_SAVE_DATA              WM_USER + 5
 #define WMU_ADD_ROW                WM_USER + 6
 #define WMU_UPDATE_ROWNO           WM_USER + 7
+#define WMU_TARGET_CHANGED         WM_USER + 8
+#define WMU_TYPE_CHANGED           WM_USER + 9
+#define WMU_REFTABLE_CHANGED       WM_USER + 10
+
 
 

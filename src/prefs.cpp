@@ -5,13 +5,16 @@
 namespace prefs {
 	sqlite3 *db;
 
-	const int ICOUNT = 19;
+	const int ICOUNT = 23;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
 		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename",
 		"csv-export-is-unix-line", "csv-export-delimiter",
-		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns"
+		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
+		"row-limit",
+		"data-generator-row-count", "data-generator-truncate",
+		"exit-by-escape"
 	};
 
 	int ivalues[ICOUNT] = {
@@ -19,7 +22,10 @@ namespace prefs {
 		0, 10, 1000,
 		1, 1, 1, 1, 0,
 		0, 0,
-		0, 0, 1
+		0, 0, 1,
+		0,
+		100, 0,
+		1
 	};
 
 	int get(const char* name) {
@@ -74,6 +80,7 @@ namespace prefs {
 			"create table if not exists recents (path text not null unique, time real not null, primary key (path));" \
 			"create table if not exists history (query text not null unique, time real not null, primary key (query));" \
 			"create table if not exists gists (query text not null unique, time real not null, primary key (query));" \
+			"create table if not exists generators (type text, value text);" \
 			"create unique index if not exists idx_history on history (query);" \
 			"create unique index if not exists idx_gists on gists (query);" \
 			"commit;" \
@@ -83,7 +90,7 @@ namespace prefs {
 			return false;
 
 		sqlite3_stmt * stmt;
-		if (SQLITE_OK != sqlite3_prepare(db, "select name, value from prefs where value  GLOB '*[0-9]*'", -1, &stmt, 0)) {
+		if (SQLITE_OK != sqlite3_prepare(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
 			sqlite3_finalize(stmt);
 			return false;
 		}

@@ -33,6 +33,8 @@ namespace tools {
 				ComboBox_AddString(hNewLine, TEXT("Windows"));
 				ComboBox_AddString(hNewLine, TEXT("Unix"));
 				ComboBox_SetCurSel(hNewLine, prefs::get("csv-export-is-unix-line"));
+
+				SetFocus(hTable);
 			}
 			break;
 			case WM_CLOSE:
@@ -105,20 +107,23 @@ namespace tools {
 			case WM_INITDIALOG: {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL), BST_CHECKED);
 
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_OBJECTLIST);
 				sqlite3_stmt *stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, "select rowid, type, name from sqlite_master where sql is not null order by case when type = 'table' then 0 when type = 'view' then 1 when type = 'trigger' then 2 else 4 end, name", -1, &stmt, 0)) {
-					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_OBJECTLIST);
 					setListViewData(hListWnd, stmt);
 					ListView_SetColumnWidth(hListWnd, 0, 0);
 					ListView_SetColumnWidth(hListWnd, 2, LVSCW_AUTOSIZE_USEHEADER);
 				} else {
 					sqlite3_finalize(stmt);
 				}
+				SetFocus(hListWnd);
 			}
 			break;
-			case WM_CLOSE:
+
+			case WM_CLOSE: {
 				EndDialog(hWnd, DLG_CANCEL);
-				break;
+			}
+			break;
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
@@ -277,11 +282,12 @@ namespace tools {
 				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 
-				SendMessage(hWnd, WM_SOURCE_UPDATED, 0, 0);
+				SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
+				SetFocus(GetDlgItem(hWnd, IDC_DLG_TABLENAME));
 			}
 			break;
 
-			case WM_SOURCE_UPDATED: {
+			case WMU_SOURCE_UPDATED: {
 				const TCHAR* delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
 				int isUTF8 = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING)) == 0;
 				bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
@@ -364,7 +370,7 @@ namespace tools {
 				if ((cmd == CBN_SELCHANGE && id == IDC_DLG_ENCODING) ||
 					(cmd == CBN_SELCHANGE && id == IDC_DLG_DELIMITER) ||
 					(cmd == BN_CLICKED && id == IDC_DLG_ISCOLUMNS))
-					SendMessage(hWnd, WM_SOURCE_UPDATED, 0, 0);
+					SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
 
 				if (wParam == IDC_DLG_OK) {
 					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
@@ -488,6 +494,352 @@ namespace tools {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+
+	const TCHAR* GENERATOR_TYPE[1024] = {0};
+	const TCHAR* SOURCES[1024] = {0};
+
+	bool execute(const char* query8) {
+		int rc = sqlite3_exec(db, query8, NULL, 0, NULL);
+		bool res = rc == SQLITE_OK || rc == SQLITE_DONE;
+		if (!res)
+			printf("\nQuery: %s\nError: %s\n", query8, sqlite3_errmsg(db));
+
+		return res;
+	}
+
+	int getDlgItemTextAsNumber(HWND hWnd, int id) {
+		TCHAR buf16[32]{0};
+		GetDlgItemText(hWnd, id, buf16, 31);
+		return _ttoi(buf16);
+	}
+
+	WNDPROC cbOldCombobox;
+	LRESULT CALLBACK cbNewType(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE)
+			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_TYPE_CHANGED, (WPARAM)GetParent(hWnd), (LPARAM)hWnd);
+
+		return CallWindowProc(cbOldCombobox, hWnd, msg, wParam, lParam);
+	}
+	LRESULT CALLBACK cbNewRefTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE)
+			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_REFTABLE_CHANGED, (WPARAM)GetParent(hWnd), (LPARAM)hWnd);
+
+		return CallWindowProc(cbOldCombobox, hWnd, msg, wParam, lParam);
+	}
+
+	BOOL CALLBACK cbDlgDataGenerator (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				cbOldCombobox = (WNDPROC)GetWindowLong(hTable, GWL_WNDPROC);
+
+				int rowCount = prefs::get("data-generator-row-count");
+				TCHAR rowCount16[32]{0};
+				_itot(rowCount, rowCount16, 10);
+				SetDlgItemText(hWnd, IDC_DLG_GEN_ROW_COUNT, rowCount16);
+
+				if (prefs::get("data-generator-truncate"))
+					Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_GEN_ISTRUNCATE), BST_CHECKED);
+
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type = 'table' and name <> 'sqlite_sequence' order by 1", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hTable, name16);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				ComboBox_SetCurSel(hTable, 0);
+
+				if (!GENERATOR_TYPE[0]) {
+					int i = 0;
+					sqlite3_stmt *stmt;
+					while (GENERATOR_TYPE[i] && i < 1024) {
+						delete [] GENERATOR_TYPE[i];
+						GENERATOR_TYPE[i] = 0;
+						i++;
+					}
+
+					execute("attach database \"prefs.sqlite\" as prefs1234567890");
+					execute("drop table if exists temp.generators");
+					execute("create table temp.generators as select * from prefs1234567890.generators");
+					execute("detach database prefs1234567890");
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select distinct type from temp.generators order by 1", -1, &stmt, 0)) {
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							GENERATOR_TYPE[i] = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+							i++;
+						}
+					}
+					sqlite3_finalize(stmt);
+
+					i = 0;
+					while (SOURCES[i] && i < 1024) {
+						delete [] SOURCES[i];
+						SOURCES[i] = 0;
+						i++;
+					}
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type in ('table', 'view') and name <> 'sqlite_sequence' order by 1", -1, &stmt, 0)) {
+						int i = 0;
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							SOURCES[i] = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+							i++;
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
+				SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
+				SetFocus(hTable);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_TARGET_CHANGED: {
+				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS);
+				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_DESTROY);
+
+				TCHAR buf16[255]{0};
+				TCHAR query16[MAX_TEXT_LENGTH]{0};
+				GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
+
+				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") order by cid"), buf16);
+				char* query8 = utils::utf16to8(query16);
+
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+					int rowNo = 0;
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						HWND hColumnWnd = CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD, 5, 5 + 30 * rowNo, 470, 23, hColumnsWnd, (HMENU)IDC_DLG_GEN_COLUMN, GetModuleHandle(0), 0);
+
+						TCHAR* colname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						CreateWindow(WC_STATIC, colname16, WS_VISIBLE | WS_CHILD, 0, 3, 70, 23, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_NAME, GetModuleHandle(0), 0);
+						delete [] colname16;
+
+						HWND hTypeWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 70, 0, 100, 200, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_TYPE, GetModuleHandle(0), 0);
+						ComboBox_AddString(hTypeWnd, TEXT("none"));
+						ComboBox_AddString(hTypeWnd, TEXT("sequence"));
+						ComboBox_AddString(hTypeWnd, TEXT("number"));
+						ComboBox_AddString(hTypeWnd, TEXT("date"));
+						ComboBox_AddString(hTypeWnd, TEXT("reference to"));
+
+						if (GENERATOR_TYPE[0])
+							ComboBox_AddString(hTypeWnd, TEXT(""));
+
+						for (int i = 0; GENERATOR_TYPE[i]; i++)
+							ComboBox_AddString(hTypeWnd, GENERATOR_TYPE[i]);
+						ComboBox_SetCurSel(hTypeWnd, 0);
+						SetWindowLong(hTypeWnd, GWL_WNDPROC, (LONG)cbNewType);
+
+						CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 180, 0, 210, 23, hColumnWnd, (HMENU)IDC_DLG_GEN_OPTION, GetModuleHandle(0), 0);
+
+						rowNo++;
+					}
+				}
+				sqlite3_finalize(stmt);
+				delete [] query8;
+
+				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+			}
+			break;
+
+			case WMU_TYPE_CHANGED: {
+				HWND hColumnWnd = (HWND)wParam;
+				HWND hTypeWnd = (HWND)lParam;
+				HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
+				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_DESTROY);
+
+				TCHAR buf16[64];
+				GetWindowText(hTypeWnd, buf16, 63);
+
+				if (_tcscmp(buf16, TEXT("sequence")) == 0) {
+					CreateWindow(WC_STATIC, TEXT("Start"), WS_VISIBLE | WS_CHILD, 0, 3, 35, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindow(WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 40, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+				}
+
+				if (_tcscmp(buf16, TEXT("number")) == 0) {
+					CreateWindow(WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 0, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD, 45, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 53, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("x"), WS_VISIBLE | WS_CHILD, 100, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 110, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_MULTIPLIER, GetModuleHandle(0), 0);
+				}
+
+				if (_tcscmp(buf16, TEXT("date")) == 0) {
+					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 0, 0, 80, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD, 85, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 95, 0, 80, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
+				}
+
+				if (_tcscmp(buf16, TEXT("reference to")) == 0) {
+					HWND hRefTableWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0, 90, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_TABLE, GetModuleHandle(0), 0);
+					for (int i = 0; SOURCES[i]; i++)
+						ComboBox_AddString(hRefTableWnd, SOURCES[i]);
+					SetWindowLong(hRefTableWnd, GWL_WNDPROC, (LONG)cbNewRefTable);
+
+					CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 90, 0, 86, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_COLUMN, GetModuleHandle(0), 0);
+					ComboBox_SetCurSel(hRefTableWnd, 0);
+					SendMessage(hWnd, WMU_REFTABLE_CHANGED, (WPARAM)hOptionWnd, (LPARAM)hRefTableWnd);
+				}
+
+				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+			}
+			break;
+
+			case WMU_REFTABLE_CHANGED: {
+				HWND hOptionWnd = (HWND)wParam;
+				HWND hRefTableWnd = (HWND)lParam;
+				HWND hRefColumnWnd = GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN);
+				ComboBox_ResetContent(hRefColumnWnd);
+
+				TCHAR buf16[255]{0};
+				TCHAR query16[MAX_TEXT_LENGTH]{0};
+				GetWindowText(hRefTableWnd, buf16, 255);
+
+				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") order by cid"), buf16);
+				char* query8 = utils::utf16to8(query16);
+
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* colname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hRefColumnWnd, colname16);
+						delete [] colname16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				delete [] query8;
+
+				ComboBox_SetCurSel(hRefColumnWnd, 0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				WORD id = LOWORD(wParam);
+				WORD cmd = HIWORD(wParam);
+				if (cmd == CBN_SELCHANGE && id == IDC_DLG_TABLENAME)
+					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL) {
+					EndDialog(hWnd, DLG_CANCEL);
+				}
+
+				if (wParam == IDC_DLG_OK || wParam == IDOK)	{
+					execute("drop table if exists temp.data_generator");
+
+					TCHAR table16[128]{0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 127);
+
+					char* table8 = utils::utf16to8(table16);
+					char query8[MAX_TEXT_LENGTH]{0};
+					sprintf(query8, "create table temp.data_generator as select null rownum, t.* from \"%s\" t where 1 = 2", table8);
+					execute(query8);
+
+					int rowCount = getDlgItemTextAsNumber(hWnd, IDC_DLG_GEN_ROW_COUNT);
+
+					sprintf(query8, "insert into temp.data_generator (rownum) select value from generate_series(1, %i, 1)", rowCount);
+					execute(query8);
+
+					HWND hColumnWnd = GetWindow(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GW_CHILD);
+					char columns8[MAX_TEXT_LENGTH]{0};
+
+					while(IsWindow(hColumnWnd)){
+						TCHAR name16[128]{0};
+						GetDlgItemText(hColumnWnd, IDC_DLG_GEN_COLUMN_NAME, name16, 127);
+						char* name8 = utils::utf16to8(name16);
+						if (strlen(columns8) > 0)
+							strcat(columns8, ", ");
+						strcat(columns8, name8);
+						delete [] name8;
+
+						HWND hTypeWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_COLUMN_TYPE);
+						HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
+						TCHAR type16[128]{0};
+						GetWindowText(hTypeWnd, type16, 127);
+						TCHAR query16[MAX_TEXT_LENGTH]{0};
+
+						if (_tcscmp(type16, TEXT("sequence")) == 0) {
+							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
+							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = rownum + %i"), name16, start);
+						}
+
+						if (_tcscmp(type16, TEXT("number")) == 0) {
+							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
+							int end = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_END);
+							int multi = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER);
+
+							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %i"), name16, start, end, start, multi);
+						}
+
+						if (_tcscmp(type16, TEXT("reference to")) == 0) {
+							TCHAR reftable16[256]{0};
+							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_TABLE, reftable16, 255);
+
+							TCHAR refcolumn16[256]{0};
+							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
+
+							_stprintf(query16, TEXT("with t as (select %s value from \"%s\" order by random()), "\
+								"t2 as (select rownum(1) rownum, t.value FROM t, generate_series(1, (select ceil(%i.0/count(1))  from t), 1) limit %i) "\
+								"update temp.data_generator set \"%s\" = (select value from t2 where t2.rownum = temp.data_generator.rownum)"),
+								refcolumn16, reftable16, rowCount, rowCount, name16);
+						}
+
+						if (_tcscmp(type16, TEXT("date")) == 0) {
+							SYSTEMTIME start = {0}, end = {0};
+							DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_START), &start);
+							DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_END), &end);
+
+							TCHAR start16[32] = {0};
+							_stprintf(start16, TEXT("%i-%0*i-%0*i"), start.wYear, 2, start.wMonth, 2, start.wDay);
+
+							TCHAR end16[32] = {0};
+							_stprintf(end16, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
+
+							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = date('%s', '+' || ((strftime('%%s', '%s', '+1 day', '-1 second') - strftime('%%s', '%s')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
+								name16, start16, end16, start16);
+						}
+
+						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
+							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
+								"t2 as (select rownum(1) rownum, t.value FROM t, generate_series(1, (select ceil(%i.0/count(1))  from t), 1) limit %i) "\
+								"update temp.data_generator set \"%s\" = (select value from t2 where t2.rownum = temp.data_generator.rownum)"),
+								type16, rowCount, rowCount, name16);
+						}
+
+						char* query8 = utils::utf16to8(query16);
+						execute(query8);
+						delete [] query8;
+
+						hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
+					}
+
+					bool isTruncate = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_GEN_ISTRUNCATE));
+					prefs::set("data-generator-row-count", rowCount);
+					prefs::set("data-generator-truncate", +isTruncate);
+
+					if (isTruncate) {
+						sprintf(query8, "delete from \"%s\"", table8);
+						execute(query8);
+					}
+
+					sprintf(query8, "insert into \"%s\" (%s) select %s from temp.data_generator", table8, columns8, columns8);
+					if (execute(query8))
+						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
+
+					delete [] table8;
+				}
 			}
 			break;
 		}

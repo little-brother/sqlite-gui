@@ -51,6 +51,9 @@ extern const TCHAR *TYPES16p[5];
 
 extern HFONT hDefFont;
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
+bool processColumnHeaderClick(NMHDR* pHdr, LPARAM lParam);
+
+int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
 struct ListViewCell {
    HWND hListWnd;
@@ -59,7 +62,7 @@ struct ListViewCell {
 };
 extern ListViewCell currCell;
 
-extern HMENU hEditDataMenu;
+extern HMENU hEditDataMenu, hResultMenu;
 
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
@@ -70,6 +73,10 @@ bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
+LRESULT onListViewMenu(int cmd);
 TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type);
+bool isQueryValid(const char* query);
+bool showDbError(HWND hWnd, char* err8 = NULL);
+
 #endif
