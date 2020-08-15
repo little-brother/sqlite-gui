@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 0, 9, 7, 0
+FILEVERSION 0, 9, 8, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "0.9.7\000"
+			VALUE "FileVersion", "0.9.8\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "0.9.7\000"
+			VALUE "ProductVersion", "0.9.8\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -30,8 +30,8 @@ IDD_ADDEDIT DIALOGEX 50,50,500,300
 BEGIN
 	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL | WS_CHILD,1,1,498,273,WS_EX_STATICEDGE
 	PUSHBUTTON "Example",IDC_DLG_EXAMPLE,5,282,50,14, WS_TABSTOP | NOT WS_VISIBLE
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,445,282,50,14, WS_TABSTOP
-    PUSHBUTTON "Execute",IDC_DLG_OK,390,282,50,14, WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,445,282,50,14, WS_TABSTOP
+	PUSHBUTTON "Execute",IDC_DLG_OK,390,282,50,14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -42,7 +42,7 @@ IDD_ROW DIALOGEX 50,50,300,300
 BEGIN
 	LTEXT "ListViewHandle", IDC_DLG_USERDATA, 0,0,0,0, WS_CHILD
 	PUSHBUTTON "OK",IDC_DLG_OK,0,0,60,14, WS_TABSTOP
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,0,0,60,14, WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,0,0,60,14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -64,7 +64,7 @@ BEGIN
 	PUSHBUTTON "Down",IDC_DLG_ROW_DOWN,195,150,30,14, WS_TABSTOP
 
 	PUSHBUTTON "OK",IDC_DLG_OK,100,181,60,14, WS_TABSTOP
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,165,181,60,14, WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,165,181,60,14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -86,13 +86,13 @@ BEGIN
 	EDITTEXT  IDC_DLG_CHECK, 40, 65, 90, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP
 
 	LTEXT "Unique", IDC_DLG_LABEL, 5, 87, 30, 14, SS_LEFT
-	AUTOCHECKBOX  "", IDC_DLG_ISUNIQUE, 75, 83, 18, 16, BS_NOTIFY
+	AUTOCHECKBOX  "", IDC_DLG_ISUNIQUE, 75, 83, 18, 16, BS_NOTIFY | WS_TABSTOP
 
 	LTEXT "Not null", IDC_DLG_LABEL, 5, 107, 30, 14, SS_LEFT
-	AUTOCHECKBOX "", IDC_DLG_ISNOTNULL, 75, 103, 18, 16, BS_NOTIFY
+	AUTOCHECKBOX "", IDC_DLG_ISNOTNULL, 75, 103, 18, 16, BS_NOTIFY | WS_TABSTOP
 
 	PUSHBUTTON "OK",IDC_DLG_OK,5,130,60,14, WS_TABSTOP
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,70,130,60,14, WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,70,130,60,14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -102,7 +102,7 @@ IDD_EDITDATA DIALOGEX 50,50,500,300
 	FONT 10, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	PUSHBUTTON  "+", IDC_DLG_ROW_ADD,0,0,18,10, WS_CHILD | BS_FLAT | WS_VISIBLE
-	EDITTEXT    IDC_DLG_QUERYFILTER,20,0,300,10,WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD, 0
+	EDITTEXT	IDC_DLG_QUERYFILTER,20,0,300,10,WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD, 0
 	CONTROL "", IDC_DLG_QUERYLIST, WC_LISTVIEW, WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | WS_CHILD | LVS_REPORT,0, 10, 400, 80, WS_EX_STATICEDGE
 END
 
@@ -112,33 +112,37 @@ IDD_QUERYLIST DIALOGEX 50,50,500,300
 	CAPTION "History and Gists"
 	FONT 10, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	EDITTEXT    IDC_DLG_QUERYFILTER,0,0,300,10,WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD, 0
+	EDITTEXT	IDC_DLG_QUERYFILTER,0,0,300,10,WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD, 0
 	CONTROL "", IDC_DLG_QUERYLIST, WC_LISTVIEW, WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | WS_CHILD | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER,0, 10, 400, 80, WS_EX_STATICEDGE
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50,50,200,160
+IDD_SETTINGS DIALOGEX 50,50,200,160 + 15
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	LTEXT           "Font", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_FONT_FAMILY, 35, 5, 125, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-    COMBOBOX        IDC_DLG_FONT_SIZE, 165, 5, 30, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT		   "Font", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_FONT_FAMILY, 35, 5, 125, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	COMBOBOX		IDC_DLG_FONT_SIZE, 165, 5, 30, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	AUTOCHECKBOX    "Autoload extensions", IDC_DLG_AUTOLOAD, 5, 20, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX    "Open last database on start up", IDC_DLG_RESTORE_DB, 5, 35, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX    "Restore editor's text on start up", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX    "Editor highlighter", IDC_DLG_USE_HIGHLIGHT, 5, 65, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX    "Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX    "App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 95, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Autoload extensions", IDC_DLG_AUTOLOAD, 5, 20, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Open last database on start up", IDC_DLG_RESTORE_DB, 5, 35, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Restore editor's text on start up", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Editor highlighter", IDC_DLG_USE_HIGHLIGHT, 5, 65, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 95, 180, 16, BS_NOTIFY
 
-	EDITTEXT        IDC_DLG_ROW_LIMIT, 5, 112, 35, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_CENTER | ES_NUMBER
-	LTEXT           "Max rows in result output. Use 0  to unlimited.", IDC_DLG_LABEL, 45, 114, 170, 14, SS_LEFT
+	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 114, 50, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_INDENT, 55, 111, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT		   "Max rows in result output. Use 0  to unlimited.", IDC_DLG_LABEL, 5, 114 + 15, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 112 + 15, 38, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_CENTER | ES_NUMBER
 
 
-	PUSHBUTTON "OK",IDC_DLG_OK,70,141,60,14,WS_TABSTOP
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,135,141,60,14,WS_TABSTOP
+
+	PUSHBUTTON "OK",IDC_DLG_OK,70,141 + 15,60,14,WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,135,141 + 15,60,14,WS_TABSTOP
 END
 
 
@@ -148,18 +152,18 @@ IDD_TOOL_IMPORT_CSV DIALOGEX 50,50,182,160
 	CAPTION "Import data from CSV file"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	LTEXT           "Table name", IDC_DLG_LABEL, 5, 7, 40, 14, SS_LEFT
-    EDITTEXT        IDC_DLG_TABLENAME, 45, 5, 130, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD
+	LTEXT		   "Table name", IDC_DLG_LABEL, 5, 7, 40, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_TABLENAME, 45, 5, 130, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD
 
-    AUTOCHECKBOX    "Column names in first line", IDC_DLG_ISCOLUMNS, 5, 19, 140, 16, BS_NOTIFY
-	LTEXT           "Column delimiter", IDC_DLG_LABEL, 5, 37, 80, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_DELIMITER, 60, 36, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-	LTEXT           "Encoding", IDC_DLG_LABEL, 5, 52, 80, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_ENCODING, 60, 49, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-	CONTROL "",     IDC_DLG_PREVIEW, WC_LISTVIEW, LVS_NOSCROLL | WS_TABSTOP | LVS_AUTOARRANGE | LVS_REPORT | LVS_SINGLESEL, 5, 70, 170, 60, WS_EX_STATICEDGE
+	AUTOCHECKBOX	"Column names in first line", IDC_DLG_ISCOLUMNS, 5, 19, 140, 16, BS_NOTIFY
+	LTEXT		   "Column delimiter", IDC_DLG_LABEL, 5, 37, 80, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_DELIMITER, 60, 36, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT		   "Encoding", IDC_DLG_LABEL, 5, 52, 80, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_ENCODING, 60, 49, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	CONTROL "",	 IDC_DLG_PREVIEW, WC_LISTVIEW, LVS_NOSCROLL | WS_TABSTOP | LVS_AUTOARRANGE | LVS_REPORT | LVS_SINGLESEL, 5, 70, 170, 60, WS_EX_STATICEDGE
 
 	PUSHBUTTON "OK",IDC_DLG_OK,50,141,60,14
-    PUSHBUTTON "Cancel",IDC_DLG_CANCEL,115,141,60,14
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,115,141,60,14
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -174,8 +178,8 @@ BEGIN
 	AUTORADIOBUTTON "Data", IDC_DLG_DATAONLY, 85, 85, 30, 10, WS_TABSTOP
 	AUTORADIOBUTTON "Structure", IDC_DLG_DDLONLY, 125, 85, 50, 10, WS_TABSTOP
 
-    PUSHBUTTON      "OK", IDC_DLG_OK, 65, 102, 50, 14, 0
-    PUSHBUTTON      "Cancel", IDC_DLG_CANCEL, 120, 102, 50, 14, 0
+	PUSHBUTTON	  "OK", IDC_DLG_OK, 65, 102, 50, 14, 0
+	PUSHBUTTON	  "Cancel", IDC_DLG_CANCEL, 120, 102, 50, 14, 0
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -184,17 +188,17 @@ IDD_TOOL_EXPORT_CSV DIALOGEX 50,50,174,100
 	CAPTION "Export data of table/view to CSV file"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    COMBOBOX        IDC_DLG_TABLENAME, 5, 5, 165, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_SORT
-    AUTOCHECKBOX    "Column names in first line", IDC_DLG_ISCOLUMNS, 5, 20, 139, 16, BS_NOTIFY
+	COMBOBOX		IDC_DLG_TABLENAME, 5, 5, 165, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_SORT
+	AUTOCHECKBOX	"Column names in first line", IDC_DLG_ISCOLUMNS, 5, 20, 139, 16, BS_NOTIFY
 
-	LTEXT           "Column delimiter", IDC_DLG_LABEL, 5, 40, 80, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_DELIMITER, 65, 38, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT		   "Column delimiter", IDC_DLG_LABEL, 5, 40, 80, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_DELIMITER, 65, 38, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-    LTEXT           "New line type", IDC_DLG_LABEL, 5, 57, 60, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_NEWLINE, 65, 55, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD
+	LTEXT		   "New line type", IDC_DLG_LABEL, 5, 57, 60, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_NEWLINE, 65, 55, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD
 
-    PUSHBUTTON      "OK", IDC_DLG_OK, 65, 82, 50, 14, 0
-    PUSHBUTTON      "Cancel", IDC_DLG_CANCEL, 120, 82, 50, 14, 0
+	PUSHBUTTON	  "OK", IDC_DLG_OK, 65, 82, 50, 14, 0
+	PUSHBUTTON	  "Cancel", IDC_DLG_CANCEL, 120, 82, 50, 14, 0
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -203,64 +207,64 @@ IDD_TOOL_GENERATE_DATA DIALOGEX 50,50,250,300
 	CAPTION "Data generator"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	LTEXT           "Target", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
-    COMBOBOX        IDC_DLG_TABLENAME, 30, 5, 120, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_SORT
-	LTEXT           "Row count", IDC_DLG_LABEL, 165, 7, 40, 14, SS_LEFT
-	EDITTEXT        IDC_DLG_GEN_ROW_COUNT, 205, 5, 40, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_NUMBER | ES_CENTER | WS_BORDER
-    AUTOCHECKBOX    "Truncate data before generation", IDC_DLG_GEN_ISTRUNCATE, 5, 20, 140, 16, BS_NOTIFY
-	LTEXT           "Column", IDC_DLG_LABEL, 5, 40, 240, 14, SS_LEFT | SS_ETCHEDHORZ
+	LTEXT		   "Target", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_TABLENAME, 30, 5, 120, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_SORT
+	LTEXT		   "Row count", IDC_DLG_LABEL, 165, 7, 40, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_GEN_ROW_COUNT, 205, 5, 40, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_NUMBER | ES_CENTER | WS_BORDER
+	AUTOCHECKBOX	"Truncate data before generation", IDC_DLG_GEN_ISTRUNCATE, 5, 20, 140, 16, BS_NOTIFY
+	LTEXT		   "Column", IDC_DLG_LABEL, 5, 40, 240, 14, SS_LEFT | SS_ETCHEDHORZ
 
-	LTEXT           "", IDC_DLG_GEN_COLUMNS, 5, 45, 240, 280, SS_LEFT | WS_TABSTOP
+	LTEXT		   "", IDC_DLG_GEN_COLUMNS, 5, 45, 240, 280, SS_LEFT | WS_TABSTOP
 
-    PUSHBUTTON      "OK", IDC_DLG_OK, 141, 282, 50, 14, 0
-    PUSHBUTTON      "Cancel", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
+	PUSHBUTTON	  "OK", IDC_DLG_OK, 141, 282, 50, 14, 0
+	PUSHBUTTON	  "Cancel", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_MAIN MENU
 BEGIN
-    POPUP "Database"
-    BEGIN
-        MENUITEM "Open", IDM_OPEN
-        MENUITEM "Close", IDM_CLOSE, GRAYED
-        MENUITEM SEPARATOR
-        MENUITEM "No recents", 0, GRAYED
-        MENUITEM SEPARATOR
-        MENUITEM "Attach database", IDM_ATTACH, GRAYED
-        MENUITEM "Settings", IDM_SETTINGS
-        MENUITEM SEPARATOR
-        MENUITEM "Exit", IDM_EXIT
-    END
+	POPUP "Database"
+	BEGIN
+		MENUITEM "Open", IDM_OPEN
+		MENUITEM "Close", IDM_CLOSE, GRAYED
+		MENUITEM SEPARATOR
+		MENUITEM "No recents", 0, GRAYED
+		MENUITEM SEPARATOR
+		MENUITEM "Attach database", IDM_ATTACH, GRAYED
+		MENUITEM "Settings", IDM_SETTINGS
+		MENUITEM SEPARATOR
+		MENUITEM "Exit", IDM_EXIT
+	END
 
-    POPUP "Query"
-    BEGIN
-        MENUITEM "Save\tCtrl+S", IDM_SAVE
-        MENUITEM "Plan\tAlt+Enter", IDM_PLAN, GRAYED
-        MENUITEM "Execute\tCtrl+Enter", IDM_EXECUTE, GRAYED
-        MENUITEM SEPARATOR
-        MENUITEM "&History\tCtrl+H", IDM_HISTORY
-        MENUITEM "&Gists\tCtrl+G", IDM_GISTS
+	POPUP "Query"
+	BEGIN
+		MENUITEM "Save\tCtrl+S", IDM_SAVE
+		MENUITEM "Plan\tAlt+Enter", IDM_PLAN, GRAYED
+		MENUITEM "Execute\tCtrl+Enter", IDM_EXECUTE, GRAYED
+		MENUITEM SEPARATOR
+		MENUITEM "&History\tCtrl+H", IDM_HISTORY
+		MENUITEM "&Gists\tCtrl+G", IDM_GISTS
 
-    END
+	END
 
-    POPUP "Tools"
-    BEGIN
-        MENUITEM "Execute SQL file", IDM_IMPORT_SQL, GRAYED
-        MENUITEM "Import from CSV file", IDM_IMPORT_CSV, GRAYED
-        MENUITEM "Export to SQL file", IDM_EXPORT_SQL, GRAYED
-        MENUITEM "Export as CSV file", IDM_EXPORT_CSV, GRAYED
-        MENUITEM "Data generator", IDM_GENERATE_DATA, GRAYED
-        MENUITEM SEPARATOR
-        MENUITEM "Integrity check", IDM_CHECK_INTEGRITY, GRAYED
-        MENUITEM "Vacuum database", IDM_VACUUM, GRAYED
-    END
+	POPUP "Tools"
+	BEGIN
+		MENUITEM "Execute SQL file", IDM_IMPORT_SQL, GRAYED
+		MENUITEM "Import from CSV file", IDM_IMPORT_CSV, GRAYED
+		MENUITEM "Export to SQL file", IDM_EXPORT_SQL, GRAYED
+		MENUITEM "Export as CSV file", IDM_EXPORT_CSV, GRAYED
+		MENUITEM "Data generator", IDM_GENERATE_DATA, GRAYED
+		MENUITEM SEPARATOR
+		MENUITEM "Integrity check", IDM_CHECK_INTEGRITY, GRAYED
+		MENUITEM "Vacuum database", IDM_VACUUM, GRAYED
+	END
 
-    POPUP "?"
-    BEGIN
-        MENUITEM "About", IDM_ABOUT
-        MENUITEM "Tips", IDM_TIPS
-        MENUITEM "Homepage", IDM_HOMEPAGE
-    END
+	POPUP "?"
+	BEGIN
+		MENUITEM "About", IDM_ABOUT
+		MENUITEM "Tips", IDM_TIPS
+		MENUITEM "Homepage", IDM_HOMEPAGE
+	END
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -278,7 +282,8 @@ IDC_MENU_TABLE MENU
 BEGIN
 	POPUP "Table"
 	BEGIN
-		MENUITEM "View", IDM_EDIT_DATA
+		MENUITEM "Query data", IDM_QUERY_DATA
+		MENUITEM "Edit data", IDM_EDIT_DATA
 		MENUITEM SEPARATOR
 		MENUITEM "Edit", IDM_EDIT
 		MENUITEM "Rename", IDM_RENAME
@@ -302,7 +307,8 @@ IDC_MENU_VIEW MENU
 BEGIN
 	POPUP "View"
 	BEGIN
-		MENUITEM "View", IDM_EDIT_DATA
+		MENUITEM "Query data", IDM_QUERY_DATA
+		MENUITEM "View data", IDM_EDIT_DATA
 		MENUITEM SEPARATOR
 		MENUITEM "Rename", IDM_RENAME
 		MENUITEM "Edit", IDM_EDIT
@@ -375,18 +381,20 @@ END
 
 IDA_ACCEL ACCELERATORS
 BEGIN
-	VK_ESCAPE, IDM_EXIT, ALT, VIRTKEY
+	VK_ESCAPE, IDM_ESCAPE_EXIT, VIRTKEY
 	"X", IDM_EXIT, ALT, VIRTKEY
-    "O", IDM_OPEN, CONTROL, VIRTKEY
-    "Q", IDM_CLOSE, CONTROL, VIRTKEY
-    VK_RETURN, IDM_EXECUTE, CONTROL, VIRTKEY
-    VK_F9, IDM_EXECUTE, VIRTKEY
-    VK_RETURN, IDM_PLAN, ALT, VIRTKEY
-    VK_F8, IDM_PLAN, VIRTKEY
-    "S", IDM_SAVE, CONTROL, VIRTKEY
-    "H", IDM_HISTORY, CONTROL, VIRTKEY
-    "G", IDM_GISTS, CONTROL, VIRTKEY
-    VK_TAB, IDM_NEXTRESULT, VIRTKEY
+	"O", IDM_OPEN, CONTROL, VIRTKEY
+	"Q", IDM_CLOSE, CONTROL, VIRTKEY
+	VK_RETURN, IDM_EXECUTE, CONTROL, VIRTKEY
+	VK_F9, IDM_EXECUTE, VIRTKEY
+	VK_RETURN, IDM_PLAN, ALT, VIRTKEY
+	VK_F8, IDM_PLAN, VIRTKEY
+	"S", IDM_SAVE, CONTROL, VIRTKEY
+	"H", IDM_HISTORY, CONTROL, VIRTKEY
+	"G", IDM_GISTS, CONTROL, VIRTKEY
+	VK_TAB, IDM_PROCESS_TAB, VIRTKEY
+	VK_TAB, IDM_PROCESS_TAB, SHIFT, VIRTKEY
+	VK_TAB, IDM_NEXT_RESULT, CONTROL, VIRTKEY
 END
 
 STRINGTABLE
@@ -396,18 +404,19 @@ BEGIN
 	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
 	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
 	IDS_ABOUT "Sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020\nlb.im@ya.ru"
-	IDS_TIPS "* To create a new database, enter the desired name in the ""Open"" dialog\n\n" \
-		"* Only the selected part of the query will be executed\n\n"
-		"* During a transaction the special indicator is displayed inside the status bar\n\n" \
-		"* Do you need a new version of sqlite or a standard extension like json1?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
-		"* Hold Ctrl and click on a table name in Editor to view the table data\n\n" \
-		"* Use Tab button to toggle to next result\n\n" \
-		"* Hold Ctrl when click by a cell in Data Edit dialog to edit the value as a multiline text. Use Ctrl + Enter to add new line to text.\n\n" \
-		"* Use Ctrl + Enter to add row in Add row dialog\n\n" \
-		"* SQLite supports a limited subset of ALTER. So there is not GUI allows remove/reorder column to an existing table or something like this.\n\n" \
+	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
+		"* Only the selected part of the query will be executed.\n\n"
+		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
+		"* Click on a table name with Ctrl (or Ctrl + ?) in Editor to get the table info.\n\n" \
+		"* Use Ctrl + Tab to toggle to next result.\n\n" \
+		"* Use Tab and Shift + Tab to switch between Navigation, Editor and the\n   result panel. Also these buttons add and remove indents in Editor.\n\n" \
+		"* Hold Ctrl when click by a cell in ""Data Edit"" dialog to edit the value as\n   a multiline text. Use Ctrl + Enter to add new line to text.\n\n" \
+		"* Use Ctrl + Enter to add row in ""Add row"" dialog\n   Or move to next row in ""View row"" dialog.\n\n" \
+		"* SQLite supports a limited subset of ALTER. So there is not GUI allows\n   remove/reorder column to an existing table or something like this.\n\n" \
+		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires series and rownum extensions.\n\n" \
-		"* Add rows to ""generators"" table in prefs.sqlite database to add new types in data generator. You can insert an empty value if the generated value can be null.\n\n" \
-		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit"
+		"* To add types in data generator, open ""refs.sqlite"" and add rows to\n   ""generators"" table. You can insert an empty value if the generated\n   valuecan be null.\n\n" \
+		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n"
 END
 
 IDI_LOGO ICON "resources/logo.ico"

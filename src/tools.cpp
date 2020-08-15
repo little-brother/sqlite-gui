@@ -837,6 +837,8 @@ namespace tools {
 					sprintf(query8, "insert into \"%s\" (%s) select %s from temp.data_generator", table8, columns8, columns8);
 					if (execute(query8))
 						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
+					else
+						showDbError(hWnd);
 
 					delete [] table8;
 				}
@@ -870,23 +872,21 @@ namespace tools {
 		return buf;
 	}
 
-	void importSqlFile(TCHAR *path16){
+	bool importSqlFile(TCHAR *path16){
 		char* path8 = utils::utf16to8(path16);
 		char* data8 = readFile(path8);
+		bool rc = true;
 		if (data8 != 0) {
-			char* err8 = 0;
-			sqlite3_exec(db, data8, NULL, 0, &err8);
-			if (err8) {
-				TCHAR* err16 = utils::utf8to16(err8);
-				MessageBox(hMainWnd, err16, TEXT("Error"), MB_OK);
-				delete [] err16;
-			} else {
-				TCHAR msg16[255];
-				_stprintf(msg16, TEXT("Done!"), sqlite3_changes(db));
-				MessageBox(hMainWnd, msg16, TEXT("Info"), MB_OK);
-			}
+			sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
+			rc = SQLITE_OK == sqlite3_exec(db, data8, NULL, 0, NULL);
+			if (!rc)
+				showDbError(hMainWnd);
+
 			delete [] data8;
+			sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
 		}
 		delete [] path8;
+
+		return rc;
 	}
 }

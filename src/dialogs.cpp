@@ -10,6 +10,8 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("null"), TEXT("blob"), TEXT("json"), 0};
+	const TCHAR* INDENT_LABELS[] = {TEXT("Tab"), TEXT("2 spaces"), TEXT("4 spaces"), 0};
+	const TCHAR* INDENTS[] = {TEXT("\t"), TEXT("  "), TEXT("    ")};
 
 	BOOL CALLBACK cbDlgAdd (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -46,8 +48,13 @@ namespace dialogs {
 					SetWindowText(hDlgEditorWnd, buf);
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
-					updateHighlighting((HWND)lParam);
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE) {
+					HWND hEditorWnd = (HWND)lParam;
+					SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
+					updateHighlighting(hEditorWnd);
+					SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
+					InvalidateRect(hEditorWnd, 0, TRUE);
+				}
 
 				if (wParam == IDC_DLG_OK) {
 					HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
@@ -463,7 +470,6 @@ namespace dialogs {
 				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Gists"));
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
-				SetFocus(hListWnd);
 
 				LVCOLUMN lvc;
 				lvc.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
@@ -477,9 +483,17 @@ namespace dialogs {
 				lvc.pszText = (TCHAR*)TEXT("Query");
 				ListView_InsertColumn(hListWnd, 1, &lvc);
 
-				SendMessage(hWnd, WMU_UPDATE_QUERYLIST, 0, 0);
+				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 				ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | 0x10000000);
 				SendMessage(hWnd, WM_SIZE, 0, 0);
+
+				SetFocus(GetDlgItem(hWnd, IDC_DLG_QUERYFILTER));
+			}
+			break;
+
+			case WM_TIMER: {
+				KillTimer(hWnd, IDT_EDIT_DATA);
+				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 			}
 			break;
 
@@ -525,8 +539,10 @@ namespace dialogs {
 			break;
 
 			case WM_COMMAND: {
-				if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_DLG_QUERYFILTER)
-					SendMessage(hWnd, WMU_UPDATE_QUERYLIST, 0, 0);
+				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER) && (HWND)lParam == GetFocus()) {
+					KillTimer(hWnd, IDT_EDIT_DATA);
+					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
+				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
@@ -546,7 +562,7 @@ namespace dialogs {
 			}
 			break;
 
-			case WMU_UPDATE_QUERYLIST: {
+			case WMU_UPDATE_DATA: {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 
@@ -563,29 +579,28 @@ namespace dialogs {
 				ListView_DeleteAllItems(hListWnd);
 				for (int i = 0; i < count; i++) {
 					TCHAR* text16 = utils::utf8to16(queries[i]);
-					TCHAR* col16 = _tcstok (text16, TEXT("\t"));
+					TCHAR* q = _tcschr(text16, TEXT('\t'));
+					if (q != NULL) {
+						int len = _tcslen(text16);
+						int len1 = _tcslen(q);
 
-					time_t time = (time_t) _tcstol(col16, NULL, 10);
-					struct tm *local  = localtime(&time);
-					TCHAR tbuf[64] = {0};
-					_tcsftime(tbuf, 64, TEXT("%d-%m-%Y %H:%M"), local);
+						TCHAR time[len - len1 + 1]{0};
+						_tcsncpy(time, text16, len - len1);
+						LVITEM  lvi = {0};
+						lvi.mask = LVIF_TEXT;
+						lvi.iSubItem = 0;
+						lvi.iItem = i;
+						lvi.pszText = time;
+						lvi.cchTextMax = len - len1 + 1;
+						ListView_InsertItem(hListWnd, &lvi);
 
-					LVITEM  lvi = {0};
-					lvi.mask = LVIF_TEXT;
-					lvi.iSubItem = 0;
-					lvi.iItem = i;
-					lvi.pszText = tbuf;
-					lvi.cchTextMax = 64;
-					ListView_InsertItem(hListWnd, &lvi);
-
-					col16 = _tcstok (NULL, TEXT("\t"));
-					lvi.mask = LVIF_TEXT;
-					lvi.iSubItem = 1;
-					lvi.iItem = i;
-					lvi.pszText = col16;
-					lvi.cchTextMax = _tcslen(col16) + 1;
-					ListView_SetItem(hListWnd, &lvi);
-
+						lvi.mask = LVIF_TEXT;
+						lvi.iSubItem = 1;
+						lvi.iItem = i;
+						lvi.pszText = q;
+						lvi.cchTextMax = len1 + 1;
+						ListView_SetItem(hListWnd, &lvi);
+					}
 					delete [] text16;
 					delete queries[i];
 				}
@@ -613,7 +628,7 @@ namespace dialogs {
 			case WM_INITDIALOG: {
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				SetWindowText(hFilterWnd, TEXT("limit 1000"));
-				SendMessage(hWnd, WMU_UPDATE_TABLE_DATA, 0 , 0);
+				SendMessage(hWnd, WMU_UPDATE_DATA, 0 , 0);
 				SetFocus(hFilterWnd);
 
 				char* table8 = utils::utf16to8(editTableData16);
@@ -647,7 +662,7 @@ namespace dialogs {
 
 			case WM_TIMER: {
 				KillTimer(hWnd, IDT_EDIT_DATA);
-				SendMessage(hWnd, WMU_UPDATE_TABLE_DATA, 0, 0);
+				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 			}
 			break;
 
@@ -664,11 +679,11 @@ namespace dialogs {
 			}
 			break;
 
-			case WMU_UPDATE_TABLE_DATA: {
+			case WMU_UPDATE_DATA: {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				int size = GetWindowTextLength(hFilterWnd);
-				TCHAR* filter16 = new TCHAR[size + 1]{0};
+				TCHAR filter16[size + 1]{0};
 				GetWindowText(hFilterWnd, filter16, size + 1);
 
 				char* table8 = utils::utf16to8(editTableData16);
@@ -696,11 +711,10 @@ namespace dialogs {
 					sqlite3_finalize(stmt);
 				}
 
+				ListView_SetItemState(hListWnd, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+
 				delete [] table8;
 				delete [] filter8;
-				delete [] filter16;
-
-				return true;
 			}
 			break;
 
@@ -828,13 +842,13 @@ namespace dialogs {
 					delete [] sql8;
 				}
 
-				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER)) {
+				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER) && (HWND)lParam == GetFocus()) {
 					KillTimer(hWnd, IDT_EDIT_DATA);
 					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
 				}
 
 				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -904,9 +918,10 @@ namespace dialogs {
 				return true;
 			}
 
-			case WM_CLOSE:
+			case WM_CLOSE: {
 				EndDialog(hWnd, DLG_CANCEL);
-				break;
+			}
+			break;
 
 			case WM_COMMAND: {
 				if (wParam >= IDC_ROW_SWITCH && wParam < IDC_ROW_SWITCH + 100) {
@@ -1211,6 +1226,10 @@ namespace dialogs {
 				_stprintf(buf, TEXT("%i"), prefs::get("row-limit"));
 				SetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf);
 
+				HWND hIndent = GetDlgItem(hWnd, IDC_DLG_INDENT);
+				for (int i = 0; i < 3; i++)
+					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
+				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
 			}
 			break;
 
@@ -1229,6 +1248,7 @@ namespace dialogs {
 					prefs::set("use-highlight", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
+					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
 					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
@@ -1247,6 +1267,9 @@ namespace dialogs {
 
 						SendMessage(hEditorWnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM) &cf);
 					}
+
+
+
 
 					EndDialog(hWnd, DLG_OK);
 				}

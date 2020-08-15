@@ -84,7 +84,7 @@ namespace utils {
 			out = new TCHAR[size + 1]{0};
 			MultiByteToWideChar(CP_UTF8, 0, in, -1, out, size);
 		}
-	    return out;
+		return out;
 	}
 
 	char* utf16to8(const TCHAR* in) {
@@ -143,6 +143,16 @@ namespace utils {
 		ofn.lpstrInitialDir = NULL;
 		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
 		return GetSaveFileName(&ofn);
+	}
+
+	bool isFileExists(TCHAR* path) {
+		WIN32_FIND_DATA FindFileData;
+		HANDLE hFile = FindFirstFile(path, &FindFileData) ;
+		int isFound = hFile != INVALID_HANDLE_VALUE;
+		if (isFound)
+			FindClose(hFile);
+
+		return isFound;
 	}
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8) {

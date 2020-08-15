@@ -16,6 +16,7 @@ namespace utils {
 	void setClipboardText(const TCHAR* text);
 	int openFile(TCHAR* path, const TCHAR* filter);
 	int saveFile(TCHAR* path, const TCHAR* filter);
+	bool isFileExists(TCHAR* path);
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8);
 }

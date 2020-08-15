@@ -2,7 +2,7 @@ Sqlite-gui is a lightweight GUI for [SQLite](https://www.sqlite.org/index.html) 
 Recent binaries are available at [Releases page](https://github.com/little-brother/sqlite-gui/releases).
 
 
-![View](resources/image.gif)
+![View](resources/image.webp)
 
 
 ### Features
@@ -10,7 +10,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Store an execution history and user gists
 * Export/Import data
 * Data generator
-* Most used extensions are included
+* Most usefull extensions are included
 * Does not require installation
 
 ### Cons

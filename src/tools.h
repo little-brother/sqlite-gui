@@ -11,6 +11,6 @@ namespace tools {
 	BOOL CALLBACK cbDlgExportSQL (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgDataGenerator (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-	void importSqlFile(TCHAR* path16);
+	bool importSqlFile(TCHAR* path16);
 }
 #endif

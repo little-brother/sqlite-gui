@@ -5,11 +5,11 @@
 namespace prefs {
 	sqlite3 *db;
 
-	const int ICOUNT = 23;
+	const int ICOUNT = 24;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
-		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename",
+		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
@@ -20,7 +20,7 @@ namespace prefs {
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000,
-		1, 1, 1, 1, 0,
+		1, 1, 1, 1, 0, 0,
 		0, 0,
 		0, 0, 1,
 		0,
@@ -194,7 +194,7 @@ namespace prefs {
 
 	int getQueries(const char* table, const char* filter, char ** queries) {
 		char buf[256];
-		sprintf(buf, "select time, query from %s %s order by time desc limit %i", table, strlen(filter) ? "where query like ?1" : "", get("max-query-count"));
+		sprintf(buf, "select strftime('%%d-%%m-%%Y %%H:%%M', time, 'unixepoch') || '\t' || query from %s %s order by time desc limit %i", table, strlen(filter) ? "where query like ?1" : "", get("max-query-count"));
 
 		sqlite3_stmt * stmt;
 		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
@@ -215,9 +215,9 @@ namespace prefs {
 
 		int count = 0;
 		while(sqlite3_step(stmt) == SQLITE_ROW) {
-			char* sql8 = (char *) sqlite3_column_text(stmt, 1);
-			queries[count] = new char[strlen(sql8) + 32]{0};
-			sprintf(queries[count], "%i\t%s", sqlite3_column_int(stmt, 0), sql8);
+			char* sql8 = (char *) sqlite3_column_text(stmt, 0);
+			queries[count] = new char[strlen(sql8) + 1]{0};
+			strcpy(queries[count], sql8);
 			count++;
 		}
 

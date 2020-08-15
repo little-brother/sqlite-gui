@@ -4,6 +4,8 @@
 #include<windows.h>
 
 namespace dialogs {
+	extern const TCHAR* INDENTS[5];
+
 	BOOL CALLBACK cbDlgQueryList (HWND, UINT, WPARAM, LPARAM);
 	BOOL CALLBACK cbDlgAdd (HWND, UINT, WPARAM, LPARAM);
 	BOOL CALLBACK cbDlgAddTable (HWND, UINT, WPARAM, LPARAM);

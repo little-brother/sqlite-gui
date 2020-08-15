@@ -2,7 +2,6 @@
 #define __GLOBAL_H__
 
 #define _WIN32_IE	0x0500
-
 #define MAX_RESULT_COUNT 32
 #define MAX_TEXT_LENGTH 32000
 
@@ -68,6 +67,7 @@ void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
 
 void updateHighlighting(HWND hEditorWnd);
+void updateParenthesisHighlighting(HWND hWnd);
 bool processAutoComplete(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 

@@ -12,7 +12,7 @@
 
 #define IDA_ACCEL                  77
 
-#define IDC_STATUSBAR			   100
+#define IDC_STATUSBAR              100
 #define IDC_TOOLBAR                101
 #define IDC_EDITOR                 102
 #define IDC_TAB                    103
@@ -47,6 +47,8 @@
 #define IDC_DLG_USE_LEGACY         129
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_EXIT_BY_ESCAPE     131
+#define IDC_DLG_INDENT             132
+
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141
@@ -97,8 +99,8 @@
 #define IDC_ROW_SWITCH             500
 
 
-#define IDM_OPEN        		   1401
-#define IDM_CLOSE        		   1402
+#define IDM_OPEN                   1401
+#define IDM_CLOSE                  1402
 #define IDM_EXIT                   1403
 #define IDM_ATTACH                 1404
 #define IDM_SETTINGS               1405
@@ -125,10 +127,12 @@
 #define IDM_HOMEPAGE               1532
 #define IDM_TIPS                   1533
 
-#define IDM_NEXTRESULT             1590
+#define IDM_NEXT_RESULT            1590
+#define IDM_PROCESS_TAB            1591
+#define IDM_ESCAPE_EXIT            1592
 
 #define IDM_EDITOR_CUT             1601
-#define IDM_EDITOR_COPY        	   1602
+#define IDM_EDITOR_COPY            1602
 #define IDM_EDITOR_PASTE           1603
 #define IDM_EDITOR_DELETE          1604
 
@@ -164,15 +168,14 @@
 #define IDT_EDIT_DATA              70000
 
 #define WMU_SET_DLG_ROW_DATA       WM_USER + 1
-#define WMU_UPDATE_TABLE_DATA      WM_USER + 2
-#define WMU_UPDATE_QUERYLIST       WM_USER + 3
-#define WMU_SOURCE_UPDATED         WM_USER + 4
-#define WMU_SAVE_DATA              WM_USER + 5
-#define WMU_ADD_ROW                WM_USER + 6
-#define WMU_UPDATE_ROWNO           WM_USER + 7
-#define WMU_TARGET_CHANGED         WM_USER + 8
-#define WMU_TYPE_CHANGED           WM_USER + 9
-#define WMU_REFTABLE_CHANGED       WM_USER + 10
-
-
-
+#define WMU_UPDATE_DATA            WM_USER + 2
+#define WMU_SOURCE_UPDATED         WM_USER + 3
+#define WMU_SAVE_DATA              WM_USER + 4
+#define WMU_ADD_ROW                WM_USER + 5
+#define WMU_UPDATE_ROWNO           WM_USER + 6
+#define WMU_TARGET_CHANGED         WM_USER + 7
+#define WMU_TYPE_CHANGED           WM_USER + 8
+#define WMU_REFTABLE_CHANGED       WM_USER + 9
+#define WMU_HIGHLIGHT              WM_USER + 10
+#define WMU_CHANGE_FOCUS           WM_USER + 11
+#define WMU_SHOW_TABLE_INFO        WM_USER + 12
