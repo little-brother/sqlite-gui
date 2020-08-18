@@ -467,7 +467,7 @@ namespace dialogs {
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 				SetWindowPos(hWnd, 0, prefs::get("x") + 40, prefs::get("y") + 80, prefs::get("width") - 80, prefs::get("height") - 120,  SWP_NOZORDER);
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
-				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Gists"));
+				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Saved queries"));
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
@@ -627,7 +627,7 @@ namespace dialogs {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
-				SetWindowText(hFilterWnd, TEXT("limit 1000"));
+				//SetWindowText(hFilterWnd, TEXT("limit 1000"));
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0 , 0);
 				SetFocus(hFilterWnd);
 
@@ -646,10 +646,6 @@ namespace dialogs {
 					showDbError(hWnd);
 				}
 				sqlite3_finalize(stmt);
-
-				TCHAR buf[256];
-				_stprintf(buf, isTable ? TEXT("Table \"%s\"") : TEXT("View \"%s\""), editTableData16);
-				SetWindowText(hWnd, buf);
 
 				delete [] table8;
 				SetWindowLong(hWnd, GWL_USERDATA, +isTable);
@@ -682,6 +678,8 @@ namespace dialogs {
 			case WMU_UPDATE_DATA: {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
+				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+
 				int size = GetWindowTextLength(hFilterWnd);
 				TCHAR filter16[size + 1]{0};
 				GetWindowText(hFilterWnd, filter16, size + 1);
@@ -704,8 +702,12 @@ namespace dialogs {
 				sqlite3_stmt *stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					int colCount = sqlite3_column_count(stmt);
-					setListViewData(hListWnd, stmt);
+					int rowCount = setListViewData(hListWnd, stmt);
 					ListView_SetColumnWidth(hListWnd, colCount, 0); // last column is rowid
+
+					TCHAR buf[256]{0};
+					_stprintf(buf, TEXT("%s \"%s\" [%s%i rows]"), isTable ? TEXT("Table") : TEXT("View"), editTableData16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					SetWindowText(hWnd, buf);
 				} else {
 					showDbError(hWnd);
 					sqlite3_finalize(stmt);

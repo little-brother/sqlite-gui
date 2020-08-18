@@ -164,6 +164,11 @@
 #define IDS_CREATE_TRIGGER         10004
 #define IDS_ABOUT                  10010
 #define IDS_TIPS                   10011
+#define IDS_TOOLTIP_OPEN           IDM_OPEN
+#define IDS_TOOLTIP_CLOSE          IDM_CLOSE
+#define IDS_TOOLTIP_SAVE           IDM_SAVE
+#define IDS_TOOLTIP_PLAN           IDM_PLAN
+#define IDS_TOOLTIP_EXECUTE        IDM_EXECUTE
 
 #define IDT_EDIT_DATA              70000
 

@@ -109,7 +109,7 @@ namespace tools {
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_OBJECTLIST);
 				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select rowid, type, name from sqlite_master where sql is not null order by case when type = 'table' then 0 when type = 'view' then 1 when type = 'trigger' then 2 else 4 end, name", -1, &stmt, 0)) {
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select type, name from sqlite_master where sql is not null order by case when type = 'table' then 0 when type = 'view' then 1 when type = 'trigger' then 2 else 4 end, name", -1, &stmt, 0)) {
 					setListViewData(hListWnd, stmt);
 					ListView_SetColumnWidth(hListWnd, 0, 0);
 					ListView_SetColumnWidth(hListWnd, 2, LVSCW_AUTOSIZE_USEHEADER);
@@ -169,7 +169,7 @@ namespace tools {
 
 							while (SQLITE_ROW == sqlite3_step(stmt)) {
 								TCHAR* line16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-								_ftprintf(f, TEXT("%s;\r\n\r\n"), line16);
+								_ftprintf(f, TEXT("%s;\n\n"), line16);
 								delete [] line16;
 							}
 						}
@@ -193,7 +193,7 @@ namespace tools {
 							sprintf(sql8, "select * from \"%s\"", table8);
 
 							if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-								_ftprintf(f, TEXT("-- %s\r\n"), table16);
+								_ftprintf(f, TEXT("-- %s\n"), table16);
 
 								TCHAR header16[MAX_TEXT_LENGTH]{0};
 								_stprintf(header16, TEXT("insert into \"%s\" ("), table16);
@@ -739,6 +739,10 @@ namespace tools {
 				if (wParam == IDC_DLG_OK || wParam == IDOK)	{
 					execute("drop table if exists temp.data_generator");
 
+					bool isTruncate = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_GEN_ISTRUNCATE));
+					if (isTruncate && MessageBox(hWnd, TEXT("All data from table will be erased. Continue?"), TEXT("Confirmation"), MB_OKCANCEL | MB_ICONASTERISK) != IDOK)
+						return true;
+
 					TCHAR table16[128]{0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 127);
 
@@ -791,8 +795,9 @@ namespace tools {
 							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
 
 							_stprintf(query16, TEXT("with t as (select %s value from \"%s\" order by random()), "\
-								"t2 as (select rownum(1) rownum, t.value FROM t, generate_series(1, (select ceil(%i.0/count(1))  from t), 1) limit %i) "\
-								"update temp.data_generator set \"%s\" = (select value from t2 where t2.rownum = temp.data_generator.rownum)"),
+								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
+								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
+								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
 								refcolumn16, reftable16, rowCount, rowCount, name16);
 						}
 
@@ -813,8 +818,9 @@ namespace tools {
 
 						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
 							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
-								"t2 as (select rownum(1) rownum, t.value FROM t, generate_series(1, (select ceil(%i.0/count(1))  from t), 1) limit %i) "\
-								"update temp.data_generator set \"%s\" = (select value from t2 where t2.rownum = temp.data_generator.rownum)"),
+								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
+								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
+								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
 								type16, rowCount, rowCount, name16);
 						}
 
@@ -825,7 +831,7 @@ namespace tools {
 						hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
 					}
 
-					bool isTruncate = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_GEN_ISTRUNCATE));
+
 					prefs::set("data-generator-row-count", rowCount);
 					prefs::set("data-generator-truncate", +isTruncate);
 

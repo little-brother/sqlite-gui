@@ -11,6 +11,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Export/Import data
 * Data generator
 * Most usefull extensions are included
+* Demo database "Bookstore" for beginners
 * Does not require installation
 
 ### Cons
@@ -24,7 +25,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
   
   * sqlite3.dll + sqlite3.def
     ```
-    gcc -shared -Wl,--output-def=sqlite3.def sqlite3.c -o sqlite3.dll -D SQLITE_ENABLE_DBSTAT_VTAB
+    gcc -shared -Wl,--output-def=sqlite3.def sqlite3.c -o sqlite3.dll -D SQLITE_ENABLE_DBSTAT_VTAB -s
     ```
 
  * libsqlite3.a
@@ -34,7 +35,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 
  * Extension e.g. iif
     ```
-    gcc -I ../include -g -shared iif.c -o iif.dll
+    gcc -I ../include -g -shared json1.c -o json1.dll -s
     ```
 </details>
 

@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 0, 9, 8, 0
+FILEVERSION 0, 9, 9, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "0.9.8\000"
+			VALUE "FileVersion", "0.9.9\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "0.9.8\000"
+			VALUE "ProductVersion", "0.9.9\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -216,8 +216,8 @@ BEGIN
 
 	LTEXT		   "", IDC_DLG_GEN_COLUMNS, 5, 45, 240, 280, SS_LEFT | WS_TABSTOP
 
-	PUSHBUTTON	  "OK", IDC_DLG_OK, 141, 282, 50, 14, 0
-	PUSHBUTTON	  "Cancel", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
+	PUSHBUTTON	  "Generate rows", IDC_DLG_OK, 5, 282, 100, 14, 0
+	PUSHBUTTON	  "Close", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -243,7 +243,7 @@ BEGIN
 		MENUITEM "Execute\tCtrl+Enter", IDM_EXECUTE, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "&History\tCtrl+H", IDM_HISTORY
-		MENUITEM "&Gists\tCtrl+G", IDM_GISTS
+		MENUITEM "Saved\tCtrl+G", IDM_GISTS
 
 	END
 
@@ -417,6 +417,11 @@ BEGIN
 		"* Data generator requires series and rownum extensions.\n\n" \
 		"* To add types in data generator, open ""refs.sqlite"" and add rows to\n   ""generators"" table. You can insert an empty value if the generated\n   valuecan be null.\n\n" \
 		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n"
+	IDS_TOOLTIP_OPEN "Open database"
+	IDS_TOOLTIP_CLOSE "Close database"
+	IDS_TOOLTIP_SAVE "Save current query"
+	IDS_TOOLTIP_PLAN "View execution plan of query"
+	IDS_TOOLTIP_EXECUTE "Execute query"
 END
 
 IDI_LOGO ICON "resources/logo.ico"
