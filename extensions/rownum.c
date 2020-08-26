@@ -1,4 +1,8 @@
-// select *, rownum(0) from mytable
+/* 
+	rownum(startBy)
+	Returns a row number starting from a passed argument
+	select *, rownum(0) from mytable
+*/
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <assert.h>
@@ -23,8 +27,8 @@ static void rownum(sqlite3_context *context, int argc, sqlite3_value **argv){
 }
 
 __declspec(dllexport) int sqlite3_rownum_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
-  int rc = SQLITE_OK;
-  SQLITE_EXTENSION_INIT2(pApi);
-  (void)pzErrMsg;  /* Unused parameter */
-  return sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0);
+	int rc = SQLITE_OK;
+	SQLITE_EXTENSION_INIT2(pApi);
+	(void)pzErrMsg;  /* Unused parameter */
+	return sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0);
 }

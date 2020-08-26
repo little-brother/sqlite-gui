@@ -58,6 +58,7 @@
 		<Unit filename="src/dialogs.h" />
 		<Unit filename="src/global.h" />
 		<Unit filename="src/main.cpp" />
+		<Unit filename="src/missing.h" />
 		<Unit filename="src/prefs.cpp" />
 		<Unit filename="src/prefs.h" />
 		<Unit filename="src/resource.h" />

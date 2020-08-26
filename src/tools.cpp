@@ -1,4 +1,5 @@
 #include "global.h"
+#include "missing.h"
 #include "resource.h"
 #include "tools.h"
 #include "utils.h"
@@ -356,7 +357,7 @@ namespace tools {
 				}
 				delete [] line;
 				fclose(f);
-				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | 0x10000000 /*LVS_EX_AUTOSIZECOLUMNS*/);
+				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
 			}
 			break;
 

@@ -9,6 +9,7 @@
 #define IDD_TOOL_IMPORT_CSV        19
 #define IDD_TOOL_GENERATE_DATA     20
 #define IDD_ADD_TABLE              21
+#define IDD_FIND                   22
 
 #define IDA_ACCEL                  77
 
@@ -63,6 +64,7 @@
 #define IDC_DLG_ROW_DOWN           153
 #define IDC_DLG_ISWITHOUT_ROWID    154
 #define IDC_DLG_MORE               155
+#define IDC_DLG_FIND               156
 
 #define IDC_DLG_GEN_ISTRUNCATE     160
 #define IDC_DLG_GEN_ROW_COUNT      161
@@ -112,6 +114,7 @@
 #define IDM_PLAN                   1513
 #define IDM_HISTORY                1514
 #define IDM_GISTS                  1515
+#define IDM_INTERRUPT              1516
 
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
@@ -126,10 +129,11 @@
 #define IDM_ABOUT                  1531
 #define IDM_HOMEPAGE               1532
 #define IDM_TIPS                   1533
+#define IDM_EXTENSIONS             1534
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_PROCESS_TAB            1591
-#define IDM_ESCAPE_EXIT            1592
+#define IDM_ESCAPE            1592
 
 #define IDM_EDITOR_CUT             1601
 #define IDM_EDITOR_COPY            1602
@@ -146,6 +150,7 @@
 #define IDM_DROP                   1704
 #define IDM_RENAME                 1705
 #define IDM_ADD_COLUMN             1706
+#define IDM_ERASE_DATA             1707
 
 #define IDM_ADD                    1710
 #define IDM_REFRESH                1711
@@ -164,11 +169,13 @@
 #define IDS_CREATE_TRIGGER         10004
 #define IDS_ABOUT                  10010
 #define IDS_TIPS                   10011
+#define IDS_EXTENSIONS             10012
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
 #define IDS_TOOLTIP_PLAN           IDM_PLAN
 #define IDS_TOOLTIP_EXECUTE        IDM_EXECUTE
+#define IDS_TOOLTIP_INTERRUPT      IDM_INTERRUPT
 
 #define IDT_EDIT_DATA              70000
 

@@ -1,3 +1,4 @@
+-- Bookstore is a simple database to demonstrate gui and some sqlite features.
 -- structure
 create table books (
 	id integer primary key autoincrement,
@@ -71,6 +72,23 @@ from reviews r inner join books b on r.book_id == b.id
 group by r.book_id
 order by 4 desc, 3 desc
 limit 5;
+
+-- json1: json_group_array, json_object
+create view v_json_orders as
+select o.id, o.sale_date, json_group_array(json_object('id', b.id, 'title', b.title, 'price', b.price)) books
+from orders o 
+inner join order_books ob on o.id = ob.order_id 
+inner join books b on ob.book_id = b.id 
+group by o.id;
+
+-- json1: json_each, json_extract
+create view v_json_order_books_price4 as
+select v.id, v.sale_date, json_each.value
+from v_json_orders v, json_each(books)
+where json_extract(json_each.value, '$.price') > 4
+group by v.id, json_each.value;
+
+create index idx_customer_fullname on customers (fullname);
 
 -- data	
 insert into books (id, title, author, isbn, price, available) values

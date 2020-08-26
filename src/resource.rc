@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 0, 9, 9, 0
+FILEVERSION 1, 0, 0, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "0.9.9\000"
+			VALUE "FileVersion", "1.0.0\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "0.9.9\000"
+			VALUE "ProductVersion", "1.0.0\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -117,13 +117,13 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50,50,200,160 + 15
+IDD_SETTINGS DIALOGEX 50,50,200,175
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	LTEXT		   "Font", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
-	COMBOBOX		IDC_DLG_FONT_FAMILY, 35, 5, 125, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	COMBOBOX		IDC_DLG_FONT_FAMILY, 35, 5, 125, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS
 	COMBOBOX		IDC_DLG_FONT_SIZE, 165, 5, 30, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
 	AUTOCHECKBOX	"Autoload extensions", IDC_DLG_AUTOLOAD, 5, 20, 180, 16, BS_NOTIFY
@@ -136,13 +136,23 @@ BEGIN
 	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 114, 50, 14, SS_LEFT
 	COMBOBOX		IDC_DLG_INDENT, 55, 111, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	LTEXT		   "Max rows in result output. Use 0  to unlimited.", IDC_DLG_LABEL, 5, 114 + 15, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 112 + 15, 38, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in result output. Use 0  to unlimited.", IDC_DLG_LABEL, 5, 129, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 127, 38, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_CENTER | ES_NUMBER
 
+	PUSHBUTTON "OK",IDC_DLG_OK,70,156,60,14,WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,135, 156,60,14,WS_TABSTOP
+END
 
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_FIND DIALOGEX 300,100,180,45
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME
+	CAPTION "Find"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	EDITTEXT		IDC_DLG_FIND, 5, 5, 170, 12, WS_VISIBLE | WS_BORDER | WS_TABSTOP | WS_CHILD | ES_LEFT
 
-	PUSHBUTTON "OK",IDC_DLG_OK,70,141 + 15,60,14,WS_TABSTOP
-	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,135,141 + 15,60,14,WS_TABSTOP
+	PUSHBUTTON "OK",IDC_DLG_OK,70,25,50,14,WS_TABSTOP
+	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,125, 25,50,14,WS_TABSTOP
 END
 
 
@@ -262,8 +272,9 @@ BEGIN
 	POPUP "?"
 	BEGIN
 		MENUITEM "About", IDM_ABOUT
-		MENUITEM "Tips", IDM_TIPS
 		MENUITEM "Homepage", IDM_HOMEPAGE
+		MENUITEM "Extensions", IDM_EXTENSIONS
+		MENUITEM "Tips", IDM_TIPS
 	END
 END
 
@@ -288,6 +299,7 @@ BEGIN
 		MENUITEM "Edit", IDM_EDIT
 		MENUITEM "Rename", IDM_RENAME
 		MENUITEM "Delete", IDM_DROP
+		MENUITEM "Clear", IDM_ERASE_DATA
 		MENUITEM SEPARATOR
 		MENUITEM "Add column", IDM_ADD_COLUMN
 	END
@@ -381,7 +393,7 @@ END
 
 IDA_ACCEL ACCELERATORS
 BEGIN
-	VK_ESCAPE, IDM_ESCAPE_EXIT, VIRTKEY
+	VK_ESCAPE, IDM_ESCAPE, VIRTKEY
 	"X", IDM_EXIT, ALT, VIRTKEY
 	"O", IDM_OPEN, CONTROL, VIRTKEY
 	"Q", IDM_CLOSE, CONTROL, VIRTKEY
@@ -409,19 +421,39 @@ BEGIN
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
 		"* Click on a table name with Ctrl (or Ctrl + ?) in Editor to get the table info.\n\n" \
 		"* Use Ctrl + Tab to toggle to next result.\n\n" \
+		"* Use Ctrl + 1, Ctrl + 2 and next to sort the result (should be in focus)\n   by column 1, 2, etc\n\n" \
 		"* Use Tab and Shift + Tab to switch between Navigation, Editor and the\n   result panel. Also these buttons add and remove indents in Editor.\n\n" \
 		"* Hold Ctrl when click by a cell in ""Data Edit"" dialog to edit the value as\n   a multiline text. Use Ctrl + Enter to add new line to text.\n\n" \
 		"* Use Ctrl + Enter to add row in ""Add row"" dialog\n   Or move to next row in ""View row"" dialog.\n\n" \
 		"* SQLite supports a limited subset of ALTER. So there is not GUI allows\n   remove/reorder column to an existing table or something like this.\n\n" \
 		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires series and rownum extensions.\n\n" \
-		"* To add types in data generator, open ""refs.sqlite"" and add rows to\n   ""generators"" table. You can insert an empty value if the generated\n   valuecan be null.\n\n" \
+		"* To add types in data generator, open ""refs.sqlite"" and add rows to\n   ""generators"" table. You can insert an empty value if the generated\n   value may be null.\n\n" \
 		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n"
+	IDS_EXTENSIONS "Json1\n" \
+		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
+		"Math\n" \
+		"This library provides common mathematical and string functions: acos, asin, atan, atn2, atan2, acosh, asinh, atanh, difference, degrees, radians, cos, sin, tan, cot, cosh, sinh, tanh, coth, exp, log, log10, power, sign, sqrt, square, ceil, floor, pi, replicate, charindex, leftstr, rightstr, ltrim, rtrim, trim, replace, reverse, proper, padl, padr, padc, strfilter, stdev, variance, mode, median, lower_quartile, upper_quartile.\n\n" \
+		"Series\n" \
+		"Add the generate_series(start, stop, step) table-function\n" \
+		"Example: select * from generate_series(0,100,5);\n\n" \
+		"Uuid\n"\
+		"This extension implements uuid(), uuid_str(X) and uuid_blob(X) functions that handling RFC-4122 UUIDs\n\n" \
+		"Rownum * \n"\
+		"Add the rownum(start) function that providing row numbers in an query result\n" \
+		"Example: select rownum(1), t.* from t;\n\n" \
+		"Exec *\n"\
+		"Add the exec(cmd, maxOutputLength = 32000) function that allowed to execute shell command.\n" \
+		"Example: select exec('powershell -nologo ""Get-Content data.json""');\n\n"\
+		"* Custom extensions are available only in sqlite-gui"
+
+
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"
 	IDS_TOOLTIP_SAVE "Save current query"
 	IDS_TOOLTIP_PLAN "View execution plan of query"
 	IDS_TOOLTIP_EXECUTE "Execute query"
+	IDS_TOOLTIP_INTERRUPT "Interrupt query"
 END
 
 IDI_LOGO ICON "resources/logo.ico"

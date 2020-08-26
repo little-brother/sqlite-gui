@@ -42,6 +42,7 @@ extern HTREEITEM treeItems[5]; // 0 - current
 extern HMENU treeMenus[6]; // 0 - add/refresh menu
 extern TCHAR treeEditName[255];
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
+extern TCHAR searchString[255];
 
 extern const char *TYPES8[5];
 extern const TCHAR *TYPES16[5];
@@ -50,7 +51,6 @@ extern const TCHAR *TYPES16p[5];
 
 extern HFONT hDefFont;
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
-bool processColumnHeaderClick(NMHDR* pHdr, LPARAM lParam);
 
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
@@ -68,11 +68,13 @@ void setTreeFont(HWND hWnd);
 
 void updateHighlighting(HWND hEditorWnd);
 void updateParenthesisHighlighting(HWND hWnd);
-bool processAutoComplete(MSGFILTER* pF);
+bool processEditorKey(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
+TCHAR* getWordFromCursor(HWND hWnd, int pos = -1);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
+bool sortListView(HWND hListWnd, int colNo);
 LRESULT onListViewMenu(int cmd);
 TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type);

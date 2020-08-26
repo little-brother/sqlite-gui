@@ -3,7 +3,7 @@
 #include "utils.h"
 
 namespace utils {
-	TCHAR* trim(TCHAR *in, bool trimSemicolon) {
+	TCHAR* trim(TCHAR *in) {
 		auto isBlank = [](TCHAR ch) -> bool {
 			return (ch == TEXT(' ')) || (ch == TEXT('\r')) || (ch == TEXT('\n'));
 		};
@@ -49,30 +49,42 @@ namespace utils {
 		return res;
 	}
 
-	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start) {
+	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool isAll) {
 		int len = _tcslen(in);
 		int nLen = _tcslen(newStr);
 		int oLen = _tcslen(oldStr);
 
-		TCHAR* res = new TCHAR[len + nLen + 1]{0};
-		_tcscpy(res, in);
+		if (start > len || len == 0)
+			return new TCHAR[1]{0};
 
-		TCHAR* p;
-		if (!(p = _tcsstr(res + start, oldStr)))
-			return res;
+		TCHAR* res = new TCHAR[nLen <= oLen ? len : len * (nLen - oLen + 1)] {0};
+		TCHAR* p = (TCHAR*)in + start;
+		TCHAR* p2 = p;
 
-		int pos = len - _tcslen(p);
-		for (int i = 0; i < nLen; i++)
-			res[pos + i] = newStr[i];
+		_tcsncat(res, in, start);
 
-		for (int i = 0; i < len - pos - oLen ; i++)
-			res[pos + nLen + i] = in[pos + oLen + i];
+		while((p = _tcsstr(p, oldStr))) {
+			_tcsncat(res, p2, p - p2);
+			_tcsncat(res, newStr, nLen);
+			p = p + oLen;
+			p2 = p;
 
-		for (int i = len - oLen + nLen; i < len + nLen + 1; i++)
-			res[i] = 0;
+			if (!isAll)
+				break;
+		}
 
+		_tcsncat(res, p2, len - (p2 - in));
 		return res;
 	}
+
+	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start) {
+		return replace(in, oldStr, newStr, start, false);
+	}
+
+	TCHAR* replaceAll (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start) {
+		return replace(in, oldStr, newStr, start, true);
+	}
+
 
 	TCHAR* utf8to16(const char* in) {
 		TCHAR *out;
@@ -81,7 +93,7 @@ namespace utils {
 			out[0] = TEXT('\0');
 		} else  {
 			DWORD size = MultiByteToWideChar(CP_UTF8, 0, in, -1, NULL, 0);
-			out = new TCHAR[size + 1]{0};
+			out = new TCHAR[size]{0};
 			MultiByteToWideChar(CP_UTF8, 0, in, -1, out, size);
 		}
 		return out;
@@ -94,7 +106,7 @@ namespace utils {
 			out[0] = '\0';
 		} else  {
 			int len = WideCharToMultiByte(CP_UTF8, 0, in, -1, NULL, 0, 0, 0);
-			out = new char[len + 1]{0};
+			out = new char[len]{0};
 			WideCharToMultiByte(CP_UTF8, 0, in, -1, out, len, 0, 0);
 		}
 		return out;
@@ -166,5 +178,34 @@ namespace utils {
 			return lValue == dValue ? sqlite3_bind_int64(stmt, pos, lValue) : sqlite3_bind_double(stmt, pos, dValue);
 
 		return strlen(value8) ? sqlite3_bind_text(stmt, pos, value8, strlen(value8),  SQLITE_TRANSIENT) : sqlite3_bind_null(stmt, pos);
+	}
+
+	// Supports both 2.7 and 2,7
+	bool isNumber(TCHAR* str, double *out) {
+		double d;
+		TCHAR *endptr;
+		errno = 0;
+		d = _tcstod(str, &endptr);
+		bool rc = !(errno != 0 || *endptr != '\0');
+		if (rc && out != NULL)
+				*out = d;
+
+		if (rc)
+			return true;
+
+		int len = _tcslen(str);
+		TCHAR str2[len + 1]{0};
+		_tcscpy(str2, str);
+		for (int i = 0; i < len; i++)
+			if (str2[i] == TEXT('.'))
+				str2[i] = TEXT(',');
+
+		errno = 0;
+		d = _tcstod(str2, &endptr);
+		rc = !(errno != 0 || *endptr != '\0');
+		if (rc && out != NULL)
+			*out = d;
+
+		return rc;
 	}
 }
