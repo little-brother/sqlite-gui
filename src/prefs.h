@@ -21,6 +21,9 @@ namespace prefs {
 	bool setQuery(const char* table, const char* query);
 	int deleteQuery(const char* table, const char* query);
 	int getQueries(const char* table, const char* filter, char ** queries);
+
+	bool getDiagramRect(const char *dbname, const char* table, RECT* rect);
+	bool setDiagramRect(const char *dbname, const char* table, RECT rect);
 }
 
 #endif

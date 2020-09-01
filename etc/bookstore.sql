@@ -59,6 +59,12 @@ create table reviews (
 	foreign key(book_id) references books(id)
 );
 
+create table order_log (
+	sale_date real,
+	manager text,
+	customer text
+);
+
 create view v_bestseller5 as
 select b.author, b.title, sum(ob.quantity) cnt
 from order_books ob inner join books b on ob.book_id == b.id
@@ -89,6 +95,13 @@ where json_extract(json_each.value, '$.price') > 4
 group by v.id, json_each.value;
 
 create index idx_customer_fullname on customers (fullname);
+
+create trigger trg_orders_insert
+after insert on orders
+begin
+	insert into order_log (sale_date, manager, customer)
+	select NEW.sale_date, (select fullname from employees where id = NEW.employee_id), (select fullname from customers where id = NEW.customer_id);
+end;
 
 -- data	
 insert into books (id, title, author, isbn, price, available) values

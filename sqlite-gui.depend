@@ -22,20 +22,20 @@
 1562796420 d:\codes\sqlite-gui\sqlite3.h
 	<stdarg.h>
 
-1598432413 source:d:\codes\sqlite-gui\src\resource.rc
+1598965694 source:d:\codes\sqlite-gui\src\resource.rc
 	<windows.h>
 	<commctrl.h>
 	<richedit.h>
 	"resource.h"
 
-1598361055 d:\codes\sqlite-gui\src\resource.h
+1598806182 d:\codes\sqlite-gui\src\resource.h
 
-1598276939 source:d:\codes\sqlite-gui\src\prefs.cpp
+1598808812 source:d:\codes\sqlite-gui\src\prefs.cpp
 	<ctime>
 	"prefs.h"
 	"sqlite3.h"
 
-1596020411 d:\codes\sqlite-gui\src\prefs.h
+1598737068 d:\codes\sqlite-gui\src\prefs.h
 	<stdio.h>
 	<windows.h>
 	<tchar.h>
@@ -43,7 +43,7 @@
 1583506689 d:\codes\sqlite-gui\src\sqlite3.h
 	<stdarg.h>
 
-1598435757 source:d:\codes\sqlite-gui\src\main.cpp
+1598966016 source:d:\codes\sqlite-gui\src\main.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
@@ -67,15 +67,16 @@
 	<stdio.h>
 	"utils.h"
 
-1598165324 source:d:\codes\sqlite-gui\src\tools.cpp
+1598993348 source:d:\codes\sqlite-gui\src\tools.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
 	"tools.h"
 	"utils.h"
+	"dialogs.h"
 	"prefs.h"
 
-1598395438 d:\codes\sqlite-gui\src\global.h
+1598885186 d:\codes\sqlite-gui\src\global.h
 	<windows.h>
 	<windowsx.h>
 	<commctrl.h>
@@ -87,13 +88,13 @@
 	<locale.h>
 	"sqlite3.h"
 
-1597490424 d:\codes\sqlite-gui\src\tools.h
+1598708299 d:\codes\sqlite-gui\src\tools.h
 	<windows.h>
 
-1598115096 d:\codes\sqlite-gui\src\dialogs.h
+1598875247 d:\codes\sqlite-gui\src\dialogs.h
 	<windows.h>
 
-1598433809 source:d:\codes\sqlite-gui\src\dialogs.cpp
+1598965806 source:d:\codes\sqlite-gui\src\dialogs.cpp
 	"resource.h"
 	"global.h"
 	"prefs.h"

@@ -8,8 +8,9 @@
 #define IDD_TOOL_EXPORT_SQL        18
 #define IDD_TOOL_IMPORT_CSV        19
 #define IDD_TOOL_GENERATE_DATA     20
-#define IDD_ADD_TABLE              21
-#define IDD_FIND                   22
+#define IDD_TOOL_DATABASE_DIAGRAM  21
+#define IDD_ADD_TABLE              22
+#define IDD_FIND                   23
 
 #define IDA_ACCEL                  77
 
@@ -49,6 +50,7 @@
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_EXIT_BY_ESCAPE     131
 #define IDC_DLG_INDENT             132
+#define IDC_DLG_TOOLBAR            133
 
 
 #define IDC_DLG_COLNAME            140
@@ -100,6 +102,8 @@
 #define IDC_ROW_EDIT               400
 #define IDC_ROW_SWITCH             500
 
+#define IDC_DATABASE_DIAGRAM_TABLE 600
+
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
@@ -124,6 +128,7 @@
 #define IDM_CHECK_FOREIGN_KEY      1525
 #define IDM_VACUUM                 1526
 #define IDM_GENERATE_DATA          1527
+#define IDM_DATABASE_DIAGRAM       1528
 
 #define IDM_HELP                   1530
 #define IDM_ABOUT                  1531
@@ -158,9 +163,14 @@
 #define IDM_ROW_EDIT               1712
 #define IDM_ROW_DELETE             1713
 
+#define IDM_LINK_FK                1731
+#define IDM_LINK_VIEW              1732
+#define IDM_LINK_TRIGGER           1733
+
 #define IDI_LOGO                   3000
 #define IDB_TREEVIEW               3001
 #define IDB_TOOLBAR                3002
+#define IDB_DLG_TOOLBAR            3003
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001

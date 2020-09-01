@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 0, 0, 0
+FILEVERSION 1, 1, 0, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.0.0\000"
+			VALUE "FileVersion", "1.1.0\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.0.0\000"
+			VALUE "ProductVersion", "1.1.0\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -29,7 +29,7 @@ IDD_ADDEDIT DIALOGEX 50,50,500,300
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL | WS_CHILD,1,1,498,273,WS_EX_STATICEDGE
-	PUSHBUTTON "Example",IDC_DLG_EXAMPLE,5,282,50,14, WS_TABSTOP | NOT WS_VISIBLE
+	PUSHBUTTON "Example",IDC_DLG_EXAMPLE,5,282,50,14, WS_TABSTOP
 	PUSHBUTTON "Cancel",IDC_DLG_CANCEL,445,282,50,14, WS_TABSTOP
 	PUSHBUTTON "Execute",IDC_DLG_OK,390,282,50,14, WS_TABSTOP
 END
@@ -230,6 +230,14 @@ BEGIN
 	PUSHBUTTON	  "Close", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
 END
 
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_TOOL_DATABASE_DIAGRAM DIALOGEX 50,50,550,400
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | WS_VISIBLE
+	CAPTION "Database diagram"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+END
+
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_MAIN MENU
 BEGIN
@@ -259,6 +267,8 @@ BEGIN
 
 	POPUP "Tools"
 	BEGIN
+		MENUITEM "Database diagram", IDM_DATABASE_DIAGRAM, GRAYED
+		MENUITEM SEPARATOR
 		MENUITEM "Execute SQL file", IDM_IMPORT_SQL, GRAYED
 		MENUITEM "Import from CSV file", IDM_IMPORT_CSV, GRAYED
 		MENUITEM "Export to SQL file", IDM_EXPORT_SQL, GRAYED
@@ -429,7 +439,7 @@ BEGIN
 		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires series and rownum extensions.\n\n" \
 		"* To add types in data generator, open ""refs.sqlite"" and add rows to\n   ""generators"" table. You can insert an empty value if the generated\n   value may be null.\n\n" \
-		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n"
+		"Cons\n* BLOB is unsupported\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n* Data diagram isn't accurate with building references\n"
 	IDS_EXTENSIONS "Json1\n" \
 		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
 		"Math\n" \
@@ -439,6 +449,8 @@ BEGIN
 		"Example: select * from generate_series(0,100,5);\n\n" \
 		"Uuid\n"\
 		"This extension implements uuid(), uuid_str(X) and uuid_blob(X) functions that handling RFC-4122 UUIDs\n\n" \
+		"Regexp\n"\
+		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Rownum * \n"\
 		"Add the rownum(start) function that providing row numbers in an query result\n" \
 		"Example: select rownum(1), t.* from t;\n\n" \
@@ -458,3 +470,4 @@ END
 
 IDI_LOGO ICON "resources/logo.ico"
 IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
+IDB_DLG_TOOLBAR BITMAP "resources/toolbar2.bmp"

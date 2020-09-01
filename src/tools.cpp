@@ -3,10 +3,11 @@
 #include "resource.h"
 #include "tools.h"
 #include "utils.h"
+#include "dialogs.h"
 #include "prefs.h"
 
 namespace tools {
-	const TCHAR* DELIMITERS[5] = {TEXT(";"), TEXT(","), TEXT("\t"), TEXT("|"), TEXT("|||")};
+	const TCHAR* DELIMITERS[4] = {TEXT(";"), TEXT(","), TEXT("\t"), TEXT("|")};
 
 	BOOL CALLBACK cbDlgExportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -26,7 +27,7 @@ namespace tools {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), BST_CHECKED);
 
 				HWND hDelimiter = GetDlgItem(hWnd, IDC_DLG_DELIMITER);
-				for (int i = 0; i < 5; i++)
+				for (int i = 0; i < 4; i++)
 					ComboBox_AddString(hDelimiter, i != 2 ? DELIMITERS[i] : TEXT("Tab"));
 				ComboBox_SetCurSel(hDelimiter, prefs::get("csv-export-delimiter"));
 
@@ -74,8 +75,16 @@ namespace tools {
 								if (i != 0)
 									_tcscat(line16, delimiter16);
 								TCHAR* value16 = utils::utf8to16(isColumns ? (char *)sqlite3_column_name(stmt, i) : (char *)sqlite3_column_text(stmt, i));
-								_tcscat(line16, value16);
+								TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
+								if (_tcschr(qvalue16, TEXT(','))) {
+									TCHAR val16[_tcslen(qvalue16) + 3]{0};
+									_stprintf(val16, TEXT("\"%s\""), qvalue16);
+									_tcscat(line16, val16);
+								} else {
+									_tcscat(line16, qvalue16);
+								}
 								delete [] value16;
+								delete [] qvalue16;
 							}
 							_tcscat(line16, isUnixNewLine ? TEXT("\n") : TEXT("\r\n"));
 							_ftprintf(f, line16);
@@ -86,7 +95,6 @@ namespace tools {
 					sqlite3_finalize(stmt);
 					fclose(f);
 					delete [] sql8;
-
 
 					prefs::set("csv-export-delimiter", iDelimiter);
 					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
@@ -265,7 +273,7 @@ namespace tools {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), prefs::get("csv-import-is-columns") ? BST_CHECKED : BST_UNCHECKED);
 
 				HWND hDelimiter = GetDlgItem(hWnd, IDC_DLG_DELIMITER);
-				for (int i = 0; i < 5; i++)
+				for (int i = 0; i < 4; i++)
 					ComboBox_AddString(hDelimiter, i != 2 ? DELIMITERS[i] : TEXT("Tab"));
 				ComboBox_SetCurSel(hDelimiter, prefs::get("csv-import-delimiter"));
 
@@ -313,49 +321,73 @@ namespace tools {
 					Header_DeleteItem(hHeader, cnt - 1 - i);
 				}
 
-				TCHAR* line = new TCHAR[size + 1]{0};
+				auto addCell = [hPreviewWnd, isColumns] (int lineNo, int colNo, TCHAR* column) {
+					if (lineNo == 0) {
+						LVCOLUMN lvc;
+						lvc.mask = LVCF_TEXT | LVCF_SUBITEM | LVCF_WIDTH;
+						lvc.iSubItem = colNo;
+						if (isColumns) {
+							lvc.pszText = (TCHAR*)column;
+							lvc.cchTextMax = _tcslen(column) + 1;
+						} else {
+							TCHAR name[64];
+							_stprintf(name, TEXT("Column%i"), colNo);
+							lvc.pszText = name;
+							lvc.cchTextMax = 64;
+						}
+						lvc.cx = 50;
+						ListView_InsertColumn(hPreviewWnd, colNo, &lvc);
+					}
+
+					if ((isColumns && lineNo > 0) || !isColumns) {
+						LVITEM  lvi = {0};
+						lvi.mask = LVIF_TEXT;
+						lvi.iSubItem = colNo;
+						lvi.iItem = isColumns ? lineNo - 1 : lineNo;
+						lvi.pszText = column;
+						lvi.cchTextMax = _tcslen(column) + 1;
+						if (colNo == 0)
+							ListView_InsertItem(hPreviewWnd, &lvi);
+						else
+							ListView_SetItem(hPreviewWnd, &lvi);
+					}
+				};
+
+				TCHAR line[size + 1]{0};
 				int lineNo = 0;
+
 				while(!feof (f) && lineNo < 5) {
 					if (_fgetts(line, size, f)) {
 						int colNo = 0;
-						TCHAR* column = _tcstok (line, delimiter);
-						while (column != NULL) {
-							if (lineNo == 0) {
-								LVCOLUMN lvc;
-								lvc.mask = LVCF_TEXT | LVCF_SUBITEM | LVCF_WIDTH;
-								lvc.iSubItem = colNo;
-								if (isColumns) {
-									lvc.pszText = (TCHAR*)column;
-									lvc.cchTextMax = _tcslen(column) + 1;
-								} else {
-									TCHAR name[64];
-									_stprintf(name, TEXT("Column%i"), colNo);
-									lvc.pszText = name;
-									lvc.cchTextMax = 64;
-								}
-								lvc.cx = 50;
-								ListView_InsertColumn(hPreviewWnd, colNo, &lvc);
+
+						TCHAR value[size + 1];
+						bool inQuotes = false;
+						int valuePos = 0;
+						int i = 0;
+						do {
+							value[valuePos++] = line[i];
+
+							if (!inQuotes && (line[i] == delimiter[0] || line[i] == TEXT('\n'))) {
+								value[valuePos - 1] = 0;
+								valuePos = 0;
+
+								addCell(lineNo, colNo, value);
+								colNo++;
 							}
 
-							if ((isColumns && lineNo > 0) || !isColumns) {
-								LVITEM  lvi = {0};
-								lvi.mask = LVIF_TEXT;
-								lvi.iSubItem = colNo;
-								lvi.iItem = isColumns ? lineNo - 1 : lineNo;
-								lvi.pszText = column;
-								lvi.cchTextMax = _tcslen(column) + 1;
-								if (colNo == 0)
-									ListView_InsertItem(hPreviewWnd, &lvi);
-								else
-									ListView_SetItem(hPreviewWnd, &lvi);
+							if (line[i] == TEXT('"') && line[i + 1] != TEXT('"')) {
+								valuePos--;
+								inQuotes = !inQuotes;
 							}
-							colNo++;
-							column = _tcstok (NULL, delimiter);
-						}
+
+							if (line[i] == TEXT('"') && line[i + 1] == TEXT('"'))
+								i++;
+
+						} while (line[++i]);
 					}
 					lineNo++;
 				}
-				delete [] line;
+
 				fclose(f);
 				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
 			}
@@ -449,23 +481,44 @@ namespace tools {
 							}
 
 							int colNo = 0;
-							TCHAR* pos = line16;
-							TCHAR* value16 = _tcstok (pos, delimiter);
-							while (value16 != NULL && colNo < colCount) {
 
-								TCHAR* tvalue16 = utils::trim(value16);
-								char* value8 = utils::utf16to8(tvalue16);
-								utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
-								delete [] value8;
-								delete [] tvalue16;
-								value16 = _tcstok (NULL, delimiter);
-								colNo++;
-							}
+							TCHAR value[size + 1];
+							bool inQuotes = false;
+							int valuePos = 0;
+							int i = 0;
+							do {
+								value[valuePos++] = line16[i];
+
+								if (!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) {
+									value[valuePos - 1] = 0;
+									valuePos = 0;
+
+									TCHAR* tvalue16 = utils::trim(value);
+									char* value8 = utils::utf16to8(tvalue16);
+									utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+									delete [] value8;
+									delete [] tvalue16;
+
+									colNo++;
+								}
+
+								if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
+									valuePos--;
+									inQuotes = !inQuotes;
+								}
+
+								if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
+									i++;
+
+							} while (line16[++i]);
+
 							for (int i = colNo; i < colCount; i++)
 								sqlite3_bind_null(stmt, i + 1);
+
 							rc = sqlite3_step(stmt) == SQLITE_DONE;
 							sqlite3_reset(stmt);
 							lineNo++;
+
 						}
 					}
 
@@ -895,5 +948,355 @@ namespace tools {
 		delete [] path8;
 
 		return rc;
+	}
+
+	#define LINK_FK 1
+	#define LINK_VIEW 2
+	#define LINK_TRIGGER 3
+	#define MAX_LINK_COUNT 255
+	struct Link {
+		HWND hWndFrom;
+		int posFrom;
+		HWND hWndTo;
+		int posTo;
+		int type;
+	};
+
+	char* dbname8 = 0;
+	Link links[MAX_LINK_COUNT]{0};
+	HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DLG_TOOLBAR), 32, 0, RGB(255,255,255));
+
+	WNDPROC cbOldTable;
+	LRESULT CALLBACK cbNewTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_WINDOWPOSCHANGED) {
+			RECT rcSize{0};
+			GetWindowRect(hWnd, &rcSize);
+			RECT rcPos{0};
+			GetWindowRect(hWnd, &rcPos);
+			POINT pos{rcPos.left, rcPos.top};
+			ScreenToClient(GetParent(hWnd), &pos);
+			TCHAR table16[255]{0};
+			GetWindowText(hWnd, table16, 255);
+			char* table8 = utils::utf16to8(table16);
+			RECT rc = {pos.x, pos.y, rcSize.right - rcSize.left, rcSize.bottom - rcSize.top};
+			prefs::setDiagramRect(dbname8, table8, rc);
+			delete [] table8;
+		}
+
+		if (msg == WM_LBUTTONDOWN) {
+			HWND hParentWnd = GetParent(hWnd);
+			SetWindowLong(hParentWnd, GWL_USERDATA, (LONG)hWnd);
+			InvalidateRect(hParentWnd, NULL, true);
+		}
+
+		if (msg == WM_LBUTTONDBLCLK) {
+			TCHAR table16[255]{0};
+			GetWindowText(hWnd, table16, 255);
+			_tcscpy(editTableData16, table16);
+			DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData);
+		}
+
+		if (msg == WM_WINDOWPOSCHANGED || msg == WM_LBUTTONDBLCLK)
+			SetFocus(GetParent(hWnd));
+
+		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
+	}
+
+	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				TCHAR* dbpath16 = utils::utf8to16(sqlite3_db_filename(db, 0));
+				TCHAR dbname16[255];
+				_tsplitpath(dbpath16, NULL, NULL, dbname16, NULL);
+				dbname8 = utils::utf16to8(dbpath16);
+				delete [] dbpath16;
+
+				TBBUTTON tbButtons [] = {
+					{0, IDM_LINK_FK, (byte)(prefs::get("link-fk") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("Foreign keys")},
+					{1, IDM_LINK_VIEW, (byte)(prefs::get("link-view") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in views")},
+					{2, IDM_LINK_TRIGGER, (byte)(prefs::get("link-trigger") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in triggers")}
+				};
+
+				HWND hToolWnd = CreateToolbarEx (hWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
+					tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
+
+				SendMessage(hToolWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
+				SendMessage(hToolWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
+
+				HWND hTableWnd = 0;
+				int tblNo = 0;
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type),c.type, 'any'), c.pk " \
+					"from sqlite_master t, pragma_table_info(t.tbl_name) c " \
+					"where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table')" \
+					"order by 1, 3", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* tblname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						TCHAR* colname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 1));
+						int no = sqlite3_column_int(stmt, 2);
+						TCHAR* type16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 3));
+						int isPk = sqlite3_column_int(stmt, 4);
+
+						if (!no) {
+							RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
+							prefs::getDiagramRect(dbname8, (const char*)sqlite3_column_text(stmt, 0), &rect);
+							hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
+								WS_CAPTION | WS_VISIBLE| WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_NOSEL,
+								rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
+
+							cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
+							ShowWindow(hTableWnd, SW_SHOW);
+							tblNo++;
+						}
+
+						TCHAR buf[1024]{0};
+						_stprintf(buf, TEXT("%s: %s %s"), colname16, type16, isPk? TEXT(" [PK]") : TEXT(""));
+						ListBox_AddString(hTableWnd, buf);
+
+						delete [] tblname16;
+						delete [] colname16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				int linkNo = 0;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblfrom, c.'from' colfrom, c.'table' tblto, c.'to' colto " \
+					"from sqlite_master t, pragma_foreign_key_list(t.tbl_name) c " \
+					"where t.sql is not null and t.type in ('view', 'table')" \
+					"order by 1, 2, 3", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* tblfrom16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						TCHAR* colfrom16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 1));
+						TCHAR* tblto16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 2));
+						TCHAR* colto16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 3));
+
+						HWND hWndFrom = FindWindowEx(hWnd, 0, NULL, tblfrom16);
+						HWND hWndTo = FindWindowEx(hWnd, 0, NULL, tblto16);
+						int posFrom = ListBox_FindString(hWndFrom, 0, colfrom16);
+						int posTo = ListBox_FindString(hWndTo, 0, colto16);
+
+						if (hWndFrom && hWndTo && posFrom != -1 && posTo != -1) {
+							links[linkNo] = {hWndFrom, posFrom, hWndTo, posTo, LINK_FK};
+							linkNo++;
+						}
+
+						delete [] tblfrom16;
+						delete [] colfrom16;
+						delete [] tblto16;
+						delete [] colto16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select sm.tbl_name, +(sm.type = 'view'), ref.name " \
+					"from sqlite_master sm inner join sqlite_master ref " \
+					"on sm.type in ('view', 'trigger') and ref.type in ('table', 'view') " \
+					"and lower(sm.sql) regexp '(from |join |into )([ \"''])*' || lower(ref.name) || '(\\D|\\b|''])+'", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* tblname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						int isView = sqlite3_column_int(stmt, 1);
+						TCHAR* refname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 2));
+
+						HWND hWndFrom = FindWindowEx(hWnd, 0, NULL, tblname16);
+						HWND hWndTo = FindWindowEx(hWnd, 0, NULL, refname16);
+						if (hWndFrom && hWndTo) {
+							links[linkNo] = {hWndFrom, -1, hWndTo, -1, isView ? LINK_VIEW : LINK_TRIGGER};
+							linkNo++;
+						}
+
+						delete [] tblname16;
+						delete [] refname16;
+					}
+				} else {
+					SendMessage(hToolWnd, TB_SETSTATE, IDM_LINK_VIEW, 0);
+					SendMessage(hToolWnd, TB_SETSTATE, IDM_LINK_TRIGGER, 0);
+				}
+				sqlite3_finalize(stmt);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+
+				SetWindowPos(hWnd, 0, prefs::get("x") + 30, prefs::get("y") + 70, prefs::get("width") - 60, prefs::get("height") - 100,  SWP_NOZORDER);
+				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
+			}
+			break;
+
+			case WM_LBUTTONDOWN: {
+				SetWindowLong(hWnd, GWL_USERDATA, 0);
+				InvalidateRect(hWnd, NULL, true);
+			}
+			break;
+
+			case WM_SIZE: {
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_TOOLBAR), WM_SIZE, 0, 0);
+			}
+			break;
+
+			case WM_ERASEBKGND: {
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+				return 1;
+			}
+			break;
+
+			case WM_PAINT : {
+				InvalidateRect(hWnd, NULL, true);
+
+				auto max = [](int a, int b) {
+					return a > b ? a : b;
+				};
+				auto min = [](int a, int b) {
+					return a < b ? a : b;
+				};
+
+				bool isFk = prefs::get("link-fk");
+				bool isView = prefs::get("link-view");
+				bool isTrigger = prefs::get("link-trigger");
+				HWND hCurrWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+
+				PAINTSTRUCT ps{0};
+				ps.fErase = true;
+				HDC hdc = BeginPaint(hWnd, &ps);
+
+				int captionH = GetSystemMetrics(SM_CYCAPTION) +  ListBox_GetItemHeight(links[0].hWndFrom, 0) - 2;
+				for (int i = 0; links[i].type != 0; i++) {
+					int type = links[i].type;
+					if ((type == LINK_FK && !isFk) || (type == LINK_VIEW && !isView) || (type == LINK_TRIGGER && !isTrigger))
+						continue;
+
+					RECT rcA{0}, rcB{0};
+					GetWindowRect(links[i].hWndFrom, &rcA);
+					GetWindowRect(links[i].hWndTo, &rcB);
+
+					POINT from{rcA.left, rcA.top}, to{rcB.left, rcB.top};
+					ScreenToClient(hWnd, &from);
+					ScreenToClient(hWnd, &to);
+					int hA = rcA.bottom - rcA.top;
+					int wA = rcA.right - rcA.left;
+					int hB = rcB.bottom - rcB.top;
+					int wB = rcB.right - rcB.left;
+
+					int minStick = 10;
+					POINT a = {0}, b = {0}, c = {0}, d = {0};
+
+					HPEN hPen = CreatePen(PS_SOLID,
+						(hCurrWnd == links[i].hWndFrom || hCurrWnd == links[i].hWndTo) ? 2 : 1,
+						type == LINK_FK ? RGB(0, 0, 0) : type == LINK_VIEW ? RGB(0, 0, 255) : RGB(255, 0, 0));
+					SelectObject(hdc, hPen);
+
+					if (type == LINK_FK) {
+						bool isRightA = false;
+						bool isRightB = false;
+
+						if (rcB.left - rcA.right > 2 * minStick) {
+							isRightA = true;
+						} else if (rcA.left - rcB.right > 2 * minStick) {
+							isRightB = true;
+						} else if (abs(rcA.left - rcB.left) < abs(rcA.right - rcB.right)) {
+							isRightA = true;
+							isRightB = true;
+						}
+
+						RECT rcFrom{0}, rcTo{0};
+						ListBox_GetItemRect(links[i].hWndFrom, links[i].posFrom, &rcFrom);
+						ListBox_GetItemRect(links[i].hWndTo, links[i].posTo, &rcTo);
+
+						a = {from.x + (isRightA ? wA : 0), from.y + rcFrom.top  + captionH};
+						b = {to.x + (isRightB ? wB : 0), to.y + rcTo.top  + captionH};
+
+						int midX = isRightA && isRightB ? max(from.x + wA, to.x + wB) + minStick :
+							!isRightA && !isRightB ? min(from.x, to.x) - minStick :
+							isRightA && !isRightB ? from.x + wA + (to.x - from.x - wA) / 2 :
+							!isRightA && isRightB ? to.x + wB + (from.x - to.x - wB) / 2 :
+							0;
+						c = {midX, a.y};
+						d = {midX, b.y};
+
+						MoveToEx(hdc, a.x + (isRightA ? 5 : -5), a.y, NULL);
+						LineTo(hdc, a.x, a.y + 5);
+						MoveToEx(hdc, a.x + (isRightA ? 5 : -5), a.y, NULL);
+						LineTo(hdc, a.x, a.y - 5);
+
+						MoveToEx(hdc, b.x, b.y - 5, NULL);
+						LineTo(hdc, b.x, b.y + 5);
+					}
+
+					if ((type == LINK_VIEW) || (type == LINK_TRIGGER)) {
+						bool isBottomA = false;
+						bool isBottomB = false;
+						int shift = LINK_VIEW ? 5 : 10;
+
+						if (rcB.top - rcA.bottom > 2 * minStick) {
+							isBottomA = true;
+						} else if (rcA.top - rcB.bottom > 2 * minStick) {
+							isBottomB = true;
+						} else if (abs(rcA.top - rcB.top) < abs(rcA.bottom - rcB.bottom)) {
+							isBottomA = true;
+							isBottomB = true;
+						}
+
+						a = {from.x + wA/2 - shift, from.y + (isBottomA ? hA : 0)};
+						b = {to.x + wB/2 + shift, to.y + (isBottomB ? hB : 0)};
+
+						int midY = isBottomA && isBottomB ? max(from.y + hA, to.y + hB) + minStick :
+							!isBottomA && !isBottomB ? min(from.y, to.y) - minStick :
+							isBottomA && !isBottomB ? from.y + hA + (to.y - from.y - hA) / 2 :
+							!isBottomA && isBottomB ? to.y + hB + (from.y - to.y - hB) / 2 :
+							0;
+						c = {a.x, midY};
+						d = {b.x, midY};
+
+						MoveToEx(hdc, a.x - 5, a.y, NULL);
+						LineTo(hdc, a.x + 5, a.y);
+
+						MoveToEx(hdc, b.x, b.y, NULL);
+						LineTo(hdc, b.x + 5, b.y + (isBottomB ? 5 : -5));
+						MoveToEx(hdc, b.x, b.y, NULL);
+						LineTo(hdc, b.x - 5, b.y + (isBottomB ? 5 : -5));
+					}
+
+					MoveToEx(hdc, a.x, a.y, NULL);
+					LineTo(hdc, c.x, c.y);
+					LineTo(hdc, d.x, d.y);
+					LineTo(hdc, b.x, b.y);
+
+					DeleteObject(hPen);
+				}
+
+				EndPaint(hWnd, &ps);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDM_LINK_FK || wParam == IDM_LINK_VIEW || wParam == IDM_LINK_TRIGGER) {
+					HWND hToolWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
+					int isChecked = SendMessage(hToolWnd, TB_ISBUTTONCHECKED, wParam, 0);
+
+					if (wParam == IDM_LINK_FK)
+						prefs::set("link-fk", isChecked);
+					if (wParam == IDM_LINK_VIEW)
+						prefs::set("link-view", isChecked);
+					if (wParam == IDM_LINK_TRIGGER)
+						prefs::set("link-trigger", isChecked);
+
+					InvalidateRect(hWnd, NULL, true);
+				}
+
+				if (wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				delete [] dbname8;
+				for (int i = 0; i < MAX_LINK_COUNT; i++)
+					links[i].type = 0;
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
 	}
 }

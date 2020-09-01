@@ -10,6 +10,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Store an execution history and user gists
 * Export/Import data
 * Data generator
+* Database diagram
 * Most usefull extensions are included
 * Demo database "Bookstore" for beginners
 * Does not require installation

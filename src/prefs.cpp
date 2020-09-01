@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3 *db;
 
-	const int ICOUNT = 24;
+	const int ICOUNT = 27;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
@@ -14,7 +14,8 @@ namespace prefs {
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
 		"data-generator-row-count", "data-generator-truncate",
-		"exit-by-escape"
+		"exit-by-escape",
+		"link-fk", "link-view", "link-trigger"
 	};
 
 	int ivalues[ICOUNT] = {
@@ -25,7 +26,8 @@ namespace prefs {
 		0, 0, 1,
 		10000,
 		100, 0,
-		1
+		1,
+		1, 0, 0
 	};
 
 	int get(const char* name) {
@@ -81,6 +83,7 @@ namespace prefs {
 			"create table if not exists history (query text not null unique, time real not null, primary key (query));" \
 			"create table if not exists gists (query text not null unique, time real not null, primary key (query));" \
 			"create table if not exists generators (type text, value text);" \
+			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
 			"create unique index if not exists idx_history on history (query);" \
 			"create unique index if not exists idx_gists on gists (query);" \
 			"commit;" \
@@ -223,5 +226,40 @@ namespace prefs {
 
 		sqlite3_finalize(stmt);
 		return count;
+	}
+
+	bool getDiagramRect(const char *dbname, const char* table, RECT* rect) {
+		sqlite3_stmt * stmt;
+		int rc = sqlite3_prepare(db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0);
+		if (rc == SQLITE_OK) {
+			sqlite3_bind_text(stmt, 1, dbname, strlen(dbname), SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 2, table, strlen(table), SQLITE_TRANSIENT);
+			if (sqlite3_step(stmt) == SQLITE_ROW) {
+				rect->left = sqlite3_column_int(stmt, 0);
+				rect->top = sqlite3_column_int(stmt, 1);
+				rect->right = sqlite3_column_int(stmt, 2);
+				rect->bottom = sqlite3_column_int(stmt, 3);
+			}
+		}
+		sqlite3_finalize(stmt);
+
+		return rc == SQLITE_DONE || rc == SQLITE_OK;
+	}
+	bool setDiagramRect(const char *dbname, const char* table, RECT rect) {
+		sqlite3_stmt * stmt;
+		int rc = sqlite3_prepare(db, "replace into 'diagrams' (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0);
+		if (rc == SQLITE_OK) {
+			sqlite3_bind_text(stmt, 1, dbname, strlen(dbname), SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 2, table, strlen(table), SQLITE_TRANSIENT);
+			sqlite3_bind_int(stmt, 3, rect.left);
+			sqlite3_bind_int(stmt, 4, rect.top);
+			sqlite3_bind_int(stmt, 5, rect.right);
+			sqlite3_bind_int(stmt, 6, rect.bottom);
+
+			rc = sqlite3_step(stmt);
+		}
+		sqlite3_finalize(stmt);
+
+		return rc == SQLITE_DONE || rc == SQLITE_OK;
 	}
 }

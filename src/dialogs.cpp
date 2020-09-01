@@ -13,47 +13,69 @@ namespace dialogs {
 	const TCHAR* INDENT_LABELS[] = {TEXT("Tab"), TEXT("2 spaces"), TEXT("4 spaces"), 0};
 	const TCHAR* INDENTS[] = {TEXT("\t"), TEXT("  "), TEXT("    ")};
 
-	BOOL CALLBACK cbDlgAdd (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	bool isRequireHighligth = false;
+	bool isRequireParenthesisHighligth = false;
+
+	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				TV_ITEM tv;
-				tv.mask = TVIF_HANDLE | TVIF_PARAM;
-				tv.hItem = treeItems[0];
+				bool isEdit = lParam == IDM_EDIT;
 
-				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam)
-					return EndDialog(hWnd, DLG_CANCEL);
+				TCHAR name16[256] = {0};
+				TV_ITEM tv;
+				tv.mask = TVIF_TEXT | TVIF_HANDLE | TVIF_PARAM;
+				tv.hItem = treeItems[0];
+				tv.pszText = name16;
+				tv.cchTextMax = 256;
+
+				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam || tv.lParam == COLUMN)
+					return EndDialog(hWnd, -1);
 
 				int type = abs(tv.lParam);
+				SetWindowLong(hWnd, GWL_USERDATA, type);
+
 				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				TCHAR buf[256];
-				_stprintf(buf, TEXT("Add %s"), TYPES16[type]);
+				TCHAR buf[512];
+				_stprintf(buf, isEdit ? TEXT("Edit %s \"%s\"") : TEXT("Add %s"), TYPES16[type], name16);
 				SetWindowText(hWnd, buf);
 
-				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_UPDATE | ENM_KEYEVENTS);
-				SetParent(hAutoComplete, hDlgEditorWnd);
+				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hDlgEditorWnd);
-				SetWindowLong(hDlgEditorWnd, GWL_USERDATA, type);
-				ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_SHOW);
+
+				HWND hAutoComplete = CreateWindowEx(WS_EX_TOPMOST | WS_EX_NOPARENTNOTIFY, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
+				SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
+				SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
+				SetWindowLong(hDlgEditorWnd, GWL_USERDATA, (LONG)hAutoComplete);
+				SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hDlgEditorWnd);
 
 				SetFocus(hDlgEditorWnd);
+
+				if (isEdit) {
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
+					TCHAR* sql16 = getDDL(name16, type);
+					if (sql16) {
+						TCHAR buf[_tcslen(sql16) + 128];
+						_stprintf(buf, TEXT("drop %s if exists \"%s\";\n\n%s;"), TYPES16[type], name16, sql16);
+						SetWindowText(hDlgEditorWnd, buf);
+					} else {
+						SetWindowText(hDlgEditorWnd, TEXT("Error to get SQL"));
+					}
+					delete [] sql16;
+				}
 			}
 			break;
 
 			case WM_COMMAND: {
-				if (wParam == IDC_DLG_EXAMPLE) {
-					HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-					TCHAR buf[1024];
-					int type = GetWindowLong(hDlgEditorWnd, GWL_USERDATA);
-					LoadString(GetModuleHandle(NULL), IDS_CREATE_DDL + type, buf, 1024);
-					SetWindowText(hDlgEditorWnd, buf);
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
+					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+					isRequireHighligth = true;
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE) {
-					HWND hEditorWnd = (HWND)lParam;
-					SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
-					updateHighlighting(hEditorWnd);
-					SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
-					InvalidateRect(hEditorWnd, 0, TRUE);
+				if (wParam == IDC_DLG_EXAMPLE) {
+					TCHAR buf[1024];
+					int type = GetWindowLong(hWnd, GWL_USERDATA);
+					LoadString(GetModuleHandle(NULL), IDS_CREATE_DDL + type, buf, 1024);
+					SetWindowText(GetDlgItem(hWnd, IDC_DLG_EDITOR), buf);
 				}
 
 				if (wParam == IDC_DLG_OK) {
@@ -65,7 +87,7 @@ namespace dialogs {
 					delete [] text;
 
 					if (isOk) {
-						EndDialog(hWnd, GetWindowLong(hDlgEditorWnd, GWL_USERDATA));
+						EndDialog(hWnd, GetWindowLong(hWnd, GWL_USERDATA));
 					} else {
 						SetFocus(hDlgEditorWnd);
 					}
@@ -77,17 +99,28 @@ namespace dialogs {
 			break;
 
 			case WM_NOTIFY: {
-				if (wParam == IDC_DLG_EDITOR) {
-					NMHDR* pHdr = (LPNMHDR)lParam;
-					if (pHdr->code == EN_MSGFILTER)
-						return processEditorKey((MSGFILTER*)lParam);
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
+					SELCHANGE *pSc = (SELCHANGE *)lParam;
+					if (pSc->seltyp > 0)
+						return 1;
+
+					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+					isRequireParenthesisHighligth = true;
+				}
+
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER) {
+					return processEditorKey((MSGFILTER*)lParam);
 				}
 			}
 			break;
 
-			case WM_DESTROY:
-				SetParent(hAutoComplete, hEditorWnd);
-				break;
+			case WMU_HIGHLIGHT: {
+				processHightlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth);
+				isRequireHighligth = false;
+				isRequireParenthesisHighligth = false;
+			}
+			break;
 
 			case WM_CLOSE:
 				EndDialog(hWnd, DLG_CANCEL);
@@ -340,95 +373,6 @@ namespace dialogs {
 				}
 			}
 			break;
-
-			case WM_DESTROY:
-				SetParent(hAutoComplete, hEditorWnd);
-				break;
-
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
-
-		}
-
-		return false;
-	}
-
-	BOOL CALLBACK cbDlgEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		switch (msg) {
-			case WM_INITDIALOG: {
-				TCHAR name16[256] = {0};
-				TV_ITEM tv;
-				tv.mask = TVIF_TEXT | TVIF_HANDLE | TVIF_PARAM;
-				tv.hItem = treeItems[0];
-				tv.pszText = name16;
-				tv.cchTextMax = 256;
-
-				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam || tv.lParam == COLUMN)
-					return EndDialog(hWnd, -1);
-
-				int type = abs(tv.lParam);
-
-				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				TCHAR buf[MAX_TEXT_LENGTH];
-				_stprintf(buf, TEXT("Edit %s \"%s\""), TYPES16[type], name16);
-				SetWindowText(hWnd, buf);
-
-				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_UPDATE | ENM_KEYEVENTS);
-				SetParent(hAutoComplete, hDlgEditorWnd);
-
-				setEditorFont(hDlgEditorWnd);
-				SetWindowLong(hDlgEditorWnd, GWL_USERDATA, type);
-				SetFocus(hDlgEditorWnd);
-
-				TCHAR* sql16 = getDDL(name16, type);
-				if (sql16) {
-					TCHAR buf[_tcslen(sql16) + 128];
-					_stprintf(buf, TEXT("drop %s if exists \"%s\";\n\n%s;"), TYPES16[type], name16, sql16);
-					SetWindowText(hDlgEditorWnd, buf);
-				} else {
-					SetWindowText(hDlgEditorWnd, TEXT("Error to get SQL"));
-				}
-				delete [] sql16;
-			}
-			break;
-
-			case WM_COMMAND: {
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
-					updateHighlighting((HWND)lParam);
-
-				if (wParam == IDC_DLG_OK) {
-					HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-					int size = GetWindowTextLength(hDlgEditorWnd) + 1;
-					TCHAR* text = new TCHAR[size]{0};
-					GetWindowText(hDlgEditorWnd, text, size);
-					bool isOk = executeCommandQuery(text);
-					delete [] text;
-
-					if (isOk) {
-						EndDialog(hWnd, GetWindowLong(hDlgEditorWnd, GWL_USERDATA));
-					} else {
-						SetFocus(hDlgEditorWnd);
-					}
-				}
-
-				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
-			}
-			break;
-
-			case WM_NOTIFY: {
-				if (wParam == IDC_DLG_EDITOR) {
-					NMHDR* pHdr = (LPNMHDR)lParam;
-					if (pHdr->code == EN_MSGFILTER)
-						return processEditorKey((MSGFILTER*)lParam);
-				}
-			}
-			break;
-
-			case WM_DESTROY:
-				SetParent(hAutoComplete, hEditorWnd);
-				break;
 
 			case WM_CLOSE:
 				EndDialog(hWnd, DLG_CANCEL);
@@ -1254,7 +1198,7 @@ namespace dialogs {
 				lf.lfCharSet = GetTextCharset(hDC);
 				EnumFontFamiliesEx(hDC, &lf, (FONTENUMPROC) cbEnumFont, (LPARAM)hFontFamily, 0);
 				ReleaseDC(hMainWnd, hDC);
-				char* fontFamily8 = prefs::get("font-family", "Arial");
+				char* fontFamily8 = prefs::get("font-family", "Courier New");
 				TCHAR* fontFamily16 = utils::utf8to16(fontFamily8);
 				ComboBox_SetCurSel(hFontFamily, ComboBox_FindString(hFontFamily, -1, fontFamily16));
 				delete [] fontFamily16;

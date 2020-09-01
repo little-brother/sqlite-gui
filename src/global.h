@@ -36,7 +36,7 @@
 #include "sqlite3.h"
 
 extern sqlite3 *db;
-extern HWND  hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hAutoComplete;
+extern HWND  hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd;
 
 extern HTREEITEM treeItems[5]; // 0 - current
 extern HMENU treeMenus[6]; // 0 - add/refresh menu
@@ -53,11 +53,12 @@ extern HFONT hDefFont;
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
+LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 struct ListViewCell {
-   HWND hListWnd;
-   int iItem;
-   int iSubItem;
+	HWND hListWnd;
+	int iItem;
+	int iSubItem;
 };
 extern ListViewCell currCell;
 
@@ -66,8 +67,7 @@ extern HMENU hEditDataMenu, hResultMenu;
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
 
-void updateHighlighting(HWND hEditorWnd);
-void updateParenthesisHighlighting(HWND hWnd);
+void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorKey(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, int pos = -1);

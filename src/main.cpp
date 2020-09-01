@@ -13,9 +13,6 @@
 #define DEFINE_GUIDXXX(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) EXTERN_C const GUID name = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
 DEFINE_GUIDXXX(IID_ITextDocument,0x8CC497C0,0xA1DF,0x11CE,0x80,0x98, 0x00,0xAA,0x00,0x47,0xBE,0x5D);
 
-IUnknown *tr_code = NULL;
-ITextDocument *td_code;
-
 const char *TYPES8[5] = {"current", "table", "view", "index", "trigger"};
 const TCHAR *TYPES16[5] = {TEXT("current"), TEXT("table"), TEXT("view"), TEXT("index"), TEXT("trigger")};
 const TCHAR *TYPES16u[5] = {TEXT("CURRENT"), TEXT("TABLE"), TEXT("VIEW"), TEXT("INDEX"), TEXT("TRIGGER")};
@@ -145,23 +142,14 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.0.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.0"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
-
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
+	hEditorTipWnd = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hMainWnd, NULL, hInstance, NULL);
 	hTabWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_TAB, hInstance, NULL);
 
-	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE);
-
-	SendMessage(hEditorWnd, EM_GETOLEINTERFACE, 0, (LPARAM)&tr_code);
-	if(tr_code == (IRichEditOle*)NULL) {
-		MessageBox(0, TEXT("Error when trying to get RichEdit OLE Object"), NULL, 0);
-		return 0;
-	}
-	tr_code->QueryInterface(IID_ITextDocument,(void**)&td_code);
-
-	hEditorTipWnd = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP |TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hMainWnd, NULL, hInstance, NULL);
+	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 
 	hDbMenu = GetSubMenu(hMainMenu, 0);
 	updateRecentList();
@@ -225,9 +213,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	ShowWindow (hMainWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 	SetFocus(hEditorWnd);
-	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST | WS_EX_NOPARENTNOTIFY, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hEditorWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
+
+	hAutoComplete = CreateWindowEx(0, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hMainWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
 	cbOldAutoComplete = (WNDPROC)SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
+	SetWindowLong(hEditorWnd, GWL_USERDATA, (LONG)hAutoComplete);
+	SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hEditorWnd);
 
 	while (GetMessage(&msg, NULL, 0, 0)) {
 		if (TranslateAccelerator(hMainWnd, hAccel, &msg))
@@ -237,7 +228,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		DispatchMessage(&msg);
 	}
 
-	tr_code->Release();
 	return msg.wParam;
 }
 
@@ -276,12 +266,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
 			isMoveX = (abs(x - prefs::get("splitter-width")) < 10);
 			isMoveY = (x > prefs::get("splitter-width") + 10) && (abs(y - top - prefs::get("splitter-height")) < 10);
+
+			if (isMoveX || isMoveY)
+				SetCapture(hMainWnd);
 		}
 		break;
 
 		case WM_LBUTTONUP: {
-			if (isMoveX || isMoveY)
+			if (isMoveX || isMoveY) {
 				updateSizes(true);
+				ReleaseCapture();
+			}
 			isMoveX = FALSE;
 			isMoveY = FALSE;
 		}
@@ -483,8 +478,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				if (cmd == IDM_QUERY_DATA) {
 					int len = GetWindowTextLength(hEditorWnd);
 					SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)len, (LPARAM)len);
+
 					TCHAR query[256];
-					_stprintf(query, TEXT("\nselect * from \"%s\";\n"), name16);
+					_stprintf(query, TEXT("select * from \"%s\";\n"), name16);
 					len += _tcslen(query);
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)query);
 					SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)len, (LPARAM)len);
@@ -493,6 +489,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 					executeQuery(query);
 					SendMessage(hMainWnd, WM_SIZE, 0, 0);
 					SendMessage(hTabWnd, TCM_SETCURFOCUS, TabCtrl_GetItemCount(hTabWnd) - 1, 0);
+
+					SetFocus(hEditorWnd);
+					return 1;
 				}
 
 				if (cmd == IDM_EDIT_DATA) {
@@ -549,14 +548,14 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
 				int rc = type == TABLE  ?
 					DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable) :
-					DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgAdd);
+					DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgAddEdit, IDM_ADD);
 				if (rc != DLG_CANCEL)
 					updateTree(rc);
 				SetFocus(hTreeWnd);
 			}
 
 			if (cmd == IDM_EDIT) {
-				int rc = DialogBox (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgEdit);
+				int rc = DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDEDIT), hMainWnd, (DLGPROC)&dialogs::cbDlgAddEdit, IDM_EDIT);
 				if (rc != DLG_CANCEL)
 					updateTree(rc);
 				SetFocus(hTreeWnd);
@@ -651,14 +650,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				}
 			}
 
-			if (cmd == IDM_EXPORT_CSV)
-				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_CSV), hMainWnd, (DLGPROC)&tools::cbDlgExportCSV);
+			if ((cmd == IDM_EXPORT_CSV) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_CSV), hMainWnd, (DLGPROC)&tools::cbDlgExportCSV) == DLG_OK))
+				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 
-			if (cmd == IDM_EXPORT_SQL)
-				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_SQL), hMainWnd, (DLGPROC)&tools::cbDlgExportSQL);
+			if ((cmd == IDM_EXPORT_SQL) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_SQL), hMainWnd, (DLGPROC)&tools::cbDlgExportSQL) == DLG_OK))
+				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 
 			if (cmd == IDM_GENERATE_DATA)
 				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_GENERATE_DATA), hMainWnd, (DLGPROC)&tools::cbDlgDataGenerator);
+
+			if (cmd == IDM_DATABASE_DIAGRAM)
+				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_DATABASE_DIAGRAM), hMainWnd, (DLGPROC)&tools::cbDlgDatabaseDiagram);
 
 			if (cmd == IDM_CHECK_INTEGRITY) {
 				TCHAR* res = getDbValue(TEXT("pragma integrity_check"));
@@ -708,6 +710,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				if (kd->wVKey == VK_RETURN) {
 					currCell = {pHdr->hwndFrom, ListView_GetNextItem(pHdr->hwndFrom, -1, LVNI_SELECTED), 0};
 					DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ROW), hMainWnd, (DLGPROC)&dialogs::cbDlgRow, MAKELPARAM(ROW_VIEW, 1));
+					SetFocus(pHdr->hwndFrom);
 				}
 
 				bool isNum = kd->wVKey >= 0x31 && kd->wVKey <= 0x39;
@@ -716,7 +719,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 					return sortListView(pHdr->hwndFrom, kd->wVKey - (isNum ? 0x31 : 0x61) + 1 );
 			}
 
-			if (pF->nmhdr.hwndFrom == hEditorWnd && pF->msg == WM_RBUTTONDOWN) {
+			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == WM_RBUTTONDOWN) {
 				POINT Pos;
 				GetCursorPos(&Pos);
 				TrackPopupMenu(hEditorMenu, 0,Pos.x, Pos.y, 0, hMainWnd, NULL);
@@ -740,7 +743,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				PostMessage(hMainWnd, WMU_HIGHLIGHT, 0, 0);
 				isRequireParenthesisHighligth = true;
 			}
-
 
 			if (pHdr->hwndFrom == hTreeWnd && (pHdr->code == (DWORD)NM_DBLCLK || pHdr->code == (DWORD)NM_RETURN)) {
 				HTREEITEM hParent = TreeView_GetParent(hTreeWnd, treeItems[0]);
@@ -858,7 +860,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 		break;
 
 		case WM_PARENTNOTIFY: {
-			if (LOWORD(wParam) == WM_LBUTTONDOWN && IsWindowVisible(hAutoComplete))
+			if (LOWORD(wParam) == WM_LBUTTONDOWN && IsWindowVisible(hAutoComplete) && (GetFocus() != hAutoComplete))
 				ShowWindow(hAutoComplete, SW_HIDE);
 
 			// Open Table view
@@ -878,26 +880,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 		break;
 
 		case WMU_HIGHLIGHT: {
-			if (!isRequireHighligth && !isRequireParenthesisHighligth)
-				return 1;
-
-			SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
-			SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_NONE);
-			td_code->Undo(tomSuspend, NULL);
-
-			if (isRequireHighligth)
-				updateHighlighting(hEditorWnd);
-
-			if (isRequireParenthesisHighligth)
-				updateParenthesisHighlighting(hEditorWnd);
-
+			processHightlight(hEditorWnd, isRequireHighligth, isRequireParenthesisHighligth);
 			isRequireHighligth = false;
 			isRequireParenthesisHighligth = false;
-
-			td_code->Undo(tomResume, NULL);
-			SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_KEYEVENTS | ENM_SELCHANGE);
-			SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
-			InvalidateRect(hEditorWnd, 0, TRUE);
 		}
 		break;
 
@@ -1189,7 +1174,6 @@ void openDb(const TCHAR* path) {
 
 	delete [] path8;
 	SetWindowText(hMainWnd, path);
-
 
 	TCHAR searchPath[MAX_PATH]{0};
 	_stprintf(searchPath, TEXT("%s\\extensions\\*.dll"), appPath);
@@ -1979,6 +1963,39 @@ void updateParenthesisHighlighting(HWND hWnd) {
 	SendMessage(hWnd, EM_SETSEL, crPos, crPos);
 }
 
+void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth) {
+	if (!isRequireHighligth && !isRequireParenthesisHighligth)
+		return;
+
+	IUnknown *tr_code = NULL;
+	ITextDocument *td_code;
+
+	SendMessage(hEditorWnd, EM_GETOLEINTERFACE, 0, (LPARAM)&tr_code);
+	if(tr_code == (IRichEditOle*)NULL) {
+		MessageBox(0, TEXT("Error when trying to get RichEdit OLE Object"), NULL, 0);
+		return;
+	}
+	tr_code->QueryInterface(IID_ITextDocument,(void**)&td_code);
+
+	SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
+	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_NONE);
+	td_code->Undo(tomSuspend, NULL);
+
+	if (isRequireHighligth)
+		updateHighlighting(hEditorWnd);
+
+	if (isRequireParenthesisHighligth)
+		updateParenthesisHighlighting(hEditorWnd);
+
+	td_code->Undo(tomResume, NULL);
+	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS);
+	SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
+	InvalidateRect(hEditorWnd, 0, TRUE);
+
+	td_code->Release();
+	tr_code->Release();
+}
+
 bool sortListView(HWND hListWnd, int colNo) {
 	hSortingResultWnd = hListWnd;
 	// lParam is used to store tab no, so use window text to store sorting params
@@ -2025,10 +2042,12 @@ void search(HWND hWnd) {
 }
 
 bool processEditorKey(MSGFILTER* pF) {
+	HWND hWnd = pF->nmhdr.hwndFrom;
+
 	int key = pF->wParam;
 	int vkKey = MapVirtualKey(LOBYTE(HIWORD(pF->lParam)), MAPVK_VSC_TO_VK);
 	bool isKeyDown = pF->lParam & (1U << 31);
-	HWND hWnd = pF->nmhdr.hwndFrom;
+
 
 	if (hWnd != hEditorWnd && key == VK_RETURN && GetAsyncKeyState(VK_CONTROL)) {
 		PostMessage(GetParent(hWnd), WM_COMMAND, IDC_DLG_OK, 0);
@@ -2058,6 +2077,8 @@ bool processEditorKey(MSGFILTER* pF) {
 }
 
 bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
+	HWND hAutoComplete = (HWND)GetWindowLong(hEditorWnd, GWL_USERDATA);
+
 	// https://stackoverflow.com/questions/8161741/handling-keyboard-input-in-win32-wm-char-or-wm-keydown-wm-keyup
 	// Shift + 7 and Shift + 9 equals to up and down
 	bool isNavKey = !GetAsyncKeyState(VK_SHIFT) && (key == VK_ESCAPE || key == VK_UP || key == VK_DOWN || key == VK_RETURN);
@@ -2080,7 +2101,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				ListBox_GetText(hAutoComplete, pos, buf);
 				long data = GetWindowLong(hAutoComplete, GWL_ID);
 				SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
-				SendMessage(hEditorWnd, EM_SETSEL, LOWORD(data), HIWORD(data));
+				SendMessage(hEditorWnd, EM_SETSEL, LOWORD(data), HIWORD(data)); //-1
 				SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)buf);
 				SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
 				InvalidateRect(hEditorWnd, 0, TRUE);
@@ -2121,18 +2142,13 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	while(start > 0 && !_tcschr(breakers, currLine[start - 1]))
 		start--;
 
-	if(end > 0 && !_tcschr(breakers, currLine[end - 1]))
-		end--;
-	while(end < _tcslen(currLine) && !_tcschr(breakers, currLine[end + 1]))
+	while(end < _tcslen(currLine) && !_tcschr(breakers, currLine[end]))
 		end++;
 
-	if (start > end)
-		end = start;
-
-	TCHAR word[end - start + 1];
-	for (size_t i = 0; i <= end - start; i++)
+	TCHAR word[end - start + 1] = {0};
+	for (size_t i = 0; i < end - start; i++)
 		word[i] = currLine[start + i];
-	word[end - start + 1] = '\0';
+
 	size_t wPos = crPos - currLineIdx - start; // Cursor position in the word
 
 	ListBox_ResetContent(hAutoComplete);
@@ -2225,8 +2241,9 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		for (int i = 0; PRAGMAS[i]; i++)
 			isExact += addString(PRAGMAS[i]);
 	} else if (start > 4 && (!_tcsnicmp(currLine + start - 5, TEXT("from "), 5) || !_tcsnicmp(currLine + start - 5, TEXT("join "), 5))) {
+		bool isNoCheck = wLen == 1 && word[0] == TEXT(' ');
 		for (int i = 0; TABLES[i]; i++)
-			isExact += addString(TABLES[i]);
+			isExact += addString(TABLES[i], isNoCheck);
 
 		addString(TEXT("dbstat"));
 		addString(TEXT("sqlite_master"));
@@ -2237,7 +2254,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		TCHAR buf[255];
 		for (int i = 0; PRAGMAS[i]; i++) {
 			_stprintf(buf, TEXT("pragma_%s()"), PRAGMAS[i]);
-			isExact += addString(buf);
+			isExact += addString(buf, isNoCheck);
 		}
 	} else if (wLen > 1) {
 		for (int i = 0; FUNCTIONS[i]; i++)
@@ -2263,18 +2280,31 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	rc.bottom += GetSystemMetrics(SM_CXEDGE) * 2;
 	SetWindowPos(hAutoComplete, 0, 0, 0, rc.right, rc.bottom > 150 ? 150 : rc.bottom, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-	ShowWindow(hAutoComplete, iCount > 0 ? SW_SHOW : SW_HIDE);
 	if (iCount) {
 		POINT p = {0};
 		GetCaretPos(&p);
+		ClientToScreen(hEditorWnd, &p);
+		ScreenToClient(GetParent(hAutoComplete), &p);
 		SetWindowPos(hAutoComplete, 0, p.x, p.y + 20, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
-		SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hEditorWnd);
+
+		SetCapture(hAutoComplete);
 
 		if (isDotEnd)
-			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + end + 1, currLineIdx + end + 1));
+			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + end, currLineIdx + end));
 		else
-			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + start, currLineIdx + end + 1));
+			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + start, currLineIdx + end));
+
+		ShowWindow(hAutoComplete, SW_SHOW);
+
+		// Up AutoComplete to top. WS_EX_MOSTTOP doesn't work as expected :(
+		SetWindowPos(hAutoComplete, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+		InvalidateRect(hEditorWnd, 0, 0);
+		ValidateRect(hEditorWnd, NULL);
+		ValidateRect(hTabWnd, NULL);
+	} else {
+		ShowWindow(hAutoComplete, SW_HIDE);
 	}
+
 
 	ListBox_SetCurSel(hAutoComplete, 0);
 
@@ -2282,9 +2312,23 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 }
 
 LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	return (msg == WM_LBUTTONDBLCLK || (msg == WM_KEYUP && wParam == VK_RETURN)) ?
-		processAutoComplete((HWND)GetWindowLong(hWnd, GWL_USERDATA), VK_RETURN, true) :
-		CallWindowProc(cbOldAutoComplete, hWnd, msg, wParam, lParam);
+	if (msg == WM_LBUTTONDBLCLK || (msg == WM_KEYUP && wParam == VK_RETURN) || (msg == WM_KEYUP && wParam == VK_ESCAPE)) {
+		HWND hEditorWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+		int rc = processAutoComplete(hEditorWnd, wParam == VK_ESCAPE ? VK_ESCAPE : VK_RETURN, true);
+		SetFocus(hEditorWnd);
+		return rc;
+	}
+
+	if (msg == WM_SHOWWINDOW && !wParam) // hide
+		ReleaseCapture();
+
+	// Outside click
+	if (msg == WM_LBUTTONDOWN && (LOWORD(lParam) > 32768 || HIWORD(lParam) > 32678)) {
+		ShowWindow(hWnd, SW_HIDE);
+		SetFocus(hEditorWnd);
+	}
+
+	return CallWindowProc(cbOldAutoComplete, hWnd, msg, wParam, lParam);
 }
 
 TCHAR* getWordFromCursor(HWND hWnd, int pos) {
