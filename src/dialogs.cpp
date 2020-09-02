@@ -42,12 +42,6 @@ namespace dialogs {
 				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hDlgEditorWnd);
 
-				HWND hAutoComplete = CreateWindowEx(WS_EX_TOPMOST | WS_EX_NOPARENTNOTIFY, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
-				SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
-				SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
-				SetWindowLong(hDlgEditorWnd, GWL_USERDATA, (LONG)hAutoComplete);
-				SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hDlgEditorWnd);
-
 				SetFocus(hDlgEditorWnd);
 
 				if (isEdit) {

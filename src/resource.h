@@ -19,7 +19,6 @@
 #define IDC_EDITOR                 102
 #define IDC_TAB                    103
 #define IDC_TREE                   104
-#define IDC_AUTOCOMPLETE           105
 
 #define IDC_DLG_QUERYADD           106
 #define IDC_DLG_QUERYFILTER        107
@@ -135,6 +134,9 @@
 #define IDM_HOMEPAGE               1532
 #define IDM_TIPS                   1533
 #define IDM_EXTENSIONS             1534
+#define IDM_SQLITE_HOMEPAGE        1535
+#define IDM_TUTORIAL1              1536
+#define IDM_TUTORIAL2              1537
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_PROCESS_TAB            1591
@@ -180,6 +182,7 @@
 #define IDS_ABOUT                  10010
 #define IDS_TIPS                   10011
 #define IDS_EXTENSIONS             10012
+#define IDS_WELCOME                10013
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE

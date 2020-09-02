@@ -107,6 +107,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	icex.dwICC = ICC_DATE_CLASSES;
 	InitCommonControlsEx(&icex);
 
+	bool isFirstRun = !utils::isFileExists(TEXT("prefs.sqlite"));
 	if (!prefs::load()) {
 		MessageBox(0, TEXT("Settings loading failed"), TEXT("Error"), MB_OK);
 		return EXIT_FAILURE;
@@ -142,7 +143,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.1"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.2"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -192,6 +193,15 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		int nArgs = 0;
 		TCHAR** args = CommandLineToArgvW(GetCommandLine(), &nArgs);
 		openDb(args[1]);
+	} else if (isFirstRun) {
+		TCHAR demoDb[MAX_PATH];
+		_stprintf(demoDb, TEXT("%s\\bookstore.sqlite"), appPath);
+		if (utils::isFileExists(demoDb)) {
+			TCHAR buf[MAX_TEXT_LENGTH];
+			LoadString(GetModuleHandle(NULL), IDS_WELCOME, buf, MAX_TEXT_LENGTH);
+			SetWindowText(hEditorWnd, buf);
+			openDb(demoDb);
+		}
 	} else {
 		if (prefs::get("restore-editor")) {
 			char* text8 = prefs::get("editor-text", "");
@@ -203,10 +213,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 		if (prefs::get("restore-db")) {
 			int recent = GetMenuItemID(hDbMenu, 3);
-			TCHAR demo[] = TEXT("bookstore.sqlite");
-			if (!recent && utils::isFileExists(demo))
-				openDb(demo);
-			else
+			if (recent)
 				PostMessage(hMainWnd, WM_COMMAND, recent, 0);
 		}
 	}
@@ -214,11 +221,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	ShowWindow (hMainWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 	SetFocus(hEditorWnd);
 
-	hAutoComplete = CreateWindowEx(0, WC_LISTBOX, NULL, WS_CHILD | WS_BORDER, 0, 0, 150, 200, hMainWnd, (HMENU)IDC_AUTOCOMPLETE, GetModuleHandle(0), NULL);
+	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST, WC_LISTBOX, NULL, WS_POPUP | WS_BORDER, 0, 0, 150, 200, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
 	cbOldAutoComplete = (WNDPROC)SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
-	SetWindowLong(hEditorWnd, GWL_USERDATA, (LONG)hAutoComplete);
-	SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hEditorWnd);
 
 	while (GetMessage(&msg, NULL, 0, 0)) {
 		if (TranslateAccelerator(hMainWnd, hAccel, &msg))
@@ -627,6 +632,15 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
 			if (cmd == IDM_HOMEPAGE)
 				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui"), 0, 0 , SW_SHOW);
+
+			if (cmd == IDM_SQLITE_HOMEPAGE)
+				ShellExecute(0, 0, TEXT("https://www.sqlite.org/index.html"), 0, 0 , SW_SHOW);
+
+			if (cmd == IDM_TUTORIAL1)
+				ShellExecute(0, 0, TEXT("https://www.sqlitetutorial.net/"), 0, 0 , SW_SHOW);
+
+			if (cmd == IDM_TUTORIAL2)
+				ShellExecute(0, 0, TEXT("https://www.tutorialspoint.com/sqlite/"), 0, 0 , SW_SHOW);
 
 			if (cmd == IDM_HISTORY || cmd == IDM_GISTS) {
 				DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_QUERYLIST), hMainWnd, (DLGPROC)&dialogs::cbDlgQueryList, (LPARAM)cmd);
@@ -1130,7 +1144,7 @@ void updateRecentList() {
 	HMENU hMenu = GetSubMenu(hMainMenu, 0);
 	int size = GetMenuItemCount(hMenu);
 	int recentCount = prefs::getRecents(recents);
-	int afterRecentCount = 5;
+	int afterRecentCount = 5; // exit, sep, setting, attach, sep
 
 	if (!recentCount)
 		return;
@@ -1139,10 +1153,9 @@ void updateRecentList() {
 		RemoveMenu(hMenu, 3, MF_BYPOSITION);
 
 	int count = 0;
-	for (int i = 0; i < recentCount && count < 5; i++) {
+	for (int i = 0; i < recentCount && count < MAX_RECENT_COUNT; i++) {
 		TCHAR* path16 = utils::utf8to16(recents[i]);
-		struct _stat stats;
-		if (_tstat(path16, &stats) == 0) {
+		if (utils::isFileExists(path16)) {
 			MENUITEMINFO mi = {0};
 			mi.cbSize = sizeof(MENUITEMINFO);
 			mi.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
@@ -2077,8 +2090,6 @@ bool processEditorKey(MSGFILTER* pF) {
 }
 
 bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
-	HWND hAutoComplete = (HWND)GetWindowLong(hEditorWnd, GWL_USERDATA);
-
 	// https://stackoverflow.com/questions/8161741/handling-keyboard-input-in-win32-wm-char-or-wm-keydown-wm-keyup
 	// Shift + 7 and Shift + 9 equals to up and down
 	bool isNavKey = !GetAsyncKeyState(VK_SHIFT) && (key == VK_ESCAPE || key == VK_UP || key == VK_DOWN || key == VK_RETURN);
@@ -2099,12 +2110,11 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				TCHAR buf[256] = {0};
 				int pos = ListBox_GetCurSel(hAutoComplete);
 				ListBox_GetText(hAutoComplete, pos, buf);
-				long data = GetWindowLong(hAutoComplete, GWL_ID);
+				long data = GetWindowLong(hEditorWnd, GWL_USERDATA);
 				SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
 				SendMessage(hEditorWnd, EM_SETSEL, LOWORD(data), HIWORD(data)); //-1
 				SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)buf);
 				SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
-				InvalidateRect(hEditorWnd, 0, TRUE);
 				ShowWindow(hAutoComplete, SW_HIDE);
 			}
 		}
@@ -2272,42 +2282,27 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 	int h = SendMessage(hAutoComplete, LB_GETITEMHEIGHT, 0, 0);
 	int iCount = ListBox_GetCount(hAutoComplete);
-	RECT rc = {0};
-	GetClientRect(hAutoComplete, &rc);
-	rc.bottom = rc.top + h * iCount;
-
-	rc.right += GetSystemMetrics(SM_CXEDGE) * 2 - 2;
-	rc.bottom += GetSystemMetrics(SM_CXEDGE) * 2;
-	SetWindowPos(hAutoComplete, 0, 0, 0, rc.right, rc.bottom > 150 ? 150 : rc.bottom, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
 	if (iCount) {
+		RECT rc = {0};
+		GetClientRect(hAutoComplete, &rc);
+		rc.bottom = rc.top + h * iCount;
+
+		rc.right += GetSystemMetrics(SM_CXEDGE) * 2 - 2;
+		rc.bottom += GetSystemMetrics(SM_CXEDGE) * 2;
+
 		POINT p = {0};
 		GetCaretPos(&p);
 		ClientToScreen(hEditorWnd, &p);
-		ScreenToClient(GetParent(hAutoComplete), &p);
-		SetWindowPos(hAutoComplete, 0, p.x, p.y + 20, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 
-		SetCapture(hAutoComplete);
-
-		if (isDotEnd)
-			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + end, currLineIdx + end));
-		else
-			SetWindowLong(hAutoComplete, GWL_ID, MAKELONG(currLineIdx + start, currLineIdx + end));
-
-		ShowWindow(hAutoComplete, SW_SHOW);
-
-		// Up AutoComplete to top. WS_EX_MOSTTOP doesn't work as expected :(
-		SetWindowPos(hAutoComplete, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-		InvalidateRect(hEditorWnd, 0, 0);
-		ValidateRect(hEditorWnd, NULL);
-		ValidateRect(hTabWnd, NULL);
-	} else {
-		ShowWindow(hAutoComplete, SW_HIDE);
+		SetWindowPos(hAutoComplete, 0, p.x, p.y + 20, rc.right, rc.bottom > 150 ? 150 : rc.bottom, SWP_NOZORDER | SWP_NOACTIVATE);
+		SetWindowLong(hAutoComplete, GWL_USERDATA, (LONG)hEditorWnd);
+		SetWindowLong(hEditorWnd, GWL_USERDATA, MAKELONG(currLineIdx + (isDotEnd ? end : start), currLineIdx + end));
 	}
 
-
 	ListBox_SetCurSel(hAutoComplete, 0);
-
+	ShowWindow(hAutoComplete, iCount ? SW_SHOW : SW_HIDE);
+	SetFocus(hEditorWnd);
 	return false;
 }
 
@@ -2317,15 +2312,6 @@ LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 		int rc = processAutoComplete(hEditorWnd, wParam == VK_ESCAPE ? VK_ESCAPE : VK_RETURN, true);
 		SetFocus(hEditorWnd);
 		return rc;
-	}
-
-	if (msg == WM_SHOWWINDOW && !wParam) // hide
-		ReleaseCapture();
-
-	// Outside click
-	if (msg == WM_LBUTTONDOWN && (LOWORD(lParam) > 32768 || HIWORD(lParam) > 32678)) {
-		ShowWindow(hWnd, SW_HIDE);
-		SetFocus(hEditorWnd);
 	}
 
 	return CallWindowProc(cbOldAutoComplete, hWnd, msg, wParam, lParam);
@@ -2366,5 +2352,3 @@ TCHAR* getWordFromCursor(HWND hWnd, int pos) {
 
 	return word;
 }
-
-

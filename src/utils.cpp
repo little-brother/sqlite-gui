@@ -157,7 +157,7 @@ namespace utils {
 		return GetSaveFileName(&ofn);
 	}
 
-	bool isFileExists(TCHAR* path) {
+	bool isFileExists(const TCHAR* path) {
 		WIN32_FIND_DATA FindFileData;
 		HANDLE hFile = FindFirstFile(path, &FindFileData) ;
 		int isFound = hFile != INVALID_HANDLE_VALUE;

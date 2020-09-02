@@ -17,7 +17,7 @@ namespace utils {
 	void setClipboardText(const TCHAR* text);
 	int openFile(TCHAR* path, const TCHAR* filter);
 	int saveFile(TCHAR* path, const TCHAR* filter);
-	bool isFileExists(TCHAR* path);
+	bool isFileExists(const TCHAR* path);
 
 	bool isNumber(TCHAR* str, double *out);
 

@@ -2,8 +2,10 @@
 #define __GLOBAL_H__
 
 #define _WIN32_IE	0x0500
+#define MAX_RECENT_COUNT 10
 #define MAX_RESULT_COUNT 32
 #define MAX_TEXT_LENGTH 32000
+
 
 #define ACTION_SETDEFFONT           1
 #define ACTION_DESTROY              2
@@ -53,7 +55,6 @@ extern HFONT hDefFont;
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 struct ListViewCell {
 	HWND hListWnd;

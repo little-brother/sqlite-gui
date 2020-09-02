@@ -1009,9 +1009,10 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				TCHAR* dbpath16 = utils::utf8to16(sqlite3_db_filename(db, 0));
-				TCHAR dbname16[255];
-				_tsplitpath(dbpath16, NULL, NULL, dbname16, NULL);
-				dbname8 = utils::utf16to8(dbpath16);
+				TCHAR dbname16[255], ext16[32], dbname_ext16[300];
+				_tsplitpath(dbpath16, NULL, NULL, dbname16, ext16);
+				_stprintf(dbname_ext16, TEXT("%s%s"), dbname16, ext16);
+				dbname8 = utils::utf16to8(dbname_ext16);
 				delete [] dbpath16;
 
 				TBBUTTON tbButtons [] = {

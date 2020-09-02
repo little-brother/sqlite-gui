@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 1, 1, 0
+FILEVERSION 1, 1, 2, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.1.1\000"
+			VALUE "FileVersion", "1.1.2\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.1.1\000"
+			VALUE "ProductVersion", "1.1.2\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -285,6 +285,10 @@ BEGIN
 		MENUITEM "Homepage", IDM_HOMEPAGE
 		MENUITEM "Extensions", IDM_EXTENSIONS
 		MENUITEM "Tips", IDM_TIPS
+		MENUITEM SEPARATOR
+		MENUITEM "SQLite Home Page", IDM_SQLITE_HOMEPAGE
+		MENUITEM "SQLite Tutorial", IDM_TUTORIAL1
+		MENUITEM "Tutorials Point", IDM_TUTORIAL2
 	END
 END
 
@@ -458,7 +462,11 @@ BEGIN
 		"Add the exec(cmd, maxOutputLength = 32000) function that allowed to execute shell command.\n" \
 		"Example: select exec('powershell -nologo ""Get-Content data.json""');\n\n"\
 		"* Custom extensions are available only in sqlite-gui"
-
+	IDS_WELCOME "-- Welcome to sqlite-gui!\n" \
+		"-- Thanks for choosing sqlite-gui. I hope you'll like it.\n" \
+		"-- bookstore.sqlite is a demo database for beginners.\n" \
+		"-- Push ""Execute"" to get all rows from ""books"" table\n" \
+		"select * from books;"
 
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"
