@@ -142,7 +142,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.1"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -261,8 +261,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 		break;
 
 		case WM_LBUTTONDOWN: {
-			int x = LOWORD(lParam);
-			int y = HIWORD(lParam);
+			int x = GET_X_LPARAM(lParam);
+			int y = GET_Y_LPARAM(lParam);
 
 			isMoveX = (abs(x - prefs::get("splitter-width")) < 10);
 			isMoveY = (x > prefs::get("splitter-width") + 10) && (abs(y - top - prefs::get("splitter-height")) < 10);
@@ -283,8 +283,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 		break;
 
 		case WM_MOUSEMOVE: {
-			DWORD x = LOWORD(lParam);
-			DWORD y = HIWORD(lParam);
+			DWORD x = GET_X_LPARAM(lParam);
+			DWORD y = GET_Y_LPARAM(lParam);
 
 			isMoveX = isMoveX && (wParam == MK_LBUTTON);
 			isMoveY = isMoveY && (wParam == MK_LBUTTON);
@@ -965,9 +965,6 @@ void executeMultiQuery(bool isPlan) {
 	if (!db)
 		return;
 
-	disableMenu();
-	setToolbarButtonState(IDM_INTERRUPT, TBSTATE_ENABLED);
-
 	TabCtrl_DeleteAllItems(hTabWnd);
 	EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_DESTROY);
 
@@ -982,6 +979,9 @@ void executeMultiQuery(bool isPlan) {
 	TCHAR buf[size + 1];
 	if (!SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)buf))
 		return;
+
+	disableMenu();
+	setToolbarButtonState(IDM_INTERRUPT, TBSTATE_ENABLED);
 
 	// Remove comments
 	for (int i = 0; i < size; i++) {

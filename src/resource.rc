@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 1, 0, 0
+FILEVERSION 1, 1, 1, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.1.0\000"
+			VALUE "FileVersion", "1.1.1\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.1.0\000"
+			VALUE "ProductVersion", "1.1.1\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -232,7 +232,7 @@ END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_TOOL_DATABASE_DIAGRAM DIALOGEX 50,50,550,400
-	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | WS_VISIBLE
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN
 	CAPTION "Database diagram"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN

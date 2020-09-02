@@ -965,6 +965,8 @@ namespace tools {
 	char* dbname8 = 0;
 	Link links[MAX_LINK_COUNT]{0};
 	HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DLG_TOOLBAR), 32, 0, RGB(255,255,255));
+	bool isMove = false;
+	POINT cursor = {0, 0};
 
 	WNDPROC cbOldTable;
 	LRESULT CALLBACK cbNewTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1002,6 +1004,7 @@ namespace tools {
 		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
 	}
 
+	// USERDATA stores a current diagram table
 	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -1121,8 +1124,38 @@ namespace tools {
 			break;
 
 			case WM_LBUTTONDOWN: {
+				cursor = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+				isMove = wParam == MK_LBUTTON;
+				SetCapture(hWnd);
 				SetWindowLong(hWnd, GWL_USERDATA, 0);
 				InvalidateRect(hWnd, NULL, true);
+			}
+			break;
+
+			case WM_LBUTTONUP: {
+				int dx = cursor.x - GET_X_LPARAM(lParam);
+				int dy = cursor.y - GET_Y_LPARAM(lParam);
+
+				if (isMove && (dx != 0 ||dy != 0)) {
+					int tblNo = 0;
+					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+						RECT rc;
+						GetWindowRect(hTableWnd, &rc);
+						POINT p = {rc.left, rc.top};
+						ScreenToClient(hWnd, &p);
+						SetWindowPos(hTableWnd, 0, p.x - dx, p.y - dy, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+						tblNo++;
+					}
+				}
+
+				isMove = false;
+				ReleaseCapture();
+			}
+			break;
+
+			case WM_MOUSEMOVE: {
+				if (isMove)
+					InvalidateRect(hWnd, NULL, true);
 			}
 			break;
 
@@ -1143,6 +1176,35 @@ namespace tools {
 			case WM_PAINT : {
 				InvalidateRect(hWnd, NULL, true);
 
+				PAINTSTRUCT ps{0};
+				ps.fErase = true;
+				HDC hdc = BeginPaint(hWnd, &ps);
+
+				if (isMove) {
+					POINT p;
+					GetCursorPos(&p);
+					ScreenToClient(hWnd, &p);
+					int dx = cursor.x - p.x;
+					int dy = cursor.y - p.y;
+
+					if (isMove && (dx != 0 ||dy != 0)) {
+						HPEN hPen = CreatePen(PS_DOT, 1, RGB(128, 128, 128));
+						SelectObject(hdc, hPen);
+
+						int tblNo = 0;
+						while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+							RECT rc;
+							GetWindowRect(hTableWnd, &rc);
+							POINT p = {rc.left, rc.top};
+							ScreenToClient(hWnd, &p);
+							Rectangle(hdc, p.x - dx, p.y - dy,  p.x - dx + rc.right - rc.left, p.y - dy + rc.bottom - rc.top);
+							tblNo++;
+						}
+
+						DeleteObject(hPen);
+					}
+				}
+
 				auto max = [](int a, int b) {
 					return a > b ? a : b;
 				};
@@ -1154,10 +1216,6 @@ namespace tools {
 				bool isView = prefs::get("link-view");
 				bool isTrigger = prefs::get("link-trigger");
 				HWND hCurrWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
-
-				PAINTSTRUCT ps{0};
-				ps.fErase = true;
-				HDC hdc = BeginPaint(hWnd, &ps);
 
 				int captionH = GetSystemMetrics(SM_CYCAPTION) +  ListBox_GetItemHeight(links[0].hWndFrom, 0) - 2;
 				for (int i = 0; links[i].type != 0; i++) {
