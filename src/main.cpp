@@ -143,7 +143,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.2"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.1.3"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, hInstance,  NULL);
@@ -463,7 +463,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				if (!SendMessage(hToolbarWnd, TB_ISBUTTONHIDDEN, IDM_INTERRUPT, 0))
 					return SendMessage(hWnd, WM_COMMAND, IDM_INTERRUPT, 0);
 
-
 				if(prefs::get("exit-by-escape") && !IsWindowVisible(hAutoComplete))
 					SendMessage(hMainWnd, WM_CLOSE, 0, 0);
 			}
@@ -619,7 +618,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 			if (cmd == IDM_EDITOR_DELETE)
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
-
 			if (cmd == IDM_ABOUT || cmd == IDM_TIPS || cmd == IDM_EXTENSIONS) {
 				HMENU hMenu = GetSubMenu(hMainMenu, 3);
 				TCHAR title[255];
@@ -628,7 +626,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				LoadString(GetModuleHandle(NULL), cmd == IDM_ABOUT ? IDS_ABOUT : cmd == IDM_TIPS ? IDS_TIPS : IDS_EXTENSIONS, buf, MAX_TEXT_LENGTH);
 				MessageBox(hMainWnd, buf, title, MB_OK);
 			}
-
 
 			if (cmd == IDM_HOMEPAGE)
 				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui"), 0, 0 , SW_SHOW);
@@ -1685,7 +1682,6 @@ int setListViewData(HWND hListWnd, sqlite3_stmt *stmt) {
 		lvi.lParam = rowNo;
 		ListView_InsertItem(hListWnd, &lvi);
 
-
 		for (int i = 1; i <= colCount; i++) {
 			bool isNull = sqlite3_column_type(stmt, i - 1) == SQLITE_NULL;
 			char* name8 = (char *) sqlite3_column_text(stmt, i - 1);
@@ -2250,7 +2246,11 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	if (start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("pragma "), 7)) {
 		for (int i = 0; PRAGMAS[i]; i++)
 			isExact += addString(PRAGMAS[i]);
-	} else if (start > 4 && (!_tcsnicmp(currLine + start - 5, TEXT("from "), 5) || !_tcsnicmp(currLine + start - 5, TEXT("join "), 5))) {
+	} else if ((start > 4 && (
+			!_tcsnicmp(currLine + start - 5, TEXT("from "), 5) ||
+			!_tcsnicmp(currLine + start - 5, TEXT("join "), 5) ||
+			!_tcsnicmp(currLine + start - 5, TEXT("into "), 5)
+		)) || (start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("update "), 7))) {
 		bool isNoCheck = wLen == 1 && word[0] == TEXT(' ');
 		for (int i = 0; TABLES[i]; i++)
 			isExact += addString(TABLES[i], isNoCheck);

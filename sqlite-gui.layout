@@ -2,34 +2,14 @@
 <CodeBlocks_layout_file>
 	<FileVersion major="1" minor="0" />
 	<ActiveTarget name="Release" />
-	<File name="src\resource.h" open="1" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="4731" topLine="109" />
-		</Cursor>
-	</File>
-	<File name="ToDo.txt" open="1" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="157" topLine="0" />
-		</Cursor>
-	</File>
 	<File name="src\resource.rc" open="1" top="1" tabpos="4" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="19145" topLine="432" />
-		</Cursor>
-	</File>
-	<File name="src\dialogs.cpp" open="1" top="0" tabpos="5" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="1569" topLine="48" />
+			<Cursor1 position="19343" topLine="436" />
 		</Cursor>
 	</File>
 	<File name="src\tools.cpp" open="1" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="35784" topLine="974" />
-		</Cursor>
-	</File>
-	<File name="src\dialogs.h" open="1" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="306" topLine="0" />
+			<Cursor1 position="49629" topLine="1330" />
 		</Cursor>
 	</File>
 	<File name="src\tools.h" open="0" top="0" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -37,24 +17,39 @@
 			<Cursor1 position="553" topLine="0" />
 		</Cursor>
 	</File>
-	<File name="src\global.h" open="1" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="1593" topLine="30" />
-		</Cursor>
-	</File>
 	<File name="src\utils.cpp" open="1" top="0" tabpos="10" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="3929" topLine="141" />
 		</Cursor>
 	</File>
-	<File name="src\main.cpp" open="1" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="24499" topLine="610" />
-		</Cursor>
-	</File>
 	<File name="src\utils.h" open="1" top="0" tabpos="11" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="617" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="ToDo.txt" open="1" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="6074" topLine="63" />
+		</Cursor>
+	</File>
+	<File name="src\dialogs.cpp" open="1" top="0" tabpos="5" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1569" topLine="48" />
+		</Cursor>
+	</File>
+	<File name="src\dialogs.h" open="1" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="306" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="src\global.h" open="1" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1593" topLine="30" />
+		</Cursor>
+	</File>
+	<File name="src\main.cpp" open="1" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="59835" topLine="1651" />
 		</Cursor>
 	</File>
 	<File name="src\missing.h" open="0" top="0" tabpos="14" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -70,6 +65,11 @@
 	<File name="src\prefs.h" open="0" top="0" tabpos="4" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="645" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="src\resource.h" open="1" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="4731" topLine="109" />
 		</Cursor>
 	</File>
 </CodeBlocks_layout_file>

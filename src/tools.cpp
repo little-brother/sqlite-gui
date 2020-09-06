@@ -988,6 +988,13 @@ namespace tools {
 		if (msg == WM_LBUTTONDOWN) {
 			HWND hParentWnd = GetParent(hWnd);
 			SetWindowLong(hParentWnd, GWL_USERDATA, (LONG)hWnd);
+
+			int tblNo = 0;
+			while(HWND hTableWnd = GetDlgItem(hParentWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+				ShowWindow(hTableWnd, hTableWnd == hWnd ? SW_SHOW : SW_HIDE);
+				tblNo++;
+			}
+
 			InvalidateRect(hParentWnd, NULL, true);
 		}
 
@@ -1128,7 +1135,14 @@ namespace tools {
 				cursor = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 				isMove = wParam == MK_LBUTTON;
 				SetCapture(hWnd);
-				SetWindowLong(hWnd, GWL_USERDATA, 0);
+				if (GetWindowLong(hWnd, GWL_USERDATA)) {
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+					int tblNo = 0;
+					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+						ShowWindow(hTableWnd, SW_SHOW);
+						tblNo++;
+					}
+				}
 				InvalidateRect(hWnd, NULL, true);
 			}
 			break;
@@ -1223,6 +1237,12 @@ namespace tools {
 					int type = links[i].type;
 					if ((type == LINK_FK && !isFk) || (type == LINK_VIEW && !isView) || (type == LINK_TRIGGER && !isTrigger))
 						continue;
+
+					if (hCurrWnd && (hCurrWnd != links[i].hWndFrom && hCurrWnd != links[i].hWndTo))
+						continue;
+
+					ShowWindow(links[i].hWndFrom, SW_SHOW);
+					ShowWindow(links[i].hWndTo, SW_SHOW);
 
 					RECT rcA{0}, rcB{0};
 					GetWindowRect(links[i].hWndFrom, &rcA);
@@ -1338,6 +1358,14 @@ namespace tools {
 						prefs::set("link-view", isChecked);
 					if (wParam == IDM_LINK_TRIGGER)
 						prefs::set("link-trigger", isChecked);
+
+					if (GetWindowLong(hWnd, GWL_USERDATA)) {
+						int tblNo = 0;
+						while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+							ShowWindow(hTableWnd, SW_HIDE);
+							tblNo++;
+						}
+					}
 
 					InvalidateRect(hWnd, NULL, true);
 				}

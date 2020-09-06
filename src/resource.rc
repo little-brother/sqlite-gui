@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 1, 2, 0
+FILEVERSION 1, 1, 3, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.1.2\000"
+			VALUE "FileVersion", "1.1.3\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.1.2\000"
+			VALUE "ProductVersion", "1.1.3\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -455,10 +455,13 @@ BEGIN
 		"This extension implements uuid(), uuid_str(X) and uuid_blob(X) functions that handling RFC-4122 UUIDs\n\n" \
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
-		"Rownum * \n"\
+		"* Rownum\n"\
 		"Add the rownum(start) function that providing row numbers in an query result\n" \
 		"Example: select rownum(1), t.* from t;\n\n" \
-		"Exec *\n"\
+		"* Icu\n"\
+		"Add lower2(str) and upper2(str) functions with national symbols support\n" \
+		"select lower2('Û'); returns û\n\n"\
+		"* Exec\n"\
 		"Add the exec(cmd, maxOutputLength = 32000) function that allowed to execute shell command.\n" \
 		"Example: select exec('powershell -nologo ""Get-Content data.json""');\n\n"\
 		"* Custom extensions are available only in sqlite-gui"
