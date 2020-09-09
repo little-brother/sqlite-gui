@@ -16,9 +16,10 @@
 
 #define IDC_STATUSBAR              100
 #define IDC_TOOLBAR                101
-#define IDC_EDITOR                 102
-#define IDC_TAB                    103
-#define IDC_TREE                   104
+#define IDC_MAINTAB                102
+#define IDC_EDITOR                 103
+#define IDC_TAB                    104
+#define IDC_TREE                   105
 
 #define IDC_DLG_QUERYADD           106
 #define IDC_DLG_QUERYFILTER        107
@@ -114,10 +115,11 @@
 
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
-#define IDM_PLAN                   1513
-#define IDM_HISTORY                1514
-#define IDM_GISTS                  1515
-#define IDM_INTERRUPT              1516
+#define IDM_EXECUTE_BATCH          1513
+#define IDM_PLAN                   1514
+#define IDM_HISTORY                1515
+#define IDM_GISTS                  1516
+#define IDM_INTERRUPT              1517
 
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
@@ -132,15 +134,21 @@
 #define IDM_HELP                   1530
 #define IDM_ABOUT                  1531
 #define IDM_HOMEPAGE               1532
-#define IDM_TIPS                   1533
-#define IDM_EXTENSIONS             1534
-#define IDM_SQLITE_HOMEPAGE        1535
-#define IDM_TUTORIAL1              1536
-#define IDM_TUTORIAL2              1537
+#define IDM_HOTKEYS                1533
+#define IDM_TIPS                   1534
+#define IDM_EXTENSIONS             1535
+#define IDM_SQLITE_HOMEPAGE        1536
+#define IDM_TUTORIAL1              1537
+#define IDM_TUTORIAL2              1538
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_PROCESS_TAB            1591
-#define IDM_ESCAPE            1592
+#define IDM_ESCAPE                 1592
+
+#define IDM_OPEN_EDITOR            1595
+#define IDM_CLOSE_EDITOR           1596
+#define IDM_PREV_EDITOR            1597
+#define IDM_NEXT_EDITOR            1598
 
 #define IDM_EDITOR_CUT             1601
 #define IDM_EDITOR_COPY            1602
@@ -180,9 +188,10 @@
 #define IDS_CREATE_INDEX           10003
 #define IDS_CREATE_TRIGGER         10004
 #define IDS_ABOUT                  10010
-#define IDS_TIPS                   10011
-#define IDS_EXTENSIONS             10012
-#define IDS_WELCOME                10013
+#define IDS_HOTKEYS                10011
+#define IDS_TIPS                   10012
+#define IDS_EXTENSIONS             10013
+#define IDS_WELCOME                10014
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -204,3 +213,14 @@
 #define WMU_HIGHLIGHT              WM_USER + 10
 #define WMU_CHANGE_FOCUS           WM_USER + 11
 #define WMU_SHOW_TABLE_INFO        WM_USER + 12
+
+#define WMU_TAB_ADD                WM_USER + 30
+#define WMU_TAB_DELETE             WM_USER + 31
+#define WMU_TAB_SET_CURRENT        WM_USER + 33
+#define WMU_TAB_GET_COUNT          WM_USER + 34
+#define WMU_TAB_GET_CURRENT        WM_USER + 35
+
+#define NM_TAB_ADD                 WM_USER + 40
+#define NM_TAB_DELETE              WM_USER + 41
+#define NM_TAB_REQUEST_DELETE      WM_USER + 42
+#define NM_TAB_CHANGE              WM_USER + 43

@@ -3,6 +3,7 @@
 
 #define _WIN32_IE	0x0500
 #define MAX_RECENT_COUNT 10
+#define MAX_TAB_COUNT 32
 #define MAX_RESULT_COUNT 32
 #define MAX_TEXT_LENGTH 32000
 

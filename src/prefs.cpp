@@ -3,13 +3,13 @@
 #include "sqlite3.h"
 
 namespace prefs {
-	sqlite3 *db;
+	sqlite3* db;
 
-	const int ICOUNT = 27;
+	const int ICOUNT = 28;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
-		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent",
+		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
@@ -21,7 +21,7 @@ namespace prefs {
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000,
-		1, 1, 1, 1, 0, 0,
+		1, 1, 1, 1, 0, 0, 1,
 		0, 0,
 		0, 0, 1,
 		10000,
@@ -45,12 +45,12 @@ namespace prefs {
 	}
 
 	char* get(const char* name, const char* def) {
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare(db, "select value from 'prefs' where name = ?;", -1, &stmt, 0))
 			return NULL;
 
 		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
-		const char* val = SQLITE_ROW == sqlite3_step(stmt) ? (char *)sqlite3_column_text(stmt, 0) : def;
+		const char* val = SQLITE_ROW == sqlite3_step(stmt) ? (char*)sqlite3_column_text(stmt, 0) : def;
 		char* value = new char[strlen(val) + 1]{0};
 		strcpy(value, val);
 
@@ -59,7 +59,7 @@ namespace prefs {
 	}
 
 	bool set(const char* name, char* value) {
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
 			return false;
 
@@ -92,21 +92,21 @@ namespace prefs {
 		if (SQLITE_OK != sqlite3_exec(db, sql8, 0, 0, 0))
 			return false;
 
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
 			sqlite3_finalize(stmt);
 			return false;
 		}
 
 		while(sqlite3_step(stmt) == SQLITE_ROW)
-			set((char *) sqlite3_column_text(stmt, 0), atoi((char *) sqlite3_column_text(stmt, 1)));
+			set((char*) sqlite3_column_text(stmt, 0), atoi((char*) sqlite3_column_text(stmt, 1)));
 
 		sqlite3_finalize(stmt);
 		return true;
 	}
 
 	bool save() {
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
 			return false;
 
@@ -123,7 +123,7 @@ namespace prefs {
 	}
 
 	bool setRecent(char* path) {
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, "replace into 'recents' (path, time) values (?1, ?2);", -1, &stmt, 0);
 		if (rc != SQLITE_OK) {
 			sqlite3_finalize(stmt);
@@ -137,8 +137,8 @@ namespace prefs {
 		return true;
 	}
 
-	int getRecents(char ** recents) {
-		sqlite3_stmt * stmt;
+	int getRecents(char** recents) {
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, "select path from recents order by time desc limit 100", -1, &stmt, 0);
 		if (SQLITE_OK != rc) {
 			sqlite3_finalize(stmt);
@@ -147,7 +147,7 @@ namespace prefs {
 
 		int count = 0;
 		while(sqlite3_step(stmt) == SQLITE_ROW) {
-			char* path8 = (char *) sqlite3_column_text(stmt, 0);
+			char* path8 = (char*) sqlite3_column_text(stmt, 0);
 			recents[count] = new char[strlen(path8) + 1]{0};
 			strcpy(recents[count], path8);
 			count++;
@@ -161,7 +161,7 @@ namespace prefs {
 		char buf[256];
 		sprintf(buf, "replace into %s (query, time) values (?1, ?2);", table);
 
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
 		if (rc != SQLITE_OK) {
 			sqlite3_finalize(stmt);
@@ -181,7 +181,7 @@ namespace prefs {
 		char buf[256];
 		sprintf(buf, "delete from %s where query = ?1;", table);
 
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
 		if (rc != SQLITE_OK) {
 			sqlite3_finalize(stmt);
@@ -195,15 +195,15 @@ namespace prefs {
 		return (rc == SQLITE_OK);
 	}
 
-	int getQueries(const char* table, const char* filter, char ** queries) {
+	int getQueries(const char* table, const char* filter, char** queries) {
 		char buf[256];
 		sprintf(buf, "select strftime('%%d-%%m-%%Y %%H:%%M', time, 'unixepoch') || '\t' || query from %s %s order by time desc limit %i", table, strlen(filter) ? "where query like ?1" : "", get("max-query-count"));
 
-		sqlite3_stmt * stmt;
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
 
 		if (SQLITE_OK != rc) {
-			char *err8 = (char*)sqlite3_errmsg(db);
+			char* err8 = (char*)sqlite3_errmsg(db);
 			printf("\nERROR: %s\n",err8);
 			sqlite3_finalize(stmt);
 			return 0;
@@ -218,7 +218,7 @@ namespace prefs {
 
 		int count = 0;
 		while(sqlite3_step(stmt) == SQLITE_ROW) {
-			char* sql8 = (char *) sqlite3_column_text(stmt, 0);
+			char* sql8 = (char*) sqlite3_column_text(stmt, 0);
 			queries[count] = new char[strlen(sql8) + 1]{0};
 			strcpy(queries[count], sql8);
 			count++;
@@ -228,7 +228,7 @@ namespace prefs {
 		return count;
 	}
 
-	bool getDiagramRect(const char *dbname, const char* table, RECT* rect) {
+	bool getDiagramRect(const char* dbname, const char* table, RECT* rect) {
 		sqlite3_stmt * stmt;
 		int rc = sqlite3_prepare(db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0);
 		if (rc == SQLITE_OK) {
@@ -245,8 +245,8 @@ namespace prefs {
 
 		return rc == SQLITE_DONE || rc == SQLITE_OK;
 	}
-	bool setDiagramRect(const char *dbname, const char* table, RECT rect) {
-		sqlite3_stmt * stmt;
+	bool setDiagramRect(const char* dbname, const char* table, RECT rect) {
+		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, "replace into 'diagrams' (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0);
 		if (rc == SQLITE_OK) {
 			sqlite3_bind_text(stmt, 1, dbname, strlen(dbname), SQLITE_TRANSIENT);

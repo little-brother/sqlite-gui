@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 1, 3, 0
+FILEVERSION 1, 2, 0, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.1.3\000"
+			VALUE "FileVersion", "1.2.0\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.1.3\000"
+			VALUE "ProductVersion", "1.2.0\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -259,6 +259,7 @@ BEGIN
 		MENUITEM "Save\tCtrl+S", IDM_SAVE
 		MENUITEM "Plan\tAlt+Enter", IDM_PLAN, GRAYED
 		MENUITEM "Execute\tCtrl+Enter", IDM_EXECUTE, GRAYED
+		MENUITEM "Batch\tCtrl+Alt+Enter", IDM_EXECUTE_BATCH, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "&History\tCtrl+H", IDM_HISTORY
 		MENUITEM "Saved\tCtrl+G", IDM_GISTS
@@ -283,6 +284,7 @@ BEGIN
 	BEGIN
 		MENUITEM "About", IDM_ABOUT
 		MENUITEM "Homepage", IDM_HOMEPAGE
+		MENUITEM "Shortcuts", IDM_HOTKEYS
 		MENUITEM "Extensions", IDM_EXTENSIONS
 		MENUITEM "Tips", IDM_TIPS
 		MENUITEM SEPARATOR
@@ -413,6 +415,8 @@ BEGIN
 	"Q", IDM_CLOSE, CONTROL, VIRTKEY
 	VK_RETURN, IDM_EXECUTE, CONTROL, VIRTKEY
 	VK_F9, IDM_EXECUTE, VIRTKEY
+	VK_RETURN, IDM_EXECUTE_BATCH, CONTROL ALT, VIRTKEY
+	VK_F12, IDM_EXECUTE_BATCH, VIRTKEY
 	VK_RETURN, IDM_PLAN, ALT, VIRTKEY
 	VK_F8, IDM_PLAN, VIRTKEY
 	"S", IDM_SAVE, CONTROL, VIRTKEY
@@ -421,6 +425,10 @@ BEGIN
 	VK_TAB, IDM_PROCESS_TAB, VIRTKEY
 	VK_TAB, IDM_PROCESS_TAB, SHIFT, VIRTKEY
 	VK_TAB, IDM_NEXT_RESULT, CONTROL, VIRTKEY
+	"N", IDM_OPEN_EDITOR, CONTROL, VIRTKEY
+	VK_ESCAPE, IDM_CLOSE_EDITOR, CONTROL ALT, VIRTKEY
+	VK_LEFT, IDM_PREV_EDITOR, CONTROL ALT, VIRTKEY
+	VK_RIGHT, IDM_NEXT_EDITOR, CONTROL ALT, VIRTKEY
 END
 
 STRINGTABLE
@@ -430,15 +438,30 @@ BEGIN
 	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n)"
 	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
 	IDS_ABOUT "Sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020\nlb.im@ya.ru"
+	IDS_HOTKEYS "Global\n" \
+		"Esc - App exit\n" \
+		"Tab/Shift + Tab - Switch between the tree, the editor and the result panel\n" \
+		"Ctrl + O - Open database\n" \
+		"Ctrl + Q - Close database\n" \
+		"Ctrl + N - New editor\n" \
+		"Alt + Ctrl + Escape - Close current editor\n" \
+		"Alt + Ctrl + Right/Left - Toggle editor's tab\n\n" \
+		"Editor\n" \
+		"F8/Alt + Enter - Show query plan\n" \
+		"F9/Ctrl + Enter - Execute query\n" \
+		"F12/Ctrl + Alt + Enter - Execute as batch (synchronous is off)\n" \
+		"Tab/Shift + Tab - Add and remove indents in Editor.\n" \
+		"Ctrl + ? (or Ctrl + click) - Get the table info\n" \
+		"Ctrl + Tab - Toggle to a next result\n" \
+		"Ctrl + 1, Ctrl + 2, ... - Sort the result (should be in focus) by column 1, 2, ...\n\n" \
+		"Etc\n" \
+		"Ctrl + Enter - Add row in ""Add row"" dialog\n" \
+		"Ctrl + Enter - Move to next row in ""View row"" dialog\n" \
+		"Ctrl + Click by cell - Edit the value as a multiline text in ""Data Edit"" dialog\n" \
+		"Ctrl + Enter - Add new line to text in the multiline mode"
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n"
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
-		"* Click on a table name with Ctrl (or Ctrl + ?) in Editor to get the table info.\n\n" \
-		"* Use Ctrl + Tab to toggle to next result.\n\n" \
-		"* Use Ctrl + 1, Ctrl + 2 and next to sort the result (should be in focus)\n   by column 1, 2, etc\n\n" \
-		"* Use Tab and Shift + Tab to switch between Navigation, Editor and the\n   result panel. Also these buttons add and remove indents in Editor.\n\n" \
-		"* Hold Ctrl when click by a cell in ""Data Edit"" dialog to edit the value as\n   a multiline text. Use Ctrl + Enter to add new line to text.\n\n" \
-		"* Use Ctrl + Enter to add row in ""Add row"" dialog\n   Or move to next row in ""View row"" dialog.\n\n" \
 		"* SQLite supports a limited subset of ALTER. So there is not GUI allows\n   remove/reorder column to an existing table or something like this.\n\n" \
 		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires series and rownum extensions.\n\n" \
@@ -465,7 +488,7 @@ BEGIN
 		"Add the exec(cmd, maxOutputLength = 32000) function that allowed to execute shell command.\n" \
 		"Example: select exec('powershell -nologo ""Get-Content data.json""');\n\n"\
 		"* Custom extensions are available only in sqlite-gui"
-	IDS_WELCOME "-- Welcome to sqlite-gui!\n" \
+	IDS_WELCOME "-- Welcome!\n" \
 		"-- Thanks for choosing sqlite-gui. I hope you'll like it.\n" \
 		"-- bookstore.sqlite is a demo database for beginners.\n" \
 		"-- Push ""Execute"" to get all rows from ""books"" table\n" \

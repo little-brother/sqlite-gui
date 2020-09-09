@@ -942,8 +942,8 @@ namespace tools {
 			if (!rc)
 				showDbError(hMainWnd);
 
-			delete [] data8;
 			sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
+			delete [] data8;
 		}
 		delete [] path8;
 

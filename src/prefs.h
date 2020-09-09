@@ -16,14 +16,14 @@ namespace prefs {
 	bool set(const char* name, char* value);
 
 	bool setRecent(char* path);
-	int getRecents(char ** recents);
+	int getRecents(char** recents);
 
 	bool setQuery(const char* table, const char* query);
 	int deleteQuery(const char* table, const char* query);
-	int getQueries(const char* table, const char* filter, char ** queries);
+	int getQueries(const char* table, const char* filter, char** queries);
 
-	bool getDiagramRect(const char *dbname, const char* table, RECT* rect);
-	bool setDiagramRect(const char *dbname, const char* table, RECT rect);
+	bool getDiagramRect(const char* dbname, const char* table, RECT* rect);
+	bool setDiagramRect(const char* dbname, const char* table, RECT rect);
 }
 
 #endif
