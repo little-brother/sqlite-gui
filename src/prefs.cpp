@@ -72,8 +72,8 @@ namespace prefs {
 		return res;
 	}
 
-	bool load() {
-		if (SQLITE_OK != sqlite3_open("prefs.sqlite", &db))
+	bool load(char* path) {
+		if (SQLITE_OK != sqlite3_open(path, &db))
 			return false;
 
 		char sql8[] = "" \

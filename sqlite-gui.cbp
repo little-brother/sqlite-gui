@@ -22,6 +22,7 @@
 				<Linker>
 					<Add library="lib/libsqlite3.a" />
 					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libcomdlg32.a" />
+					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libshlwapi.a" />
 				</Linker>
 			</Target>
 			<Target title="Release">
@@ -41,6 +42,7 @@
 					<Add option="-s" />
 					<Add library="lib/libsqlite3.a" />
 					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libcomdlg32.a" />
+					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libshlwapi.a" />
 				</Linker>
 			</Target>
 		</Build>

@@ -30,6 +30,7 @@
 #include <windowsx.h>
 #include <commctrl.h>
 #include <richedit.h>
+#include <shlwapi.h>
 #include <stdio.h>
 #include <tchar.h>
 #include <ctime>

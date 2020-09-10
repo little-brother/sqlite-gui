@@ -21,9 +21,9 @@ const TCHAR *transactionStates[] = {TEXT(" TRN"),TEXT("")};
 
 // AutoComplete
 const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), TEXT('\0')};
-const TCHAR *PRAGMAS[1024] = {0};
-const TCHAR *FUNCTIONS[1024] = {0};
-const TCHAR *TABLES[1024] = {0};
+TCHAR *PRAGMAS[1024] = {0};
+TCHAR *FUNCTIONS[1024] = {0};
+TCHAR *TABLES[1024] = {0};
 
 sqlite3 *db;
 HWND hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hMainTabWnd, hEditorTipWnd, hDialog, hSortingResultWnd, hAutoComplete; // hTab.lParam is current ListView HWND
@@ -59,7 +59,7 @@ int top = 0;
 int currParenthesisPos[] = {-1, -1};
 bool isRequireHighligth = false, isRequireParenthesisHighligth = false;
 
-TCHAR appPath[MAX_PATH]{0};
+TCHAR APP_PATH[MAX_PATH]{0};
 
 WNDPROC cbOldTreeItemEdit;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -69,7 +69,7 @@ void executeQuery(TCHAR* query, int tabId, bool isPlan = false);
 
 void openDb(const TCHAR* path);
 void closeDb();
-
+void search(HWND hWnd);
 void enableMenu();
 void disableMenu();
 void setToolbarButtonState(int id, byte state, LPARAM lParam = 0);
@@ -116,11 +116,19 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	icex.dwICC = ICC_DATE_CLASSES;
 	InitCommonControlsEx(&icex);
 
-	bool isFirstRun = !utils::isFileExists(TEXT("prefs.sqlite"));
-	if (!prefs::load()) {
+	GetModuleFileName(0, APP_PATH, MAX_PATH);
+	PathRemoveFileSpec(APP_PATH);
+	TCHAR prefPath16[MAX_PATH] = {0};
+	_stprintf(prefPath16, TEXT("%s/prefs.sqlite"), APP_PATH);
+	char* prefPath8 = utils::utf16to8(prefPath16);
+
+	bool isFirstRun = !utils::isFileExists(prefPath16);
+	if (!prefs::load(prefPath8)) {
 		MessageBox(0, TEXT("Settings loading failed"), TEXT("Error"), MB_OK);
 		return EXIT_FAILURE;
 	}
+
+	delete [] prefPath8;
 
 	hMainWnd = CreateWindowEx (0, TEXT("sqlite-gui-class"), TEXT("sqlite-gui"), WS_OVERLAPPEDWINDOW,
 		prefs::get("x"), prefs::get("y"), prefs::get("width"), prefs::get("height"),
@@ -152,7 +160,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.2.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.2.1"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -199,7 +207,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
 	setTreeFont(hTreeWnd);
 
-	GetCurrentDirectory(MAX_PATH, appPath);
+
 
 	if (strlen(lpCmdLine)) {
 		int nArgs = 0;
@@ -207,7 +215,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		openDb(args[1]);
 	} else if (isFirstRun) {
 		TCHAR demoDb[MAX_PATH];
-		_stprintf(demoDb, TEXT("%s\\bookstore.sqlite"), appPath);
+		_stprintf(demoDb, TEXT("%s\\bookstore.sqlite"), APP_PATH);
 		if (utils::isFileExists(demoDb)) {
 			TCHAR buf[MAX_TEXT_LENGTH];
 			LoadString(GetModuleHandle(NULL), IDS_WELCOME, buf, MAX_TEXT_LENGTH);
@@ -215,22 +223,22 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			openDb(demoDb);
 		}
 	} else {
-		if (prefs::get("restore-editor")) {
-			for (int tabNo = 0; tabNo < prefs::get("editor-tab-count"); tabNo++) {
-				char key[60] = {0};
-				sprintf(key, "editor-text-%i", tabNo);
-				char* text8 = prefs::get(key, "");
-				TCHAR* text16 = utils::utf8to16(text8);
-				SetWindowText(tabs[tabNo].hEditorWnd, text16);
-				delete [] text8;
-				delete [] text16;
-			}
-		}
-
 		if (prefs::get("restore-db")) {
 			int recent = GetMenuItemID(hDbMenu, 3);
 			if (recent)
 				PostMessage(hMainWnd, WM_COMMAND, recent, 0);
+		}
+	}
+
+	if (prefs::get("restore-editor") && !isFirstRun) {
+		for (int tabNo = 0; tabNo < prefs::get("editor-tab-count"); tabNo++) {
+			char key[60] = {0};
+			sprintf(key, "editor-text-%i", tabNo);
+			char* text8 = prefs::get(key, "");
+			TCHAR* text16 = utils::utf8to16(text8);
+			SetWindowText(tabs[tabNo].hEditorWnd, text16);
+			delete [] text8;
+			delete [] text16;
 		}
 	}
 
@@ -666,6 +674,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 			if (cmd == IDM_EDITOR_DELETE)
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
+			if ((cmd == IDM_EDITOR_FIND) && (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hMainWnd, (DLGPROC)&dialogs::cbDlgFind, (LPARAM)hEditorWnd) == DLG_OK)) {
+				search(hEditorWnd);
+				SetFocus(hEditorWnd);
+			}
+
 			if (cmd == IDM_ABOUT || cmd == IDM_TIPS || cmd == IDM_EXTENSIONS || cmd == IDM_HOTKEYS) {
 				HMENU hMenu = GetSubMenu(hMainMenu, 3);
 				TCHAR title[255];
@@ -1033,8 +1046,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 					ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS |  TTF_TRACK;
 					ti.uId = (UINT_PTR)hMainWnd;
 					ti.lpszText = desc;
+
 					SendMessage(hEditorTipWnd, TTM_SETMAXTIPWIDTH, 0, MAX_TEXT_LENGTH);
 					SendMessage(hEditorTipWnd, TTM_ADDTOOL, 0, (LPARAM)&ti);
+					SendMessage(hEditorTipWnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
 					SendMessage(hEditorTipWnd, TTM_TRACKPOSITION, 0, (LPARAM)(DWORD) MAKELONG(p.x, p.y + 20));
 					SendMessage(hEditorTipWnd, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO) &ti);
 					delete [] desc;
@@ -1311,7 +1326,7 @@ void openDb(const TCHAR* path) {
 	SetWindowText(hMainWnd, path);
 
 	TCHAR searchPath[MAX_PATH]{0};
-	_stprintf(searchPath, TEXT("%s\\extensions\\*.dll"), appPath);
+	_stprintf(searchPath, TEXT("%s\\extensions\\*.dll"), APP_PATH);
 
 	// load extensions
 	if (prefs::get("autoload-extensions")) {
@@ -1324,7 +1339,7 @@ void openDb(const TCHAR* path) {
 			sqlite3_enable_load_extension(db, true);
 			do {
 				TCHAR file16[MAX_PATH]{0};
-				_stprintf(file16, TEXT("%s/extensions/%s"), appPath, ffd.cFileName);
+				_stprintf(file16, TEXT("%s/extensions/%s"), APP_PATH, ffd.cFileName);
 				char* file8 = utils::utf16to8(file16);
 
 				if (SQLITE_OK == sqlite3_load_extension(db, file8, NULL, NULL)) {
@@ -1706,6 +1721,14 @@ void updateTree(int type) {
 			hItem = TreeView_GetNextSibling(hTreeWnd, hItem);
 		}
 	}
+
+	TABLES[tblNo] = new TCHAR[256]{0};
+	_tcscpy(TABLES[tblNo], TEXT("sqlite_master"));
+	TABLES[tblNo + 1] = new TCHAR[256]{0};
+	_tcscpy(TABLES[tblNo + 1], TEXT("sqlite_sequence"));
+	TABLES[tblNo + 2] = new TCHAR[256]{0};
+	_tcscpy(TABLES[tblNo + 2], TEXT("dbstat"));
+
 	InvalidateRect(hTreeWnd, 0, TRUE);
 }
 
@@ -2388,9 +2411,6 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		for (int i = 0; TABLES[i]; i++)
 			isExact += addString(TABLES[i], isNoCheck);
 
-		addString(TEXT("dbstat"));
-		addString(TEXT("sqlite_master"));
-		addString(TEXT("sqlite_sequence"));
 		if (isQueryValid("select value from generate_series(1, 1, 1)"))
 			isExact += addString(TEXT("generate_series"));
 

@@ -6,7 +6,7 @@
 #include <tchar.h>
 
 namespace prefs {
-	bool load();
+	bool load(char* path);
 	bool save();
 
 	int get(const char* name);

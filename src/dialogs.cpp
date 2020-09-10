@@ -1164,6 +1164,41 @@ namespace dialogs {
 		return false;
 	}
 
+	BOOL CALLBACK cbDlgDDL (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				setEditorFont(hEditorWnd);
+				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
+
+				processHightlight(hEditorWnd, true, false);
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				RECT rc = {0};
+				GetClientRect(hWnd, &rc);
+				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
+				SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)0, (LPARAM)0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+		}
+
+		return false;
+	}
+
+
 	BOOL CALLBACK cbEnumFont(LPLOGFONT lplf, LPNEWTEXTMETRIC lpntm, DWORD fontType, LPVOID hWnd)  {
 		if (fontType & TRUETYPE_FONTTYPE && lplf->lfFaceName[0] != TEXT('@'))
 			ComboBox_AddString((HWND)hWnd, lplf->lfFaceName);

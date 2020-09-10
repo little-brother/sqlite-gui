@@ -967,9 +967,30 @@ namespace tools {
 	HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DLG_TOOLBAR), 32, 0, RGB(255,255,255));
 	bool isMove = false;
 	POINT cursor = {0, 0};
+	HMENU hDiagramMenu = 0;
 
 	WNDPROC cbOldTable;
 	LRESULT CALLBACK cbNewTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_COMMAND) {
+			TCHAR table16[255]{0};
+			GetWindowText(hWnd, table16, 255);
+
+			if (wParam == IDM_EDIT_DATA) {
+				_tcscpy(editTableData16, table16);
+				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
+			}
+
+			if (wParam == IDM_DDL) {
+				TCHAR query16[1024] = {0};
+				_stprintf(query16, TEXT("with t as (select sql, iif(type = 'table', 0, 1) from sqlite_master " \
+					"where tbl_name = '%s' and sql is not null order by 2) " \
+					"select group_concat(sql, ';' || char(10) || char(10)) || ';' from t"), table16);
+				TCHAR* DDL = getDbValue(query16);
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_DDL), hWnd, (DLGPROC)&dialogs::cbDlgDDL, (LPARAM)DDL);
+				delete [] DDL;
+			}
+		}
+
 		if (msg == WM_WINDOWPOSCHANGED) {
 			RECT rcSize{0};
 			GetWindowRect(hWnd, &rcSize);
@@ -998,15 +1019,18 @@ namespace tools {
 			InvalidateRect(hParentWnd, NULL, true);
 		}
 
-		if (msg == WM_LBUTTONDBLCLK) {
-			TCHAR table16[255]{0};
-			GetWindowText(hWnd, table16, 255);
-			_tcscpy(editTableData16, table16);
-			DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData);
-		}
-
 		if (msg == WM_WINDOWPOSCHANGED || msg == WM_LBUTTONDBLCLK)
 			SetFocus(GetParent(hWnd));
+
+		if (msg == WM_CONTEXTMENU) {
+			POINT p = {LOWORD(lParam), HIWORD(lParam)};
+			if (!hDiagramMenu) {
+				hDiagramMenu = LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_DIAGRAM));
+				hDiagramMenu = GetSubMenu(hDiagramMenu, 0);
+			}
+
+			TrackPopupMenu(hDiagramMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+		}
 
 		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
 	}

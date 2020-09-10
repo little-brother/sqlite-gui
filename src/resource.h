@@ -11,6 +11,7 @@
 #define IDD_TOOL_DATABASE_DIAGRAM  21
 #define IDD_ADD_TABLE              22
 #define IDD_FIND                   23
+#define IDD_DDL                    24
 
 #define IDA_ACCEL                  77
 
@@ -90,6 +91,7 @@
 #define IDC_MENU_EDITOR            201
 #define IDC_MENU_RESULT            202
 #define IDC_MENU_EDIT_DATA         203
+#define IDC_MENU_DIAGRAM           204
 
 #define IDC_MENU_TREE              210
 #define IDC_MENU_TABLE             211
@@ -104,14 +106,12 @@
 
 #define IDC_DATABASE_DIAGRAM_TABLE 600
 
-
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
 #define IDM_EXIT                   1403
 #define IDM_ATTACH                 1404
 #define IDM_SETTINGS               1405
 #define IDM_RECENT                 1410
-
 
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
@@ -154,6 +154,7 @@
 #define IDM_EDITOR_COPY            1602
 #define IDM_EDITOR_PASTE           1603
 #define IDM_EDITOR_DELETE          1604
+#define IDM_EDITOR_FIND            1605
 
 #define IDM_RESULT_COPY_CELL       1610
 #define IDM_RESULT_COPY_ROW        1611
@@ -166,6 +167,7 @@
 #define IDM_RENAME                 1705
 #define IDM_ADD_COLUMN             1706
 #define IDM_ERASE_DATA             1707
+#define IDM_DDL                    1708
 
 #define IDM_ADD                    1710
 #define IDM_REFRESH                1711
