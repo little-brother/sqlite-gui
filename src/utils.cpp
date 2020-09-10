@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include "utils.h"
 
 namespace utils {
@@ -168,20 +170,38 @@ namespace utils {
 	}
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8) {
-		long lValue = strtol(value8, NULL, 10);
-		double dValue = strtod(value8, NULL);
+		int len = strlen(value8);
 
-		if (strlen(value8) == 1 && value8[0] == '0')
+		if (len == 0)
+			return sqlite3_bind_null(stmt, pos);
+
+		if (len > 20) // 18446744073709551615
+			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+
+		if (len == 1 && value8[0] == '0')
 			return sqlite3_bind_int(stmt, pos, 0);
 
-		if (lValue && dValue)
-			return lValue == dValue ? sqlite3_bind_int64(stmt, pos, lValue) : sqlite3_bind_double(stmt, pos, dValue);
+		bool isNum = true;
+		int dotCount = false;
+		for (int i = +(value8[0] == '-' /* is negative */); i < len; i++) {
+			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.');
+			dotCount += value8[i] == '.';
+		}
 
-		return strlen(value8) ? sqlite3_bind_text(stmt, pos, value8, strlen(value8),  SQLITE_TRANSIENT) : sqlite3_bind_null(stmt, pos);
+		if (isNum && dotCount == 0) {
+			return len < 10 ? // 2147483647
+				sqlite3_bind_int(stmt, pos, atoi(value8)) :
+				sqlite3_bind_int64(stmt, pos, atoll(value8));
+		}
+
+		if (isNum && dotCount == 1)
+			return sqlite3_bind_int(stmt, pos, strtod(value8, 0));
+
+		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
 	}
 
 	// Supports both 2.7 and 2,7
-	bool isNumber(TCHAR* str, double *out) {
+	bool isNumber(const TCHAR* str, double *out) {
 		double d;
 		TCHAR *endptr;
 		errno = 0;

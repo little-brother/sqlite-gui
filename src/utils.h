@@ -19,7 +19,7 @@ namespace utils {
 	int saveFile(TCHAR* path, const TCHAR* filter);
 	bool isFileExists(const TCHAR* path);
 
-	bool isNumber(TCHAR* str, double *out);
+	bool isNumber(const TCHAR* str, double *out);
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8);
 }
