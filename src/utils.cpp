@@ -169,6 +169,39 @@ namespace utils {
 		return isFound;
 	}
 
+	char* readFile(const char* path) {
+		FILE *fp = fopen (path , "rb");
+		if(!fp)
+			return 0;
+
+		fseek(fp, 0L, SEEK_END);
+		long size = ftell(fp);
+		rewind(fp);
+
+		char* buf = new char[size + 1]{0};
+		int rc = fread(buf, size, 1 , fp);
+		fclose(fp);
+
+		if (!rc) {
+			delete [] buf;
+			return 0;
+		}
+
+		buf[size] = '\0';
+
+		return buf;
+	}
+
+	char* getFileName(const char* path) {
+		TCHAR* path16 = utils::utf8to16(path);
+		TCHAR name16[255], ext16[32], name_ext16[300];
+		_tsplitpath(path16, NULL, NULL, name16, ext16);
+		_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
+		char* name8 = utils::utf16to8(name_ext16);
+		delete [] path16;
+		return name8;
+	}
+
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8) {
 		int len = strlen(value8);
 

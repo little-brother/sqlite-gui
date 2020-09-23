@@ -4,16 +4,22 @@
 #define IDD_ROW                    14
 #define IDD_ADD_COLUMN             15
 #define IDD_SETTINGS               16
-#define IDD_TOOL_EXPORT_CSV        17
-#define IDD_TOOL_EXPORT_SQL        18
-#define IDD_TOOL_IMPORT_CSV        19
-#define IDD_TOOL_GENERATE_DATA     20
-#define IDD_TOOL_DATABASE_DIAGRAM  21
-#define IDD_ADD_TABLE              22
-#define IDD_FIND                   23
-#define IDD_DDL                    24
+#define IDD_ADD_TABLE              17
+#define IDD_FIND                   18
+#define IDD_DDL                    19
+
+#define IDD_TOOL_EXPORT_CSV        30
+#define IDD_TOOL_EXPORT_SQL        31
+#define IDD_TOOL_IMPORT_CSV        32
+#define IDD_TOOL_GENERATE_DATA     33
+#define IDD_TOOL_DATABASE_DIAGRAM  34
 
 #define IDA_ACCEL                  77
+
+#define IDC_DLG_EXAMPLE            90
+#define IDC_DLG_OK                 91
+#define IDC_DLG_CANCEL             92
+#define IDC_DLG_DELETE             93
 
 #define IDC_STATUSBAR              100
 #define IDC_TOOLBAR                101
@@ -52,7 +58,7 @@
 #define IDC_DLG_EXIT_BY_ESCAPE     131
 #define IDC_DLG_INDENT             132
 #define IDC_DLG_TOOLBAR            133
-
+#define IDC_DLG_STARTUP            134
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141
@@ -82,36 +88,38 @@
 #define IDC_DLG_GEN_OPTION_TABLE   183
 #define IDC_DLG_GEN_OPTION_COLUMN  184
 #define IDC_DLG_GEN_OPTION_MULTIPLIER  185
+#define IDC_DLG_GEN_DICTIONARY     186
+#define IDC_DLG_GEN_DICTIONARY_HELP    187
 
-#define IDC_DLG_EXAMPLE            190
-#define IDC_DLG_OK                 191
-#define IDC_DLG_CANCEL             192
+#define IDC_TAB_EDIT               300
 
-#define IDC_MENU_MAIN              200
-#define IDC_MENU_EDITOR            201
-#define IDC_MENU_RESULT            202
-#define IDC_MENU_EDIT_DATA         203
-#define IDC_MENU_DIAGRAM           204
+#define IDC_MENU_MAIN              500
+#define IDC_MENU_EDITOR            501
+#define IDC_MENU_RESULT            502
+#define IDC_MENU_EDIT_DATA         503
+#define IDC_MENU_BLOB              504
+#define IDC_MENU_DIAGRAM           505
 
-#define IDC_MENU_TREE              210
-#define IDC_MENU_TABLE             211
-#define IDC_MENU_VIEW              212
-#define IDC_MENU_INDEX             213
-#define IDC_MENU_TRIGGER           214
-#define IDC_MENU_COLUMN            215
+#define IDC_MENU_TREE              510
+#define IDC_MENU_TABLE             511
+#define IDC_MENU_VIEW              512
+#define IDC_MENU_INDEX             513
+#define IDC_MENU_TRIGGER           514
+#define IDC_MENU_COLUMN            515
 
-#define IDC_ROW_LABEL              300
-#define IDC_ROW_EDIT               400
-#define IDC_ROW_SWITCH             500
+// Iterable. Should have a gap
+#define IDC_ROW_LABEL              900
+#define IDC_ROW_EDIT               1000
+#define IDC_ROW_SWITCH             1100
 
-#define IDC_DATABASE_DIAGRAM_TABLE 600
+#define IDC_DATABASE_DIAGRAM_TABLE 1300
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
 #define IDM_EXIT                   1403
 #define IDM_ATTACH                 1404
 #define IDM_SETTINGS               1405
-#define IDM_RECENT                 1410
+#define IDM_RECENT                 1410 // Iteratable
 
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
@@ -160,6 +168,10 @@
 #define IDM_RESULT_COPY_ROW        1611
 #define IDM_RESULT_EXPORT          1612
 
+#define IDM_BLOB_NULL              1620
+#define IDM_BLOB_IMPORT            1621
+#define IDM_BLOB_EXPORT            1622
+
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
 #define IDM_EDIT                   1703
@@ -182,7 +194,7 @@
 #define IDI_LOGO                   3000
 #define IDB_TREEVIEW               3001
 #define IDB_TOOLBAR                3002
-#define IDB_DLG_TOOLBAR            3003
+#define IDB_DIAGRAM_TOOLBAR        3003
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001
@@ -193,7 +205,8 @@
 #define IDS_HOTKEYS                10011
 #define IDS_TIPS                   10012
 #define IDS_EXTENSIONS             10013
-#define IDS_WELCOME                10014
+#define IDS_GEN_DICTIONARY         10014
+#define IDS_WELCOME                10015
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -219,8 +232,11 @@
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31
 #define WMU_TAB_SET_CURRENT        WM_USER + 33
-#define WMU_TAB_GET_COUNT          WM_USER + 34
-#define WMU_TAB_GET_CURRENT        WM_USER + 35
+#define WMU_TAB_SET_TEXT           WM_USER + 34
+#define WMU_TAB_GET_TEXT           WM_USER + 35
+#define WMU_TAB_GET_COUNT          WM_USER + 36
+#define WMU_TAB_GET_CURRENT        WM_USER + 37
+
 
 #define NM_TAB_ADD                 WM_USER + 40
 #define NM_TAB_DELETE              WM_USER + 41

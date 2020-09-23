@@ -3,10 +3,14 @@
 
 #define _WIN32_IE	0x0500
 #define MAX_RECENT_COUNT 10
-#define MAX_TAB_COUNT 32
+#define MAX_TAB_COUNT 16
 #define MAX_RESULT_COUNT 32
 #define MAX_TEXT_LENGTH 32000
+#define MAX_TOOLTIP_LENGTH 1024
 
+#define DLG_OK                      1
+#define DLG_CANCEL                 -1
+#define DLG_DELETE                  2
 
 #define ACTION_SETDEFFONT           1
 #define ACTION_DESTROY              2
@@ -22,9 +26,6 @@
 #define INDEX                       3
 #define TRIGGER                     4
 #define COLUMN                      5
-
-#define DLG_OK                      1
-#define DLG_CANCEL                 -1
 
 #include <windows.h>
 #include <windowsx.h>
@@ -65,20 +66,20 @@ struct ListViewCell {
 };
 extern ListViewCell currCell;
 
-extern HMENU hEditDataMenu, hResultMenu;
+extern HMENU hEditDataMenu, hResultMenu, hBlobMenu;
 
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
 
 void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
-bool processEditorKey(MSGFILTER* pF);
+bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, int pos = -1);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
 bool sortListView(HWND hListWnd, int colNo);
-LRESULT onListViewMenu(int cmd);
+LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
 TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type);
 bool isQueryValid(const char* query);

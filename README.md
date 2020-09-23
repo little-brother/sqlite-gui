@@ -16,7 +16,6 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Does not require installation
 
 ### Cons
-* BLOB is unsupported
 * Only utf-8 is supported
 * NULL is displayed as an empty string and an empty string is set to NULL when data is edit
 

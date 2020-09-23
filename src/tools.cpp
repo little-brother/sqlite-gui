@@ -22,7 +22,13 @@ namespace tools {
 					}
 				}
 				sqlite3_finalize(stmt);
-				ComboBox_SetCurSel(hTable, 0);
+
+				char* table8 = prefs::get("csv-export-last-table", "");
+				TCHAR* table16 = utils::utf8to16(table8);
+				int idx = ComboBox_FindString(hTable, 0, table16);
+				ComboBox_SetCurSel(hTable, idx == -1 ? 0 : idx);
+				delete [] table8;
+				delete [] table16;
 
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), BST_CHECKED);
 
@@ -49,7 +55,11 @@ namespace tools {
 					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0")))
 						return true;
 
-					FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));
+					char* path8 = utils::utf16to8(path16);
+					// Use binary mode
+					// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
+					FILE* f = fopen(path8, "wb");
+					delete [] path8;
 					if (f == NULL) {
 						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 						return true;
@@ -70,11 +80,18 @@ namespace tools {
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
 						while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
-							TCHAR* line16 = new TCHAR[MAX_TEXT_LENGTH]{0};
+							int size = 0;
+							for(int i = 0; i < sqlite3_column_count(stmt); i++)
+								size += sqlite3_column_type(stmt, i) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, i) + 1 : 20;
+
+							TCHAR line16[size] = {0};
 							for(int i = 0; i < sqlite3_column_count(stmt); i++) {
 								if (i != 0)
 									_tcscat(line16, delimiter16);
-								TCHAR* value16 = utils::utf8to16(isColumns ? (char *)sqlite3_column_name(stmt, i) : (char *)sqlite3_column_text(stmt, i));
+
+								TCHAR* value16 = utils::utf8to16(
+									isColumns ? (char *)sqlite3_column_name(stmt, i) :
+									sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
 								TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
 								if (_tcschr(qvalue16, TEXT(','))) {
 									TCHAR val16[_tcslen(qvalue16) + 3]{0};
@@ -86,9 +103,11 @@ namespace tools {
 								delete [] value16;
 								delete [] qvalue16;
 							}
+
 							_tcscat(line16, isUnixNewLine ? TEXT("\n") : TEXT("\r\n"));
-							_ftprintf(f, line16);
-							delete [] line16;
+							char* line8 = utils::utf16to8(line16);
+							fprintf(f, line8);
+							delete [] line8;
 							isColumns = false;
 						}
 					}
@@ -98,6 +117,10 @@ namespace tools {
 
 					prefs::set("csv-export-delimiter", iDelimiter);
 					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
+
+					char* table8 = utils::utf16to8(table16);
+					prefs::set("csv-export-last-table", table8);
+					delete [] table8;
 
 					EndDialog(hWnd, DLG_OK);
 				}
@@ -622,12 +645,7 @@ namespace tools {
 						i++;
 					}
 
-					execute("attach database \"prefs.sqlite\" as prefs1234567890");
-					execute("drop table if exists temp.generators");
-					execute("create table temp.generators as select * from prefs1234567890.generators");
-					execute("detach database prefs1234567890");
-
-					if (SQLITE_OK == sqlite3_prepare_v2(db, "select distinct type from temp.generators order by 1", -1, &stmt, 0)) {
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select distinct type from preferences.generators order by 1", -1, &stmt, 0)) {
 						while (SQLITE_ROW == sqlite3_step(stmt)) {
 							GENERATOR_TYPE[i] = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
 							i++;
@@ -790,6 +808,17 @@ namespace tools {
 					EndDialog(hWnd, DLG_CANCEL);
 				}
 
+				if (wParam == IDC_DLG_GEN_DICTIONARY) {
+					_tcscpy(editTableData16, TEXT("preferences.generators"));
+					DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
+				}
+
+				if (wParam == IDC_DLG_GEN_DICTIONARY_HELP) {
+					TCHAR buf[MAX_TEXT_LENGTH];
+					LoadString(GetModuleHandle(NULL), IDS_GEN_DICTIONARY, buf, MAX_TEXT_LENGTH);
+					MessageBox(hWnd, buf, TEXT("Data generator help"), MB_OK);
+				}
+
 				if (wParam == IDC_DLG_OK || wParam == IDOK)	{
 					execute("drop table if exists temp.data_generator");
 
@@ -871,7 +900,7 @@ namespace tools {
 						}
 
 						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
-							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
+							_stprintf(query16, TEXT("with t as (select type, value from preferences.generators where type = \"%s\" order by random()), "\
 								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
 								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
@@ -909,32 +938,9 @@ namespace tools {
 		return false;
 	}
 
-	char* readFile(const char* path) {
-		FILE *fp = fopen (path , "rb");
-		if(!fp)
-			return 0;
-
-		fseek(fp, 0L, SEEK_END);
-		long size = ftell(fp);
-		rewind(fp);
-
-		char* buf = new char[size + 1]{0};
-		int rc = fread(buf, size, 1 , fp);
-		fclose(fp);
-
-		if (!rc) {
-			delete [] buf;
-			return 0;
-		}
-
-		buf[size] = '\0';
-
-		return buf;
-	}
-
 	bool importSqlFile(TCHAR *path16){
 		char* path8 = utils::utf16to8(path16);
-		char* data8 = readFile(path8);
+		char* data8 = utils::readFile(path8);
 		bool rc = true;
 		if (data8 != 0) {
 			sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
@@ -964,7 +970,7 @@ namespace tools {
 
 	char* dbname8 = 0;
 	Link links[MAX_LINK_COUNT]{0};
-	HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DLG_TOOLBAR), 32, 0, RGB(255,255,255));
+
 	bool isMove = false;
 	POINT cursor = {0, 0};
 	HMENU hDiagramMenu = 0;
@@ -1039,12 +1045,7 @@ namespace tools {
 	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				TCHAR* dbpath16 = utils::utf8to16(sqlite3_db_filename(db, 0));
-				TCHAR dbname16[255], ext16[32], dbname_ext16[300];
-				_tsplitpath(dbpath16, NULL, NULL, dbname16, ext16);
-				_stprintf(dbname_ext16, TEXT("%s%s"), dbname16, ext16);
-				dbname8 = utils::utf16to8(dbname_ext16);
-				delete [] dbpath16;
+				dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 
 				TBBUTTON tbButtons [] = {
 					{0, IDM_LINK_FK, (byte)(prefs::get("link-fk") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("Foreign keys")},
@@ -1055,6 +1056,7 @@ namespace tools {
 				HWND hToolWnd = CreateToolbarEx (hWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
 					tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
 
+				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DIAGRAM_TOOLBAR), 32, 0, RGB(255,255,255));
 				SendMessage(hToolWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
 				SendMessage(hToolWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
 

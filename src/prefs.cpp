@@ -5,11 +5,11 @@
 namespace prefs {
 	sqlite3* db;
 
-	const int ICOUNT = 28;
+	const int ICOUNT = 29;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
-		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count",
+		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
@@ -21,7 +21,7 @@ namespace prefs {
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000,
-		1, 1, 1, 1, 0, 0, 1,
+		1, 1, 1, 1, 0, 0, 1, 0,
 		0, 0,
 		0, 0, 1,
 		10000,
@@ -78,14 +78,12 @@ namespace prefs {
 
 		char sql8[] = "" \
 			"begin;\n" \
-			"create table if not exists prefs (name text not null unique, value text not null, primary key (name));" \
-			"create table if not exists recents (path text not null unique, time real not null, primary key (path));" \
-			"create table if not exists history (query text not null unique, time real not null, primary key (query));" \
-			"create table if not exists gists (query text not null unique, time real not null, primary key (query));" \
+			"create table if not exists prefs (name text not null, value text not null, primary key (name));" \
+			"create table if not exists recents (path text not null, time real not null, primary key (path));" \
+			"create table if not exists history (query text not null, time real not null, primary key (query));" \
+			"create table if not exists gists (query text not null, time real not null, primary key (query));" \
 			"create table if not exists generators (type text, value text);" \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
-			"create unique index if not exists idx_history on history (query);" \
-			"create unique index if not exists idx_gists on gists (query);" \
 			"commit;" \
 			"pragma synchronous = 0;";
 
