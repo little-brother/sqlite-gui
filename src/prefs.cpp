@@ -78,7 +78,7 @@ namespace prefs {
 
 		char sql8[] = "" \
 			"begin;\n" \
-			"create table if not exists prefs (name text not null, value text not null, primary key (name));" \
+			"create table if not exists prefs (name text not null, value text, primary key (name));" \
 			"create table if not exists recents (path text not null, time real not null, primary key (path));" \
 			"create table if not exists history (query text not null, time real not null, primary key (query));" \
 			"create table if not exists gists (query text not null, time real not null, primary key (query));" \

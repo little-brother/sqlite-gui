@@ -16,6 +16,12 @@ namespace dialogs {
 	bool isRequireHighligth = false;
 	bool isRequireParenthesisHighligth = false;
 
+	HBITMAP hButtonIcons [] = {
+		(HBITMAP)LoadImage(GetModuleHandle(0), MAKEINTRESOURCE(IDB_BTN_ADD), IMAGE_BITMAP, 16, 16, LR_LOADTRANSPARENT | LR_LOADMAP3DCOLORS),
+		(HBITMAP)LoadImage(GetModuleHandle(0), MAKEINTRESOURCE(IDB_BTN_DELETE), IMAGE_BITMAP, 16, 16, LR_LOADTRANSPARENT | LR_LOADMAP3DCOLORS),
+		(HBITMAP)LoadImage(GetModuleHandle(0), MAKEINTRESOURCE(IDB_BTN_REFRESH), IMAGE_BITMAP, 16, 16, LR_LOADTRANSPARENT | LR_LOADMAP3DCOLORS)
+	};
+
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -592,6 +598,13 @@ namespace dialogs {
 
 				SetWindowPos(hWnd, 0, prefs::get("x") + 40, prefs::get("y") + 80, prefs::get("width") - 80, prefs::get("height") - 120,  SWP_NOZORDER);
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
+
+				HWND hBtnWnd = GetDlgItem(hWnd, IDC_DLG_ROW_ADD);
+				SendMessage(hBtnWnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hButtonIcons[0]);
+				hBtnWnd = GetDlgItem(hWnd, IDC_DLG_ROW_DEL);
+				SendMessage(hBtnWnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hButtonIcons[1]);
+				hBtnWnd = GetDlgItem(hWnd, IDC_DLG_REFRESH);
+				SendMessage(hBtnWnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hButtonIcons[2]);
 			}
 			break;
 
@@ -603,13 +616,15 @@ namespace dialogs {
 
 			case WM_SIZE: {
 				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+				HWND hRefreshBtn = GetDlgItem(hWnd, IDC_DLG_REFRESH);
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 
 				RECT rc;
 				GetClientRect(hWnd, &rc);
-				int w = isTable ? 40 : 0;
-				SetWindowPos(hFilterWnd, 0, w, 0, rc.right - rc.left - 0 - w, 20, SWP_NOZORDER );
+				int w = isTable ? 44 : 0;
+				SetWindowPos(hRefreshBtn, 0, rc.right - rc.left - 21, 0, 20, 20, SWP_NOZORDER);
+				SetWindowPos(hFilterWnd, 0, w, 0, rc.right - rc.left - 0 - w - 22, 20, SWP_NOZORDER);
 				SetWindowPos(hListWnd, 0, 0, 0, rc.right - rc.left, rc.bottom - rc.top - 21, SWP_NOZORDER | SWP_NOMOVE);
 			}
 			break;
@@ -755,9 +770,9 @@ namespace dialogs {
 			case WM_COMMAND: {
 				WORD cmd = LOWORD(wParam);
 				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
 				if (wParam == IDOK) { // User push Enter
-					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
 					if (hListWnd == GetFocus() && pos != -1) {
 						currCell = {hListWnd, pos, 0};
@@ -765,11 +780,20 @@ namespace dialogs {
 					}
 				}
 
+				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+
 				if (cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
 					onListViewMenu(cmd, true);
 
 				if (cmd == IDC_DLG_ROW_ADD)
 					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ROW), hWnd, (DLGPROC)&cbDlgRow, MAKELPARAM(ROW_ADD, 0));
+
+				if (cmd == IDC_DLG_ROW_DEL)
+					SendMessage(hWnd, WM_COMMAND, MAKELPARAM(IDM_ROW_DELETE, 0), 0);
+
+				if (cmd == IDC_DLG_REFRESH)
+					SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 
 				if (cmd == IDM_ROW_EDIT)
 					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ROW), hWnd, (DLGPROC)&cbDlgRow, MAKELPARAM(isTable ? ROW_EDIT: ROW_VIEW, 0));
@@ -794,11 +818,12 @@ namespace dialogs {
 
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+						int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd));
 						int pos = -1;
 						TCHAR buf16[64];
 						for (int i = 0; i < count; i++) {
 							pos = ListView_GetNextItem(hListWnd, pos, LVNI_SELECTED);
-							ListView_GetItemText(hListWnd, pos, 0, buf16, 128);
+							ListView_GetItemText(hListWnd, pos, colCount - 1, buf16, 128);
 							sqlite3_bind_int64(stmt, i + 1, _tcstol(buf16, NULL, 10));
 						}
 
@@ -914,9 +939,6 @@ namespace dialogs {
 					KillTimer(hWnd, IDT_EDIT_DATA);
 					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
 				}
-
-				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -1484,6 +1506,7 @@ namespace dialogs {
 
 		switch(msg){
 			case WM_KILLFOCUS: {
+				SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
 				DestroyWindow(hWnd);
 			}
 			break;
@@ -1494,54 +1517,58 @@ namespace dialogs {
 					if((style & ES_MULTILINE) == ES_MULTILINE && GetAsyncKeyState(VK_CONTROL))
 						break;
 
-					HWND hListWnd = GetParent(hWnd);
-					int size = GetWindowTextLength(hWnd);
-					TCHAR* value16 = new TCHAR[size + 1]{0};
-					GetWindowText(hWnd, value16, size + 1);
-
-					TCHAR column16[64];
-					HDITEM hdi = {0};
-					hdi.mask = HDI_TEXT;
-					hdi.pszText = column16;
-					hdi.cchTextMax = 64;
-
-					HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
-					int data = GetWindowLong(hWnd, GWL_USERDATA);
-					int rowNo = LOWORD(data);
-					int colNo = HIWORD(data);
-
-					if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
-						TCHAR query16[256];
-						_stprintf(query16, TEXT("update \"%s\" set %s = ?1 where rowid = ?2"), editTableData16, column16);
-
-						int colCount = Header_GetItemCount(hHeader);
-						ListView_GetItemText(hListWnd, rowNo, colCount - 1, column16, 64);
-						long rowid = _tcstol(column16, NULL, 10);
-
-						char* query8 = utils::utf16to8(query16);
-						char* value8 = utils::utf16to8(value16);
-
-						sqlite3_stmt *stmt;
-						if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-							utils::sqlite3_bind_variant(stmt, 1, value8);
-							sqlite3_bind_int64(stmt, 2, rowid);
-							if (SQLITE_DONE == sqlite3_step(stmt))
-								ListView_SetItemText(hListWnd, rowNo, colNo, value16);
-
-						}
-						sqlite3_finalize(stmt);
-
-						delete [] query8;
-						delete [] value8;
-					}
-
-					delete [] value16;
-
+					SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
 				}
 
 				if (wParam == VK_ESCAPE)
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WMU_SAVE_DATA: {
+				HWND hListWnd = GetParent(hWnd);
+				int size = GetWindowTextLength(hWnd);
+				TCHAR* value16 = new TCHAR[size + 1]{0};
+				GetWindowText(hWnd, value16, size + 1);
+
+				TCHAR column16[64];
+				HDITEM hdi = {0};
+				hdi.mask = HDI_TEXT;
+				hdi.pszText = column16;
+				hdi.cchTextMax = 64;
+
+				HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
+				int data = GetWindowLong(hWnd, GWL_USERDATA);
+				int rowNo = LOWORD(data);
+				int colNo = HIWORD(data);
+
+				if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
+					TCHAR query16[256];
+					_stprintf(query16, TEXT("update \"%s\" set %s = ?1 where rowid = ?2"), editTableData16, column16);
+
+					int colCount = Header_GetItemCount(hHeader);
+					ListView_GetItemText(hListWnd, rowNo, colCount - 1, column16, 64);
+					long rowid = _tcstol(column16, NULL, 10);
+
+					char* query8 = utils::utf16to8(query16);
+					char* value8 = utils::utf16to8(value16);
+
+					sqlite3_stmt *stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						utils::sqlite3_bind_variant(stmt, 1, value8);
+						sqlite3_bind_int64(stmt, 2, rowid);
+						if (SQLITE_DONE == sqlite3_step(stmt))
+							ListView_SetItemText(hListWnd, rowNo, colNo, value16);
+
+					}
+					sqlite3_finalize(stmt);
+
+					delete [] query8;
+					delete [] value8;
+				}
+
+				delete [] value16;
 			}
 			break;
 		}

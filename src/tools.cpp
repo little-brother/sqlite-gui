@@ -55,11 +55,9 @@ namespace tools {
 					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0")))
 						return true;
 
-					char* path8 = utils::utf16to8(path16);
 					// Use binary mode
 					// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
-					FILE* f = fopen(path8, "wb");
-					delete [] path8;
+					FILE* f = _tfopen(path16, TEXT("wb"));
 					if (f == NULL) {
 						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 						return true;
@@ -80,12 +78,15 @@ namespace tools {
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
 						while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
+							int colCount = sqlite3_column_count(stmt);
 							int size = 0;
-							for(int i = 0; i < sqlite3_column_count(stmt); i++)
+							for(int i = 0; i < colCount; i++)
 								size += sqlite3_column_type(stmt, i) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, i) + 1 : 20;
 
+							// https://en.wikipedia.org/wiki/Comma-separated_values
+							size += colCount + 64; // add place for quotes
 							TCHAR line16[size] = {0};
-							for(int i = 0; i < sqlite3_column_count(stmt); i++) {
+							for(int i = 0; i < colCount; i++) {
 								if (i != 0)
 									_tcscat(line16, delimiter16);
 
@@ -93,7 +94,7 @@ namespace tools {
 									isColumns ? (char *)sqlite3_column_name(stmt, i) :
 									sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
 								TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
-								if (_tcschr(qvalue16, TEXT(','))) {
+								if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
 									TCHAR val16[_tcslen(qvalue16) + 3]{0};
 									_stprintf(val16, TEXT("\"%s\""), qvalue16);
 									_tcscat(line16, val16);

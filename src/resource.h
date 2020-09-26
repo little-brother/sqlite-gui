@@ -74,6 +74,7 @@
 #define IDC_DLG_ISWITHOUT_ROWID    154
 #define IDC_DLG_MORE               155
 #define IDC_DLG_FIND               156
+#define IDC_DLG_REFRESH            157
 
 #define IDC_DLG_GEN_ISTRUNCATE     160
 #define IDC_DLG_GEN_ROW_COUNT      161
@@ -194,7 +195,10 @@
 #define IDI_LOGO                   3000
 #define IDB_TREEVIEW               3001
 #define IDB_TOOLBAR                3002
-#define IDB_DIAGRAM_TOOLBAR        3003
+#define IDB_BTN_ADD                3003
+#define IDB_BTN_DELETE             3004
+#define IDB_BTN_REFRESH            3005
+#define IDB_DIAGRAM_TOOLBAR        3006
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001

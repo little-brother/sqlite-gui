@@ -149,9 +149,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		{5, IDM_INTERRUPT, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Interrupt")}
 	};
 
-	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_TOOLBAR, 0, NULL, 0,
+	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST, IDC_TOOLBAR, 0, NULL, 0,
 		tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
-	SendMessage(hToolbarWnd, TB_SETIMAGELIST,0, (LPARAM)ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_TOOLBAR), 0, 0, RGB(255,255,255)));
+	SendMessage(hToolbarWnd, TB_SETIMAGELIST,0, (LPARAM)ImageList_LoadBitmap(hInstance, MAKEINTRESOURCE(IDB_TOOLBAR), 0, 0, RGB(255,255,255)));
 	hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, NULL, hMainWnd, IDC_STATUSBAR);
 	int sizes[5] = {80, 150, 186, 300, -1};
 	SendMessage(hStatusWnd, SB_SETPARTS, 5, (LPARAM)&sizes);
@@ -161,9 +161,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.2.2"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.2.3"));
 
-	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS /*| TVS_SHOWSELALWAYS*/, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
+	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
 	hEditorTipWnd = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hMainWnd, NULL, hInstance, NULL);
 
@@ -1894,6 +1894,8 @@ TCHAR* getDDL(TCHAR* name16, int type) {
 }
 
 // A ListView with one column has broken sort. So, the first column is a row number
+// The first column contains a row number in result
+// lParam of each row stores row length in TCHAR without first column and \0
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt) {
 	int colCount = sqlite3_column_count(stmt);
 	HWND hHeader = ListView_GetHeader(hListWnd);
@@ -1932,16 +1934,17 @@ int setListViewData(HWND hListWnd, sqlite3_stmt *stmt) {
 			}
 		}
 
+		int rowLenght = 0;
+
 		TCHAR rowNo16[64];
 		_stprintf(rowNo16, TEXT("%i"), rowNo + 1);
 
 		LVITEM lvi = {0};
-		lvi.mask = LVIF_TEXT | LVIF_PARAM;
+		lvi.mask = LVIF_TEXT;
 		lvi.iSubItem = 0;
 		lvi.iItem = rowNo;
 		lvi.pszText = rowNo16;
 		lvi.cchTextMax = _tcslen(rowNo16) + 1;
-		lvi.lParam = rowNo;
 		ListView_InsertItem(hListWnd, &lvi);
 
 		for (int i = 1; i <= colCount; i++) {
@@ -1954,11 +1957,18 @@ int setListViewData(HWND hListWnd, sqlite3_stmt *stmt) {
 			lvi.iSubItem = i;
 			lvi.mask = LVIF_TEXT;
 			lvi.pszText = value16;
-			lvi.cchTextMax = _tcslen(value16);
 
 			ListView_SetItem(hListWnd, &lvi);
+
+			rowLenght += _tcslen(value16);
 			delete [] value16;
 		}
+
+		lvi.mask = LVIF_PARAM;
+		lvi.iSubItem = 0;
+		lvi.iItem = rowNo;
+		lvi.lParam = rowLenght;
+		ListView_SetItem(hListWnd, &lvi);
 
 		rowNo++;
 	}
@@ -2014,33 +2024,55 @@ LRESULT onListViewMenu(int cmd, bool ignoreLastColumn) {
 		const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
 
 		if (colCount && rowCount) {
-			TCHAR* res = new TCHAR[MAX_TEXT_LENGTH * colCount * rowCount]{0};
-			TCHAR buf[MAX_TEXT_LENGTH]{0};
+			int bufSize = 0;
 			int rowNo = -1;
 			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
+				LVITEM lvi = {0};
+				lvi.mask = LVIF_PARAM;
+				lvi.iSubItem = 0;
+				lvi.iItem = rowNo;
+				ListView_GetItem(hListWnd, &lvi);
+				bufSize += lvi.lParam;
+			}
+
+			bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
+			TCHAR res16[bufSize]{0};
+			TCHAR buf16[MAX_TEXT_LENGTH]{0};
+
+			rowNo = -1;
+			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
 				for(int colNo = 1; colNo < colCount; colNo++) {
-					ListView_GetItemText(hListWnd, rowNo, colNo, buf, MAX_TEXT_LENGTH);
-					_tcscat(res, buf);
-					_tcscat(res, colNo != colCount - 1 ? delimiter16 : newLine16);
+					ListView_GetItemText(hListWnd, rowNo, colNo, buf16, MAX_TEXT_LENGTH);
+					TCHAR* qvalue16 = utils::replaceAll(buf16, TEXT("\""), TEXT("\"\""));
+					if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
+						TCHAR val16[_tcslen(qvalue16) + 3]{0};
+						_stprintf(val16, TEXT("\"%s\""), qvalue16);
+						_tcscat(res16, val16);
+					} else {
+						_tcscat(res16, buf16);
+					}
+					_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
+
+					delete [] qvalue16;
 				}
 			}
 
 			if (cmd == IDM_RESULT_COPY_ROW)
-				utils::setClipboardText(res);
+				utils::setClipboardText(res16);
 
 			TCHAR path16[MAX_PATH] {0};
 			if (cmd == IDM_RESULT_EXPORT && utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"))) {
-
-				FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));
-				if (f) {
-					_ftprintf(f, res);
-					fclose(f);
+				FILE* f = _tfopen(path16, TEXT("wb"));
+				if (f != NULL) {
+					char* res8 = utils::utf16to8(res16);
+					fprintf(f, res8);
+					delete [] res8;
 				} else {
-					MessageBox(hMainWnd, TEXT("Error to open file"), NULL, MB_OK);
+					MessageBox(0, TEXT("Error to open file"), NULL, MB_OK);
 				}
-			}
 
-			delete [] res;
+				fclose(f);
+			}
 		}
 	}
 
@@ -2280,15 +2312,6 @@ bool sortListView(HWND hListWnd, int colNo) {
 	ListView_SortItems (hListWnd, cbListComparator, param);
 	_ultot(param, buf, 10);
 	SetWindowText(hListWnd, buf);
-
-	for (int i = 0; i < ListView_GetItemCount(hListWnd); i++) {
-		LVITEM lvi = {0};
-		lvi.iItem = i;
-		lvi.mask = LVIF_PARAM;
-		lvi.iSubItem = 0;
-		lvi.lParam = i;
-		ListView_SetItem(hListWnd, &lvi);
-	}
 
 	return true;
 }
