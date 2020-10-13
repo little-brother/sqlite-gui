@@ -59,7 +59,7 @@ namespace utils {
 		if (start > len || len == 0)
 			return new TCHAR[1]{0};
 
-		TCHAR* res = new TCHAR[nLen <= oLen ? len : len * (nLen - oLen + 1)] {0};
+		TCHAR* res = new TCHAR[nLen <= oLen ? len + 1 : len * (nLen - oLen + 1)] {0};
 		TCHAR* p = (TCHAR*)in + start;
 		TCHAR* p2 = p;
 

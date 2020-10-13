@@ -7,7 +7,7 @@
 #include "prefs.h"
 
 namespace tools {
-	const TCHAR* DELIMITERS[4] = {TEXT(";"), TEXT(","), TEXT("\t"), TEXT("|")};
+	const TCHAR* DELIMITERS[4] = {TEXT(","), TEXT(";"), TEXT("\t"), TEXT("|")};
 
 	BOOL CALLBACK cbDlgExportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -327,12 +327,9 @@ namespace tools {
 				HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
 
 				TCHAR* path16 = (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA);
-				HANDLE hFile = CreateFile(path16, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-				DWORD size = GetFileSize(hFile, NULL);
-				CloseHandle(hFile);
 
 				FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
-				if (f == NULL || size == INVALID_FILE_SIZE) {
+				if (f == NULL) {
 					MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 					return true;
 				}
@@ -377,11 +374,24 @@ namespace tools {
 					}
 				};
 
-				TCHAR line[size + 1]{0};
-				int lineNo = 0;
+				size_t size = 32000, bsize = 2000;
+				TCHAR* line = new TCHAR[size + 1] {0};
+				TCHAR buf[bsize + 1]{0};
 
+				int lineNo = 0;
 				while(!feof (f) && lineNo < 5) {
-					if (_fgetts(line, size, f)) {
+					if (_fgetts(buf, bsize + 1, f)) {
+						if (_tcslen(line) + bsize > size) {
+							size *= 2;
+							TCHAR* oLine = line;
+							line = new TCHAR[size + 1]{0};
+							_tcscpy(line, oLine);
+							delete [] oLine;
+						}
+						_tcscat(line, buf);
+						if (_tcslen(buf) == bsize)
+							continue;
+
 						int colNo = 0;
 
 						TCHAR value[size + 1];
@@ -391,10 +401,9 @@ namespace tools {
 						do {
 							value[valuePos++] = line[i];
 
-							if (!inQuotes && (line[i] == delimiter[0] || line[i] == TEXT('\n'))) {
-								value[valuePos - 1] = 0;
+							if ((!inQuotes && (line[i] == delimiter[0] || line[i] == TEXT('\n'))) || !line[i + 1]) {
+								value[valuePos - (line[i + 1] != 0 || inQuotes)] = 0;
 								valuePos = 0;
-
 								addCell(lineNo, colNo, value);
 								colNo++;
 							}
@@ -406,11 +415,13 @@ namespace tools {
 
 							if (line[i] == TEXT('"') && line[i + 1] == TEXT('"'))
 								i++;
-
 						} while (line[++i]);
 					}
 					lineNo++;
+					memset(line, 0, (size + 1) * sizeof (TCHAR));
 				}
+
+				delete [] line;
 
 				fclose(f);
 				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
@@ -476,12 +487,8 @@ namespace tools {
 						_tcscat(insert16, i != colCount - 1 ? TEXT("?, ") : TEXT("?);"));
 
 					TCHAR* path16 = (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA);
-					HANDLE hFile = CreateFile(path16, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-					DWORD size = GetFileSize(hFile, NULL);
-					CloseHandle(hFile);
-
 					FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
-					if (f == NULL || size == INVALID_FILE_SIZE) {
+					if (f == NULL) {
 						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 						return true;
 					}
@@ -492,61 +499,81 @@ namespace tools {
 
 					char* create8 = utils::utf16to8(create16);
 					char* insert8 = utils::utf16to8(insert16);
-					sqlite3_stmt *stmt;
-					bool rc = (SQLITE_OK == sqlite3_exec(db, create8, NULL, 0, NULL)) && (SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0));
+					sqlite3_exec(db, create8, NULL, 0, NULL);
 
-					TCHAR* line16 = new TCHAR[size + 1]{0};
 					int lineNo = 0;
-					while(!feof (f) && rc) {
-						if (_fgetts(line16, size, f)) {
-							if (lineNo == 0 && isColumns) {
+					sqlite3_stmt *stmt;
+					bool rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
+					if (rc) {
+						size_t size = 32000, bsize = 2000;
+						TCHAR* line16 = new TCHAR[size + 1] {0};
+						TCHAR buf16[bsize + 1]{0};
+
+						while(!feof (f)) {
+							memset(buf16, 0, (bsize + 1) * sizeof(TCHAR));
+							if (_fgetts(buf16, bsize + 1, f)) {
+								if (_tcslen(line16) + bsize > size) {
+									size *= 2;
+									TCHAR* oLine16 = line16;
+									line16 = new TCHAR[size + 1]{0};
+									_tcscpy(line16, oLine16);
+									delete [] oLine16;
+								}
+								_tcscat(line16, buf16);
+								if (_tcslen(buf16) == bsize && !_tcschr(buf16, TEXT('\n')))
+									continue;
+
+								if (lineNo == 0 && isColumns) {
+									memset(line16, 0, (size + 1) * sizeof (TCHAR));
+									lineNo++;
+									continue;
+								}
+
+								int colNo = 0;
+
+								TCHAR value[size + 1];
+								bool inQuotes = false;
+								int valuePos = 0;
+								int i = 0;
+								do {
+									value[valuePos++] = line16[i];
+
+									if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
+										value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
+										valuePos = 0;
+
+										TCHAR* tvalue16 = utils::trim(value);
+										char* value8 = utils::utf16to8(tvalue16);
+										utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+										delete [] value8;
+										delete [] tvalue16;
+
+										colNo++;
+									}
+
+									if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
+										valuePos--;
+										inQuotes = !inQuotes;
+									}
+
+									if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
+										i++;
+
+								} while (line16[++i]);
+
+								for (int i = colNo; i < colCount; i++)
+									sqlite3_bind_null(stmt, i + 1);
+
+								rc = sqlite3_step(stmt) == SQLITE_DONE;
+								sqlite3_reset(stmt);
 								lineNo++;
-								continue;
+								memset(line16, 0, (size + 1) * sizeof (TCHAR));
 							}
-
-							int colNo = 0;
-
-							TCHAR value[size + 1];
-							bool inQuotes = false;
-							int valuePos = 0;
-							int i = 0;
-							do {
-								value[valuePos++] = line16[i];
-
-								if (!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) {
-									value[valuePos - 1] = 0;
-									valuePos = 0;
-
-									TCHAR* tvalue16 = utils::trim(value);
-									char* value8 = utils::utf16to8(tvalue16);
-									utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
-									delete [] value8;
-									delete [] tvalue16;
-
-									colNo++;
-								}
-
-								if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
-									valuePos--;
-									inQuotes = !inQuotes;
-								}
-
-								if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
-									i++;
-
-							} while (line16[++i]);
-
-							for (int i = colNo; i < colCount; i++)
-								sqlite3_bind_null(stmt, i + 1);
-
-							rc = sqlite3_step(stmt) == SQLITE_DONE;
-							sqlite3_reset(stmt);
-							lineNo++;
-
 						}
+						delete [] line16;
 					}
 
-					delete [] line16;
+
 					delete [] create8;
 					delete [] insert8;
 					sqlite3_finalize(stmt);
@@ -566,12 +593,12 @@ namespace tools {
 						prefs::set("csv-import-encoding", iEncoding);
 						prefs::set("csv-import-delimiter", iDelimiter);
 						prefs::set("csv-import-is-columns", +isColumns);
-						EndDialog(hWnd, DLG_OK);
+						EndDialog(hWnd, lineNo - isColumns);
 					}
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					EndDialog(hWnd, -1);
 			}
 			break;
 		}
@@ -1042,7 +1069,7 @@ namespace tools {
 		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
 	}
 
-	// USERDATA stores a current diagram table
+	// USERDATA stores a handle of current diagram table
 	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -1258,6 +1285,19 @@ namespace tools {
 				bool isView = prefs::get("link-view");
 				bool isTrigger = prefs::get("link-trigger");
 				HWND hCurrWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+
+				if (hCurrWnd) {
+					RECT rc{0};
+					GetWindowRect(hCurrWnd, &rc);
+					POINT p = {rc.left, rc.top};
+					ScreenToClient(hWnd, &p);
+
+					HPEN hPen = CreatePen(PS_DOT, 1, RGB(128, 128, 128));
+					SelectObject(hdc, hPen);
+					Rectangle(hdc, p.x - 5, p.y - 5,  p.x + rc.right - rc.left + 5, p.y + rc.bottom - rc.top + 5);
+					DeleteObject(hPen);
+				}
+
 
 				int captionH = GetSystemMetrics(SM_CYCAPTION) +  ListBox_GetItemHeight(links[0].hWndFrom, 0) - 2;
 				for (int i = 0; links[i].type != 0; i++) {

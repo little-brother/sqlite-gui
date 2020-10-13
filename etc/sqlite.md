@@ -2,7 +2,7 @@
   
   * sqlite3.dll + sqlite3.def
     ```
-    gcc -shared -Wl,--output-def=sqlite3.def sqlite3.c -o sqlite3.dll -D SQLITE_ENABLE_DBSTAT_VTAB -s -O
+    gcc -shared -Wl,--output-def=sqlite3.def sqlite3.c -o sqlite3.dll -DSQLITE_ENABLE_DBSTAT_VTAB -DSQLITE_ENABLE_COLUMN_METADATA  -s -O
     ```
 
  * libsqlite3.a

@@ -5,11 +5,11 @@
 namespace prefs {
 	sqlite3* db;
 
-	const int ICOUNT = 29;
+	const int ICOUNT = 31;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count",
-		"autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current",
+		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current", "query-data-in-current-tab",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
@@ -21,7 +21,7 @@ namespace prefs {
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000,
-		1, 1, 1, 1, 0, 0, 1, 0,
+		1, 1, 1, 1, 1, 0, 0, 1, 0, 0,
 		0, 0,
 		0, 0, 1,
 		10000,
@@ -83,6 +83,7 @@ namespace prefs {
 			"create table if not exists history (query text not null, time real not null, primary key (query));" \
 			"create table if not exists gists (query text not null, time real not null, primary key (query));" \
 			"create table if not exists generators (type text, value text);" \
+			"create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, query text, primary key (dbname, schema, tblname, colname)); " \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
 			"commit;" \
 			"pragma synchronous = 0;";
@@ -118,6 +119,13 @@ namespace prefs {
 		sqlite3_finalize(stmt);
 		sqlite3_close(db);
 		return true;
+	}
+
+	bool backup() {
+		const char* dbpath = sqlite3_db_filename(db, 0);
+		char backup8[strlen(dbpath) + 64];
+		sprintf(backup8, "vacuum into '%s.backup'", dbpath);
+		return SQLITE_OK == sqlite3_exec(db, backup8, 0, 0, 0);
 	}
 
 	bool setRecent(char* path) {

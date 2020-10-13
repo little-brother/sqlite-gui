@@ -8,6 +8,7 @@
 namespace prefs {
 	bool load(char* path);
 	bool save();
+	bool backup();
 
 	int get(const char* name);
 	void set(const char* name, int value);

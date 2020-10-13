@@ -9,8 +9,9 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Syntax highlighting and code completion
 * Store an execution history and user gists
 * Export/Import data
-* Data generator
 * Database diagram
+* [Workflow manager](https://github.com/little-brother/sqlite-wf) (ETL)
+* Data generator
 * Most usefull extensions are included
 * Demo database "Bookstore" for beginners
 * Does not require installation

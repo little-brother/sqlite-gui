@@ -56,9 +56,10 @@
 #define IDC_DLG_USE_LEGACY         129
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_EXIT_BY_ESCAPE     131
-#define IDC_DLG_INDENT             132
-#define IDC_DLG_TOOLBAR            133
-#define IDC_DLG_STARTUP            134
+#define IDC_DLG_QUERY_IN_CURR_TAB  132
+#define IDC_DLG_INDENT             133
+#define IDC_DLG_TOOLBAR            134
+#define IDC_DLG_STARTUP            135
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141
@@ -139,6 +140,7 @@
 #define IDM_VACUUM                 1526
 #define IDM_GENERATE_DATA          1527
 #define IDM_DATABASE_DIAGRAM       1528
+#define IDM_WORKFLOW_MANAGER       1529
 
 #define IDM_HELP                   1530
 #define IDM_ABOUT                  1531
@@ -151,8 +153,9 @@
 #define IDM_TUTORIAL2              1538
 
 #define IDM_NEXT_RESULT            1590
-#define IDM_PROCESS_TAB            1591
-#define IDM_ESCAPE                 1592
+#define IDM_CHANGE_FOCUS           1591
+#define IDM_PROCESS_TAB            1592
+#define IDM_ESCAPE                 1593
 
 #define IDM_OPEN_EDITOR            1595
 #define IDM_CLOSE_EDITOR           1596
@@ -230,8 +233,7 @@
 #define WMU_TYPE_CHANGED           WM_USER + 8
 #define WMU_REFTABLE_CHANGED       WM_USER + 9
 #define WMU_HIGHLIGHT              WM_USER + 10
-#define WMU_CHANGE_FOCUS           WM_USER + 11
-#define WMU_SHOW_TABLE_INFO        WM_USER + 12
+#define WMU_SHOW_TABLE_INFO        WM_USER + 11
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

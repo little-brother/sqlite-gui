@@ -177,6 +177,7 @@ namespace dialogs {
 						}
 					}
 
+					int colCount = 0;
 					TCHAR columns16[MAX_TEXT_LENGTH] = {0};
 					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
 						TCHAR* row[8] = {0};
@@ -210,10 +211,17 @@ namespace dialogs {
 
 						for (int i = 0; i < 8; i++)
 							delete [] row[i];
+
+						colCount++;
 					}
 
 					TCHAR tblName16[255] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, tblName16, 255);
+
+					if (!colCount || !_tcslen(tblName16)) {
+						MessageBox(hWnd, TEXT("The table should have a name and at least one column"), NULL, 0);
+						return 0;
+					}
 
 					TCHAR query16[MAX_TEXT_LENGTH] = {0};
 					_stprintf(query16, TEXT("create table \"%s\" (\n%s%s%s%s\n)%s"),
@@ -605,6 +613,7 @@ namespace dialogs {
 				SendMessage(hBtnWnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hButtonIcons[1]);
 				hBtnWnd = GetDlgItem(hWnd, IDC_DLG_REFRESH);
 				SendMessage(hBtnWnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hButtonIcons[2]);
+				cbOldResultList = (WNDPROC)SetWindowLong(GetDlgItem(hWnd, IDC_DLG_QUERYLIST), GWL_WNDPROC, (LONG)cbNewResultList);
 			}
 			break;
 
@@ -700,10 +709,15 @@ namespace dialogs {
 					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, 10);
 
 					bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
-					HMENU hMenu = (!isTable || !ListView_GetSelectedCount(hListWnd) == 1) ?
+					HMENU hMenu = !isTable || ListView_GetSelectedCount(hListWnd) != 1 ?
 						hResultMenu :
 						(blobs[ia->iSubItem - 1] || !_tcscmp(buf, TEXT("(BLOB)"))) ? hBlobMenu : hEditDataMenu;
 					TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+				}
+
+				if (pHdr->code == (DWORD)NM_CLICK && GetAsyncKeyState(VK_MENU)) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					return showRefData(hListWnd, ia->iItem, ia->iSubItem);
 				}
 
 				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == hListWnd && !isTable) {
@@ -714,10 +728,13 @@ namespace dialogs {
 
 				if (pHdr->code == LVN_KEYDOWN && pHdr->hwndFrom == hListWnd) {
 					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
-					if (kd->wVKey == 0x43 && GetKeyState(VK_CONTROL)) {
+					if (kd->wVKey == 0x43 && GetKeyState(VK_CONTROL)) { // Ctrl + C
 						currCell = {hListWnd, 0, 0};
 						PostMessage(hWnd, WM_COMMAND, IDM_RESULT_COPY_ROW, 0);
 					}
+
+					if (kd->wVKey == 0x41 && GetKeyState(VK_CONTROL)) // Ctrl + A
+						ListView_SetItemState(hListWnd, -1, LVIS_SELECTED, LVIS_SELECTED);
 
 					if (isTable && kd->wVKey == VK_DELETE)
 						PostMessage(hWnd, WM_COMMAND, IDM_ROW_DELETE, 0);
@@ -1161,13 +1178,14 @@ namespace dialogs {
 
 					struct HookUserData {
 						char *table;
+						int op;
 						sqlite3_int64 rowid;
 					};
-					HookUserData hud = {tablename8, -1};
+					HookUserData hud = {tablename8, mode == ROW_ADD ? SQLITE_INSERT : SQLITE_UPDATE, -1};
 
-					auto cbHook = [](void *user_data, int operation_type, char const *dbName, char const *table, sqlite3_int64 rowid) {
+					auto cbHook = [](void *user_data, int op, char const *dbName, char const *table, sqlite3_int64 rowid) {
 						HookUserData* hud = (HookUserData*)user_data;
-						if (!stricmp(hud->table, table))
+						if (!stricmp(hud->table, table) && hud->op == op)
 							hud->rowid = rowid;
 					};
 					sqlite3_update_hook(db, cbHook, &hud);
@@ -1429,6 +1447,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT), prefs::get("use-highlight") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB), prefs::get("query-data-in-current-tab") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[255];
 				_stprintf(buf, TEXT("%i"), prefs::get("row-limit"));
@@ -1462,6 +1481,7 @@ namespace dialogs {
 					prefs::set("use-highlight", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
+					prefs::set("query-data-in-current-tab", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
 					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);

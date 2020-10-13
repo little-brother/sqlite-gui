@@ -1,12 +1,13 @@
 #ifndef __GLOBAL_H__
 #define __GLOBAL_H__
 
-#define _WIN32_IE	0x0500
-#define MAX_RECENT_COUNT 10
-#define MAX_TAB_COUNT 16
-#define MAX_RESULT_COUNT 32
-#define MAX_TEXT_LENGTH 32000
-#define MAX_TOOLTIP_LENGTH 1024
+#define _WIN32_IE	            0x0500
+#define MAX_RECENT_COUNT            10
+#define MAX_TAB_COUNT               16
+#define MAX_RESULT_COUNT            32
+#define MAX_TEXT_LENGTH          32000
+#define MAX_TOOLTIP_LENGTH        1024
+#define MAX_REFCOLUMN_COUNT        128
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -41,7 +42,7 @@
 #include "sqlite3.h"
 
 extern sqlite3 *db;
-extern HWND  hMainWnd, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd;
+extern HWND  hMainWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
 
 extern HTREEITEM treeItems[5]; // 0 - current
 extern HMENU treeMenus[6]; // 0 - add/refresh menu
@@ -55,8 +56,9 @@ extern const TCHAR *TYPES16u[5];
 extern const TCHAR *TYPES16p[5];
 
 extern HFONT hDefFont;
+extern WNDPROC cbOldResultList;
+LRESULT CALLBACK cbNewResultList(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
-
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
 struct ListViewCell {
@@ -78,6 +80,7 @@ TCHAR* getWordFromCursor(HWND hWnd, int pos = -1);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
+int showRefData(HWND hListWnd, int rowNo, int colNo);
 bool sortListView(HWND hListWnd, int colNo);
 LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
 TCHAR* getDbValue(const TCHAR* query16);
