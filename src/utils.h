@@ -11,6 +11,8 @@ namespace utils {
 	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
 	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
 
+	TCHAR* getName(const TCHAR* in, bool isSchema = false);
+
 	TCHAR* utf8to16(const char* in);
 	char* utf16to8(const TCHAR* in);
 

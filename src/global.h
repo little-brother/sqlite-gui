@@ -76,7 +76,7 @@ void setTreeFont(HWND hWnd);
 void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
-TCHAR* getWordFromCursor(HWND hWnd, int pos = -1);
+TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
 
 bool executeCommandQuery(const TCHAR* query);
 int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);

@@ -129,7 +129,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	delete [] prefPath8;
 
 	if (prefs::get("backup-prefs")) {
-		_stprintf(prefPath16, TEXT("%s/prefs.sqlite.backup"), APP_PATH);
+		_stprintf(prefPath16, TEXT("%s/prefs.backup"), APP_PATH);
 		DeleteFile(prefPath16);
 		if (!prefs::backup())
 			MessageBox(0, TEXT("Settings back up failed"), TEXT("Error"), MB_OK);
@@ -165,7 +165,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.1"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1074,7 +1074,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		break;
 
 		case WMU_SHOW_TABLE_INFO: {
-			TCHAR* word = getWordFromCursor(hEditorWnd, wParam);
+			TCHAR* word = getWordFromCursor(hEditorWnd, true, wParam);
 			if (!_tcslen(word)) {
 				delete [] word;
 				return 0;
@@ -1084,16 +1084,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			GetCaretPos(&p);
 			ClientToScreen(hEditorWnd, &p);
 
-			TCHAR* pos = _tcschr(word, TEXT('.'));
-			TCHAR tablename[255]{0};
-			_tcsncpy(tablename, pos ? pos + 1 : word, pos ? _tcslen(pos) - 1 : _tcslen(word));
-
-			TCHAR schema[255]{0};
-			_tcsncpy(schema, pos ? word : TEXT("main"), pos ? _tcslen(word) - _tcslen(pos) : 4);
+			TCHAR* tablename16 = utils::getName(word, false);
+			TCHAR* schema16 = utils::getName(word, true);
 
 			TCHAR query16[MAX_TEXT_LENGTH] {0};
 			if (lParam) {
-				_stprintf(query16, TEXT("select 1 from \"%s\".sqlite_master where type in ('table', 'view') and name = \"%s\" limit 1"), schema, tablename);
+				_stprintf(query16, TEXT("select 1 from \"%s\".sqlite_master where type in ('table', 'view') and name = \"%s\" limit 1"), schema16, tablename16);
 				char* query8 = utils::utf16to8(query16);
 				sqlite3_stmt *stmt;
 				int rc = (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) && (SQLITE_ROW == sqlite3_step(stmt));
@@ -1101,13 +1097,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				delete [] query8;
 
 				if (rc) {
+
 					_stprintf(editTableData16, TEXT("%s"), word);
 					DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData);
 					SetFocus(hEditorWnd);
 				}
-
 			} else {
-				_stprintf(query16, TEXT("select group_concat(name || ': ' || type || iif(pk,' [pk]',''),'\n') from pragma_table_info where schema = '%s' and arg = '%s'"), schema, tablename);
+				_stprintf(query16, TEXT("select group_concat(name || ': ' || type || iif(pk,' [pk]',''),'\n') from pragma_table_info where schema = '%s' and arg = '%s'"), schema16, tablename16);
 				TCHAR* desc = getDbValue(query16);
 
 				if (desc) {
@@ -1127,6 +1123,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				delete [] desc;
 			}
 			delete [] word;
+			delete [] tablename16;
+			delete [] schema16;
 		}
 		break;
 
@@ -2095,7 +2093,7 @@ int showRefData(HWND hListWnd, int rowNo, int colNo) {
 
 	HWND hColumnsWnd = FindWindowEx(hListWnd, 0, WC_LISTBOX, NULL);
 
-	TCHAR query16[255];
+	TCHAR query16[4000];
 	ListBox_GetText(hColumnsWnd, colNo, query16);
 	if (!_tcslen(query16))
 		return 0;
@@ -2136,6 +2134,8 @@ int showRefData(HWND hListWnd, int rowNo, int colNo) {
 
 			delete [] res16;
 		}
+	} else {
+		showDbError(0);
 	}
 	sqlite3_finalize(stmt);
 	delete [] query8;
@@ -3090,7 +3090,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-TCHAR* getWordFromCursor(HWND hWnd, int pos) {
+TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos) {
 	int crPos = pos;
 	if (pos == -1)
 		SendMessage(hWnd, EM_GETSEL, (WPARAM)&crPos, (LPARAM)&crPos);
@@ -3105,7 +3105,8 @@ TCHAR* getWordFromCursor(HWND hWnd, int pos) {
 	SendMessage(hWnd, EM_GETLINE, currLineNo, (LPARAM)currLine);
 	size_t start = crPos - currLineIdx;
 	size_t end = start;
-	TCHAR breakers[] = TEXT(" \"'`\n\r\+-;:(),=<>!");
+	TCHAR breakers[64];
+	_tcscat(breakers, isTable ? TEXT(" \n\r\+-;:(),=<>!") : TEXT(" \"'`[].\n\r\+-;:(),=<>!"));
 
 	while(start > 0 && !_tcschr(breakers, currLine[start - 1]))
 		start--;
@@ -3118,7 +3119,12 @@ TCHAR* getWordFromCursor(HWND hWnd, int pos) {
 	if (start > end)
 		end = start;
 
-	TCHAR* word = new TCHAR[end - start + 2];
+	if (isTable && (start - end > 2) && (currLine[start] == currLine[end]) && _tcschr(TEXT("'`\""), currLine[start])) {
+		start++;
+		end--;
+	}
+
+	TCHAR* word = new TCHAR[end - start + 2]{0};
 	for (size_t i = 0; i <= end - start; i++)
 		word[i] = currLine[start + i];
 	word[end - start + 1] = '\0';

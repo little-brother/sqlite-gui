@@ -303,7 +303,7 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (pHdr->code == (DWORD)NM_CLICK && pHdr->hwndFrom == GetDlgItem(hWnd, IDC_DLG_COLUMNS)) {
+				if (pHdr->code == (DWORD)NM_CLICK && pHdr->idFrom == IDC_DLG_COLUMNS) {
 					HWND hListWnd = pHdr->hwndFrom;
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 
@@ -338,10 +338,24 @@ namespace dialogs {
 						SendMessage(hCell, EM_SETSEL, end, end);
 					}
 
-					SendMessage(hCell, WM_SETFONT, (LPARAM)hDefFont, true);
-					SetWindowLong(hCell, GWL_USERDATA, MAKELPARAM(ia->iItem, ia->iSubItem));
-					cbOldAddTableCell = (WNDPROC)SetWindowLong(hCell, GWL_WNDPROC, (LONG)cbNewAddTableCell);
-					SetFocus(hCell);
+					if (hCell) {
+						SetWindowLong(hCell, GWL_USERDATA, MAKELPARAM(ia->iItem, ia->iSubItem));
+						cbOldAddTableCell = (WNDPROC)SetWindowLong(hCell, GWL_WNDPROC, (LONG)cbNewAddTableCell);
+						SendMessage(hCell, WM_SETFONT, (LPARAM)hDefFont, true);
+						SetFocus(hCell);
+					}
+				}
+
+				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->idFrom == IDC_DLG_COLUMNS) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					if (ia->iItem == -1)
+						SendMessage(hWnd, WM_COMMAND, IDC_DLG_ROW_ADD, 0);
+				}
+
+				if (pHdr->code == LVN_KEYDOWN && pHdr->idFrom == IDC_DLG_COLUMNS) {
+					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
+					if (kd->wVKey == VK_DELETE)
+						SendMessage(hWnd, WM_COMMAND, IDC_DLG_ROW_DEL, 0);
 				}
 
 				if (wParam == IDC_DLG_EDITOR) {
@@ -569,18 +583,17 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgEditData (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				char* table8 = utils::utf16to8(editTableData16);
+				TCHAR* schema16 = utils::getName(editTableData16, true);
+				TCHAR* tablename16 = utils::getName(editTableData16);
 
-				char* pos = strchr(table8, '.');
-				char* tablename8 = new char[255]{0};
-				strncpy(tablename8, pos ? pos + 1 : table8, pos ? strlen(pos) - 1 : strlen(table8));
+				char* tablename8 = utils::utf16to8(tablename16);
 				SetProp(hWnd, TEXT("TABLENAME8"), (HANDLE)tablename8);
 
-				char* schema8 = new char[255]{0};
-				strncpy(schema8, pos ? table8 : "main", pos ? strlen(table8) - strlen(pos) : 4);
+				char* schema8 = utils::utf16to8(schema16);
 				SetProp(hWnd, TEXT("SCHEMA8"), (HANDLE)schema8);
 
-				delete [] table8;
+				delete [] tablename16;
+				delete [] schema16;
 
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0 , 0);
@@ -766,7 +779,7 @@ namespace dialogs {
 
 					bool isRichEdit = GetAsyncKeyState(VK_CONTROL) || _tcslen(buf) > 100 || _tcschr(buf, TEXT('\n'));
 					HWND hEdit = isRichEdit ?
-						CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), buf, WS_CHILD | WS_VISIBLE | ES_WANTRETURN | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL, rect.left, rect.top - 2, 300, 150, hListWnd, 0, GetModuleHandle(NULL), NULL):
+						CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), buf, WS_CHILD | WS_VISIBLE | ES_WANTRETURN | ES_MULTILINE | ES_AUTOVSCROLL, rect.left, rect.top - 2, 300, 150, hListWnd, 0, GetModuleHandle(NULL), NULL):
 						CreateWindowEx(0, WC_EDIT, buf, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
 
 					SetWindowLong(hEdit, GWL_USERDATA, MAKELPARAM(ia->iItem, ia->iSubItem));
@@ -1118,16 +1131,13 @@ namespace dialogs {
 					TCHAR* values16[colCount];
 					char* columns8[colCount];
 
-					char* table8 = utils::utf16to8(editTableData16);
-					char* pos = strchr(table8, '.');
+					TCHAR* schema16 = utils::getName(editTableData16, true);
+					TCHAR* tablename16 = utils::getName(editTableData16);
 
-					char* tablename8 = new char[255]{0};
-					strncpy(tablename8, pos ? pos + 1 : table8, pos ? strlen(pos) - 1 : strlen(table8));
-
-					char* schema8 = new char[255]{0};
-					strncpy(schema8, pos ? table8 : "main", pos ? strlen(table8) - strlen(pos) : 4);
-
-					delete [] table8;
+					char* schema8 = utils::utf16to8(schema16);
+					char* tablename8 = utils::utf16to8(tablename16);
+					delete [] schema16;
+					delete [] tablename16;
 
 					int len = 0;
 					// A first column in the listview is always a rowno. Should be ignored.
@@ -1269,7 +1279,6 @@ namespace dialogs {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
-
 			}
 			break;
 		}
@@ -1309,9 +1318,14 @@ namespace dialogs {
 
 					bool isNotNull = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISNOTNULL));
 					bool isUnique = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISUNIQUE));
-					TCHAR query16[2000] = {0};
-					_stprintf(query16, TEXT("alter table \"%s\" add column \"%s\" %s %s %s %s %s"),
-						editTableData16, colName16, colType16, isNotNull ? TEXT("NOT NULL") : TEXT(""), defValue16, check16, isUnique ? TEXT("UNIQUE") : TEXT(""));
+					TCHAR query16[2000 + _tcslen(editTableData16)] = {0};
+
+					TCHAR* schema16 = utils::getName(editTableData16, true);
+					TCHAR* tablename16 = utils::getName(editTableData16);
+					_stprintf(query16, TEXT("alter table \"%s\".\"%s\" add column \"%s\" %s %s %s %s %s"),
+						schema16, tablename16, colName16, colType16, isNotNull ? TEXT("NOT NULL") : TEXT(""), defValue16, check16, isUnique ? TEXT("UNIQUE") : TEXT(""));
+					delete [] schema16;
+					delete [] tablename16;
 
 					char* query8 = utils::utf16to8(query16);
 					if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL))
@@ -1346,7 +1360,7 @@ namespace dialogs {
 					TEXTRANGE tr{{start, end}, word};
 					SendMessage(hEditorWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
 				} else {
-					word = getWordFromCursor(hEditorWnd);
+					word = getWordFromCursor(hEditorWnd, false);
 				}
 				SetDlgItemText(hWnd, IDC_DLG_FIND, word);
 				delete [] word;
@@ -1520,33 +1534,17 @@ namespace dialogs {
 		return false;
 	}
 
+	// USERDATA = MAKELPARAM(iItem, iSubItem)
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_GETDLGCODE)
 			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam));
 
 		switch(msg){
-			case WM_KILLFOCUS: {
-				SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
-				DestroyWindow(hWnd);
-			}
-			break;
+			case WM_DESTROY: {
+				int data = GetWindowLong(hWnd, GWL_USERDATA);
+				if (!data) // Exit by Esc
+					return 0;
 
-			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN) {
-					int style = GetWindowLong(hWnd, GWL_STYLE);
-					if((style & ES_MULTILINE) == ES_MULTILINE && GetAsyncKeyState(VK_CONTROL))
-						break;
-
-					SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-				}
-
-				if (wParam == VK_ESCAPE)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
-			case WMU_SAVE_DATA: {
 				HWND hListWnd = GetParent(hWnd);
 				int size = GetWindowTextLength(hWnd);
 				TCHAR* value16 = new TCHAR[size + 1]{0};
@@ -1559,13 +1557,18 @@ namespace dialogs {
 				hdi.cchTextMax = 64;
 
 				HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
-				int data = GetWindowLong(hWnd, GWL_USERDATA);
+
 				int rowNo = LOWORD(data);
 				int colNo = HIWORD(data);
 
 				if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
-					TCHAR query16[256];
-					_stprintf(query16, TEXT("update \"%s\" set %s = ?1 where rowid = ?2"), editTableData16, column16);
+					TCHAR* schema16 = utils::getName(editTableData16, true);
+					TCHAR* tablename16 = utils::getName(editTableData16);
+
+					TCHAR query16[256 + _tcslen(editTableData16)];
+					_stprintf(query16, TEXT("update \"%s\".\"%s\" set %s = ?1 where rowid = ?2"), schema16, tablename16, column16);
+					delete [] schema16;
+					delete [] tablename16;
 
 					int colCount = Header_GetItemCount(hHeader);
 					ListView_GetItemText(hListWnd, rowNo, colCount - 1, column16, 64);
@@ -1591,6 +1594,26 @@ namespace dialogs {
 				delete [] value16;
 			}
 			break;
+			case WM_KILLFOCUS: {
+				DestroyWindow(hWnd);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					int style = GetWindowLong(hWnd, GWL_STYLE);
+					if((style & ES_MULTILINE) == ES_MULTILINE && GetAsyncKeyState(VK_CONTROL))
+						break;
+
+					DestroyWindow(hWnd);
+				}
+
+				if (wParam == VK_ESCAPE) {
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+					DestroyWindow(hWnd);
+				}
+			}
+			break;
 		}
 
 		return CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam);
@@ -1601,34 +1624,37 @@ namespace dialogs {
 			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldAddTableCell, hWnd, msg, wParam, lParam));
 
 		switch(msg){
-			case WM_KILLFOCUS: {
-				SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
-				HWND parent = GetParent(hWnd);
-				DestroyWindow(hWnd);
+			case WM_DESTROY: {
+				int data = GetWindowLong(hWnd, GWL_USERDATA);
+				if (!data) // Exit by Esc
+					return 0;
 
-				InvalidateRect(parent, 0, TRUE);
-			}
-			break;
-
-			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN) {
-					SendMessage(hWnd, WMU_SAVE_DATA, 0, 0);
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-				}
-
-				if (wParam == VK_ESCAPE)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
-			case WMU_SAVE_DATA: {
 				HWND hListWnd = GetParent(hWnd);
-				LPARAM data = GetWindowLong(hWnd, GWL_USERDATA);
 				int size = GetWindowTextLength(hWnd);
 				TCHAR* value16 = new TCHAR[size + 1]{0};
 				GetWindowText(hWnd, value16, size + 1);
 				ListView_SetItemText(hListWnd, LOWORD(data), HIWORD(data), value16);
 				delete [] value16;
+
+				HWND parent = GetParent(hWnd);
+				InvalidateRect(parent, 0, TRUE);
+			}
+			break;
+
+			case WM_KILLFOCUS: {
+				DestroyWindow(hWnd);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					DestroyWindow(hWnd);
+				}
+
+				if (wParam == VK_ESCAPE){
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+					DestroyWindow(hWnd);
+				}
 			}
 			break;
 		}

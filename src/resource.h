@@ -226,14 +226,13 @@
 #define WMU_SET_DLG_ROW_DATA       WM_USER + 1
 #define WMU_UPDATE_DATA            WM_USER + 2
 #define WMU_SOURCE_UPDATED         WM_USER + 3
-#define WMU_SAVE_DATA              WM_USER + 4
-#define WMU_ADD_ROW                WM_USER + 5
-#define WMU_UPDATE_ROWNO           WM_USER + 6
-#define WMU_TARGET_CHANGED         WM_USER + 7
-#define WMU_TYPE_CHANGED           WM_USER + 8
-#define WMU_REFTABLE_CHANGED       WM_USER + 9
-#define WMU_HIGHLIGHT              WM_USER + 10
-#define WMU_SHOW_TABLE_INFO        WM_USER + 11
+#define WMU_ADD_ROW                WM_USER + 4
+#define WMU_UPDATE_ROWNO           WM_USER + 5
+#define WMU_TARGET_CHANGED         WM_USER + 6
+#define WMU_TYPE_CHANGED           WM_USER + 7
+#define WMU_REFTABLE_CHANGED       WM_USER + 8
+#define WMU_HIGHLIGHT              WM_USER + 9
+#define WMU_SHOW_TABLE_INFO        WM_USER + 10
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

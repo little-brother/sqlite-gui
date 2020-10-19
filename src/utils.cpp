@@ -87,6 +87,41 @@ namespace utils {
 		return replace(in, oldStr, newStr, start, true);
 	}
 
+	TCHAR* getName(const TCHAR* in, bool isSchema) {
+		TCHAR* res = new TCHAR[_tcslen(in) + 5]{0}; // `in` can be 1 char, but schema requires 4 ("main")
+		if (!_tcslen(in))
+			return _tcscat(res, isSchema ? TEXT("main") : TEXT(""));
+
+		const TCHAR* p = in;
+		while (p[0] && !_istgraph(p[0]))
+			p++;
+
+		TCHAR* q = p ? _tcschr(TEXT("'`\"["), p[0]) : 0;
+		if (q) {
+			TCHAR* q2 = _tcschr(p + 1, q[0] == TEXT('[') ? TEXT(']') : q[0]);
+			if (q2 && ((isSchema && q2[1] == TEXT('.')) || (!isSchema && q2[1] != TEXT('.'))))
+				_tcsncpy(res, p + 1, _tcslen(p) - _tcslen(q2) - 1);
+
+			if (q2 && !isSchema && q2[1] == TEXT('.') && q2[2] != 0) {
+				delete [] res;
+				return getName(q2 + 2);
+			}
+
+		} else {
+			TCHAR* d = p ? _tcschr(p, TEXT('.')) : 0;
+			if (d && isSchema)
+				_tcsncpy(res, p, _tcslen(p) - _tcslen(d));
+			if (d && !isSchema) {
+				delete [] res;
+				return getName(d + 1);
+			}
+		}
+
+		if (!res[0])
+			_tcscat(res, isSchema ? TEXT("main") : in);
+
+		return res;
+	}
 
 	TCHAR* utf8to16(const char* in) {
 		TCHAR *out;

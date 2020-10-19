@@ -123,8 +123,11 @@ namespace prefs {
 
 	bool backup() {
 		const char* dbpath = sqlite3_db_filename(db, 0);
-		char backup8[strlen(dbpath) + 64];
-		sprintf(backup8, "vacuum into '%s.backup'", dbpath);
+		int len = strlen(dbpath);
+		char backup8[len + 64]{0};
+		strcat(backup8, "vacuum into '");
+		strncat(backup8, dbpath, len - strlen(".sqlite"));
+		strcat(backup8, ".backup'");
 		return SQLITE_OK == sqlite3_exec(db, backup8, 0, 0, 0);
 	}
 
