@@ -8,25 +8,23 @@ namespace prefs {
 	const int ICOUNT = 31;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
-		"maximized", "font-size", "max-query-count",
+		"maximized", "font-size", "max-query-count", "exit-by-escape",
 		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current", "query-data-in-current-tab",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
 		"data-generator-row-count", "data-generator-truncate",
-		"exit-by-escape",
 		"link-fk", "link-view", "link-trigger"
 	};
 
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
-		0, 10, 1000,
+		0, 10, 1000, 1,
 		1, 1, 1, 1, 1, 0, 0, 1, 0, 0,
 		0, 0,
 		0, 0, 1,
 		10000,
 		100, 0,
-		1,
 		1, 0, 0
 	};
 

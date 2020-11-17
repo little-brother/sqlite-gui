@@ -52,20 +52,28 @@ namespace dialogs {
 
 				if (isEdit) {
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
-					TCHAR* sql16 = getDDL(name16, type);
+					TCHAR* sql16 = getDDL(name16, type, true);
 					if (sql16) {
-						TCHAR buf[_tcslen(sql16) + 128];
-						_stprintf(buf, TEXT("drop %s if exists \"%s\";\n\n%s;"), TYPES16[type], name16, sql16);
-						SetWindowText(hDlgEditorWnd, buf);
+						SetWindowText(hDlgEditorWnd, sql16);
+						delete [] sql16;
 					} else {
-						SetWindowText(hDlgEditorWnd, TEXT("Error to get SQL"));
+						SetWindowText(hDlgEditorWnd, TEXT("Error to get DDL"));
 					}
-					delete [] sql16;
 				}
 			}
 			break;
 
+			case WM_CONTEXTMENU: {
+				POINT p = {LOWORD(lParam), HIWORD(lParam)};
+				bool isContextKey = p.x == 65535 && p.y == 65535;
+				if ((HWND)wParam == GetDlgItem(hWnd, IDC_DLG_EDITOR) && !isContextKey)
+					TrackPopupMenu(hEditorMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+			}
+			break;
+
 			case WM_COMMAND: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+
 				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
 					isRequireHighligth = true;
@@ -78,18 +86,29 @@ namespace dialogs {
 					SetWindowText(GetDlgItem(hWnd, IDC_DLG_EDITOR), buf);
 				}
 
+				if (wParam == IDM_EDITOR_CUT)
+					SendMessage(hEditorWnd, WM_CUT, 0, 0);
+
+				if (wParam == IDM_EDITOR_COPY)
+					SendMessage(hEditorWnd, WM_COPY, 0, 0);
+
+				if (wParam == IDM_EDITOR_PASTE)
+					SendMessage(hEditorWnd, WM_PASTE, 0, 0);
+
+				if (wParam == IDM_EDITOR_DELETE)
+					SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
+
 				if (wParam == IDC_DLG_OK) {
-					HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-					int size = GetWindowTextLength(hDlgEditorWnd) + 1;
+					int size = GetWindowTextLength(hEditorWnd) + 1;
 					TCHAR* text = new TCHAR[size]{0};
-					GetWindowText(hDlgEditorWnd, text, size);
+					GetWindowText(hEditorWnd, text, size);
 					bool isOk = executeCommandQuery(text);
 					delete [] text;
 
 					if (isOk) {
 						EndDialog(hWnd, DLG_OK);
 					} else {
-						SetFocus(hDlgEditorWnd);
+						SetFocus(hEditorWnd);
 					}
 				}
 
@@ -685,7 +704,7 @@ namespace dialogs {
 							types[i] = stricmp(sqlite3_column_decltype(stmt, i), "blob") == 0;
 						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)types);
 					}
-					int rowCount = setListViewData(hListWnd, stmt);
+					int rowCount = ListView_SetData(hListWnd, stmt, true);
 					ListView_SetColumnWidth(hListWnd, colCount, 0); // last column is rowid
 
 					TCHAR buf[256]{0};
@@ -709,7 +728,7 @@ namespace dialogs {
 
 				if (pHdr->code == LVN_COLUMNCLICK) {
 					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
-					return sortListView(pHdr->hwndFrom, pLV->iSubItem);
+					return ListView_Sort(pHdr->hwndFrom, pLV->iSubItem);
 				}
 
 				if (pHdr->code == (DWORD)NM_RCLICK && pHdr->hwndFrom == hListWnd) {
@@ -730,7 +749,7 @@ namespace dialogs {
 
 				if (pHdr->code == (DWORD)NM_CLICK && GetAsyncKeyState(VK_MENU)) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
-					return showRefData(hListWnd, ia->iItem, ia->iSubItem);
+					return ListView_ShowRef(hListWnd, ia->iItem, ia->iSubItem);
 				}
 
 				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == hListWnd && !isTable) {
@@ -754,7 +773,7 @@ namespace dialogs {
 					bool isNum = kd->wVKey >= 0x31 && kd->wVKey <= 0x39;
 					bool isNumPad = kd->wVKey >= 0x61 && kd->wVKey <= 0x69;
 					if ((isNum || isNumPad) && GetKeyState(VK_CONTROL)) // Ctrl + 1-9
-						return sortListView(pHdr->hwndFrom, kd->wVKey - (isNum ? 0x31 : 0x61) + 1 );
+						return ListView_Sort(pHdr->hwndFrom, kd->wVKey - (isNum ? 0x31 : 0x61) + 1 );
 				}
 
 				if (isTable && pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == hListWnd) {

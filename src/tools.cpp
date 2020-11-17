@@ -142,13 +142,14 @@ namespace tools {
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_OBJECTLIST);
 				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select type, name from sqlite_master where sql is not null order by case when type = 'table' then 0 when type = 'view' then 1 when type = 'trigger' then 2 else 4 end, name", -1, &stmt, 0)) {
-					setListViewData(hListWnd, stmt);
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select type, name, rowid from sqlite_master where sql is not null order by case when type = 'table' then 0 when type = 'view' then 1 when type = 'trigger' then 2 else 4 end, name", -1, &stmt, 0)) {
+					ListView_SetData(hListWnd, stmt);
 					ListView_SetColumnWidth(hListWnd, 0, 0);
+					ListView_SetColumnWidth(hListWnd, 3, 0);
 					ListView_SetColumnWidth(hListWnd, 2, LVSCW_AUTOSIZE_USEHEADER);
-				} else {
-					sqlite3_finalize(stmt);
 				}
+				sqlite3_finalize(stmt);
+
 				SetFocus(hListWnd);
 			}
 			break;
@@ -196,7 +197,7 @@ namespace tools {
 							int pos = -1;
 							for (int i = 0; i < count; i++) {
 								pos = ListView_GetNextItem(hListWnd, pos, LVNI_SELECTED);
-								ListView_GetItemText(hListWnd, pos, 0, buf16, 128);
+								ListView_GetItemText(hListWnd, pos, 3, buf16, 128);
 								sqlite3_bind_int64(stmt, i + 1, _tcstol(buf16, NULL, 10));
 							}
 
@@ -205,6 +206,8 @@ namespace tools {
 								_ftprintf(f, TEXT("%s;\n\n"), line16);
 								delete [] line16;
 							}
+						} else {
+							showDbError(hWnd);
 						}
 						sqlite3_finalize(stmt);
 						delete [] sql8;
@@ -217,7 +220,7 @@ namespace tools {
 							TCHAR table16[64];
 							ListView_GetItemText(hListWnd, pos, 1, type16, 64);
 							ListView_GetItemText(hListWnd, pos, 2, table16, 64);
-							if (_tcscmp(type16, TEXT("table")) && _tcscmp(type16, TEXT("view")))
+							if (_tcscmp(type16, TEXT("table")))
 								continue;
 
 							sqlite3_stmt *stmt;
@@ -253,15 +256,17 @@ namespace tools {
 										int type = sqlite3_column_type(stmt, i);
 
 										if (type == SQLITE_BLOB)
-											_tcscat(line16, TEXT("\"BLOB (unsupported)\""));
+											_tcscat(line16, TEXT("'BLOB (unsupported)'"));
 										else if (type == SQLITE_NULL)
 											_tcscat(line16, TEXT("null"));
 										else if (type == SQLITE_TEXT) {
-											_tcscat(line16, TEXT("\""));
-											TCHAR* qvalue16 = utils::maskQuotes(value16);
-											_tcscat(line16, qvalue16);
-											_tcscat(line16, TEXT("\""));
-											delete [] qvalue16;
+											_tcscat(line16, TEXT("'"));
+											TCHAR* dvalue16 = utils::replaceAll(value16, TEXT("'"), TEXT("''"));
+											TCHAR* ddvalue16 = utils::replaceAll(dvalue16, TEXT("%"), TEXT("%%"));
+											_tcscat(line16, ddvalue16);
+											_tcscat(line16, TEXT("'"));
+											delete [] dvalue16;
+											delete [] ddvalue16;
 										} else
 											_tcscat(line16, value16);
 										delete [] value16;
@@ -334,13 +339,7 @@ namespace tools {
 					return true;
 				}
 
-				ListView_DeleteAllItems(hPreviewWnd);
-				HWND hHeader = ListView_GetHeader(hPreviewWnd);
-				int cnt = Header_GetItemCount(hHeader);
-				for (int i = 0; i < cnt; i++) {
-					ListView_DeleteColumn(hPreviewWnd, cnt - 1 - i);
-					Header_DeleteItem(hHeader, cnt - 1 - i);
-				}
+				ListView_Reset(hPreviewWnd);
 
 				auto addCell = [hPreviewWnd, isColumns] (int lineNo, int colNo, TCHAR* column) {
 					if (lineNo == 0) {
@@ -460,7 +459,7 @@ namespace tools {
 					auto catQuotted = [](TCHAR* a, TCHAR* b) {
 						_tcscat(a, TEXT("\""));
 						TCHAR* tb = utils::trim(b);
-						TCHAR* qb = utils::maskQuotes(tb);
+						TCHAR* qb = utils::replaceAll(tb, TEXT("\""), TEXT("\\\""));
 						_tcscat(a, qb);
 						_tcscat(a, TEXT("\""));
 						delete [] qb;
@@ -601,6 +600,575 @@ namespace tools {
 					EndDialog(hWnd, -1);
 			}
 			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgImportODBC (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, TEXT("odbc_data"));
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RECREATE_TARGET), BST_CHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE), BST_CHECKED);
+				EnableWindow(GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE), FALSE);
+				SendMessage(hWnd, WM_COMMAND, IDC_DLG_ISTABLE, 0);
+
+				HWND hCSWnd = GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING);
+				sqlite3_stmt *stmt;
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'DSN=' || value from json_each(json_extract(odbc_dsn(), '$.result'))", -1, &stmt, 0);
+				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+					TCHAR* connectionString16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+					ComboBox_AddString(hCSWnd, connectionString16);
+					delete [] connectionString16;
+				}
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_ISQUERY || wParam == IDC_DLG_ISTABLE) {
+					BOOL isTable = wParam == IDC_DLG_ISTABLE;
+					HWND hSrcWnd = GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE);
+					EnableWindow(hSrcWnd, isTable && ComboBox_GetCount(hSrcWnd) > 0);
+					EnableWindow(GetDlgItem(hWnd, IDC_DLG_SOURCE_QUERY), !isTable);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && HIWORD(wParam) == CBN_SELCHANGE)
+					PostMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CONNECTION_STRING, CBN_EDITCHANGE), (LPARAM)GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING));
+
+				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && (HIWORD(wParam) == CBN_EDITCHANGE)) {
+					TCHAR connectionString16[1024]{0};
+					GetDlgItemText(hWnd, IDC_DLG_CONNECTION_STRING, connectionString16, 1024);
+					HWND hSrcWnd = GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE);
+					EnableWindow(hSrcWnd, FALSE);
+
+					if (!_tcslen(connectionString16))
+						return 0;
+
+					sqlite3_exec(db, "drop table if exists temp.odbc_tables", NULL, NULL, NULL);
+					sqlite3_stmt *stmt;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select odbc_read(?1, 'TABLES', 'temp.odbc_tables')", -1, &stmt, 0);
+
+					if (rc) {
+						char* connectionString8 = utils::utf16to8(connectionString16);
+						sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
+						delete [] connectionString8;
+
+						rc = SQLITE_ROW == sqlite3_step(stmt);
+					}
+					sqlite3_finalize(stmt);
+
+					if (rc) {
+						ComboBox_ResetContent(hSrcWnd);
+
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select table_name from temp.odbc_tables where table_type in ('TABLE', 'VIEW', 'SYSTEM TABLE') order by 1", -1, &stmt, 0);
+						while (rc && (SQLITE_ROW == sqlite3_step(stmt))) {
+							TCHAR* name16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+							ComboBox_AddString(hSrcWnd, name16);
+							delete [] name16;
+						}
+
+						sqlite3_finalize(stmt);
+
+						ComboBox_SetCurSel(hSrcWnd, 0);
+						EnableWindow(hSrcWnd, Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE)) == BST_CHECKED && ComboBox_GetCount(hSrcWnd) > 0);
+					}
+				}
+
+				if (wParam == IDC_DLG_HELP) {
+					TCHAR buf[MAX_TEXT_LENGTH];
+					LoadString(GetModuleHandle(NULL), IDS_ODBC_HELP, buf, MAX_TEXT_LENGTH);
+					MessageBox(hWnd, buf, TEXT("ODBC Help"), MB_OK);
+				}
+
+				if (wParam == IDC_DLG_OK) {
+					TCHAR target16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, target16, 1024);
+					if (!_tcslen(target16))
+						return MessageBox(0, TEXT("Specify a name for the target table"), NULL, 0);
+
+					TCHAR connectionString16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_CONNECTION_STRING, connectionString16, 1024);
+					if (!_tcslen(connectionString16))
+						return MessageBox(0, TEXT("Specify a valid connection string"), NULL, 0);
+
+
+					if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RECREATE_TARGET)) == BST_CHECKED) {
+						TCHAR* schema16 = utils::getName(target16, true);
+						TCHAR* tablename16 = utils::getName(target16);
+						TCHAR query16[_tcslen(target16) + 64];
+						_stprintf(query16, TEXT("drop table if exists \"%s\".\"%s\""), schema16, tablename16);
+						char* query8 = utils::utf16to8(query16);
+						BOOL rc = SQLITE_OK == sqlite3_exec(db, query8, NULL, NULL, NULL);
+						delete [] query8;
+						delete [] tablename16;
+						delete [] schema16;
+
+						if (!rc)
+							return showDbError(hWnd);
+					}
+
+					sqlite3_stmt *stmt;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select json_extract(odbc_read(?1, ?2, ?3), '$.error')", -1, &stmt, 0);
+					if (rc) {
+						TCHAR query16[MAX_TEXT_LENGTH];
+						if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE)) == BST_CHECKED) {
+							TCHAR tblname16[1024];
+							GetDlgItemText(hWnd, IDC_DLG_SOURCE_TABLE, tblname16, MAX_TEXT_LENGTH);
+							_stprintf(query16, TEXT("select * from \"%s\""), tblname16);
+						} else {
+							GetDlgItemText(hWnd, IDC_DLG_SOURCE_QUERY, query16, MAX_TEXT_LENGTH);
+						}
+
+						char* connectionString8 = utils::utf16to8(connectionString16);
+						char* query8 = utils::utf16to8(query16);
+						char* target8 = utils::utf16to8(target16);
+
+						sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, query8, strlen(query8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 3, target8, strlen(target8), SQLITE_TRANSIENT);
+						delete [] connectionString8;
+						delete [] query8;
+						delete [] target8;
+
+						rc = SQLITE_ROW == sqlite3_step(stmt);
+					}
+
+					if (rc) {
+						TCHAR* res = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						if (_tcslen(res)) {
+							MessageBox(0, res, NULL, 0);
+							rc = FALSE;
+						}
+						delete [] res;
+					} else {
+						showDbError(hWnd);
+					}
+
+					sqlite3_finalize(stmt);
+
+					if (rc)
+						EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgCompareDatabase (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hDbWnd = GetDlgItem(hWnd, IDC_DLG_DATABASE);
+				sqlite3_stmt *stmt;
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select path from preferences.recents order by time desc limit 40", -1, &stmt, 0);
+				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+					TCHAR* db16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+					if (utils::isFileExists(db16))
+						ComboBox_AddString(hDbWnd, db16);
+					delete [] db16;
+				}
+				sqlite3_finalize(stmt);
+
+				SetFocus(hDbWnd);
+				setEditorFont(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_DDL));
+				setEditorFont(GetDlgItem(hWnd, IDC_DLG_COMPARED_DDL));
+			}
+			break;
+
+			case WM_CLOSE:
+				sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+
+			case WM_COMMAND: {
+				TCHAR path16[MAX_PATH]{0};
+				if (wParam == IDC_DLG_DATABASE_SELECTOR && utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db)\0*.sqlite;.sqlite3;.id\0All\0*.*\0")))
+					SetDlgItemText(hWnd, IDC_DLG_DATABASE, path16);
+
+				if (wParam == IDC_DLG_COMPARE_SCHEMA || wParam == IDC_DLG_COMPARE_DATA) {
+					GetDlgItemText(hWnd, IDC_DLG_DATABASE, path16, MAX_PATH);
+					if(!utils::isFileExists(path16))
+						return MessageBox(hWnd, TEXT("Specify a compared database"), NULL, 0);
+
+					sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
+					sqlite3_stmt *stmt;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "attach database ?1 as compared", -1, &stmt, 0);
+					if (rc) {
+						char* path8 = utils::utf16to8(path16);
+						sqlite3_bind_text(stmt, 1, path8, strlen(path8), SQLITE_TRANSIENT);
+						delete [] path8;
+
+						rc = SQLITE_DONE == sqlite3_step(stmt);
+					}
+					sqlite3_finalize(stmt);
+
+					BOOL isSchema = wParam == IDC_DLG_COMPARE_SCHEMA;
+
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF), isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ORIGINAL), isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_COMPARED), isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_DDL), isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_COMPARED_DDL), isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_DATA_DIFF), !isSchema ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS), !isSchema ? SW_SHOW : SW_HIDE);
+
+					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, TEXT(""));
+					SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, TEXT(""));
+					ListView_Reset(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS));
+
+					if (rc && isSchema) {
+						HWND hDiffWnd = GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF);
+						sqlite3_prepare_v2(db,
+							"with t as (select type, name, sql from sqlite_master), " \
+							"t2 as (select type, name, sql from compared.sqlite_master), " \
+							"t3 as (select 1 src, * from t except select 1 src, * from t2), " \
+							"t4 as (select 2 src, * from t2 except select 2 src, * from t), " \
+							"t5 as (select * from t3 union  select * from t4),"
+							"t6 as (select sum(src) idx, type, name from t5 group by type, name)"
+							"select case when idx == 1 then '-->' when idx == 2 then '<--' else cast(x'e289a0' as text) end ' ', type, name from t6", -1, &stmt, 0);
+						int rowCount = ListView_SetData(hDiffWnd, stmt);
+						ListView_SetColumnWidth(hDiffWnd, 3, 495);
+						if (!rowCount)
+							MessageBox(hWnd, TEXT("Database schemas are the same"), TEXT("Info"), 0);
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc && !isSchema) {
+						HWND hDiffWnd = GetDlgItem(hWnd, IDC_DLG_DATA_DIFF);
+						sqlite3_exec(db, "drop table temp.compare_tables", NULL, NULL, NULL);
+						sqlite3_exec(db,
+							"create table temp.compare_tables as " \
+							"select sm.name, null cnt1, null cnt2, null diff from sqlite_master sm inner join compared.sqlite_master sm2 on " \
+							"sm.type = sm2.type and sm.name = sm2.name and sm.type = 'table' where not exists( " \
+							"select name from pragma_table_info(sm.name) except select name from pragma_table_info(sm.name) where schema = 'compared' " \
+							"union all " \
+							"select name from pragma_table_info(sm.name) where schema = 'compared' except select name from pragma_table_info(sm.name))",
+							NULL, NULL, NULL);
+						sqlite3_prepare_v2(db, "select name from temp.compare_tables", -1, &stmt, 0);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							const char* name = (const char*)sqlite3_column_text(stmt, 0);
+							char query[1024 + 3 * strlen(name)];
+							sprintf(query, "update temp.compare_tables set cnt1 = (select count(1) from \"%s\"), cnt2 = (select count(1) from compared.\"%s\") where name = \"%s\"", name, name, name);
+							sqlite3_exec(db, query, NULL, NULL, NULL);
+						}
+						sqlite3_finalize(stmt);
+
+						sqlite3_prepare_v2(db, "select name from temp.compare_tables where cnt1 = cnt2", -1, &stmt, 0);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							const char* name = (const char*)sqlite3_column_text(stmt, 0);
+							char query[1024 + 3 * strlen(name)];
+							sprintf(query,
+								"with t as (select * from \"%s\" except select * from compared.\"%s\" union all select * from compared.\"%s\" except select * from \"%s\") "\
+								"update temp.compare_tables set diff = (select count(1) from t) where name = \"%s\"", name, name, name, name, name);
+							sqlite3_exec(db, query, NULL, NULL, NULL);
+						}
+						sqlite3_finalize(stmt);
+
+						sqlite3_prepare_v2(db,
+							"select name, iif(cnt1 <> cnt2, 'Rows count: ' || cnt1 || ' vs ' || cnt2, 'Different rows: ' || diff || ' of ' || cnt1) 'Reason' " \
+							"from temp.compare_tables where cnt1 <> cnt2 or coalesce(diff, 0) > 0", -1, &stmt, 0);
+						int rowCount = ListView_SetData(hDiffWnd, stmt);
+						if (!rowCount)
+							MessageBox(hWnd, TEXT("No differences found"), TEXT("Info"), 0);
+						sqlite3_finalize(stmt);
+					}
+
+					if (!rc)
+						showDbError(hWnd);
+				}
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->idFrom == IDC_DLG_SCHEMA_DIFF && pHdr->code == (DWORD)NM_CLICK) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					TCHAR type16[32], name16[1024];
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 2, type16, 32);
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 3, name16, 32);
+
+					sqlite3_stmt *stmt;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db,
+						"select (select max(sql) from sqlite_master where type = ?1 and name = ?2)," \
+						"(select max(sql) from compared.sqlite_master where type = ?1 and name = ?2)", -1, &stmt, 0);
+					if (rc) {
+						char* type8 = utils::utf16to8(type16);
+						char* name8 = utils::utf16to8(name16);
+						sqlite3_bind_text(stmt, 1, type8, strlen(type8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, name8, strlen(name8), SQLITE_TRANSIENT);
+						delete [] type8;
+						delete [] name8;
+
+						if (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* sql = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							TCHAR* sql2 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+
+							SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, sql);
+							SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, sql2);
+
+							delete [] sql;
+							delete [] sql2;
+						} else {
+							SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, TEXT(""));
+							SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, TEXT(""));
+						}
+
+						rc = SQLITE_DONE == sqlite3_step(stmt);
+					}
+					sqlite3_finalize(stmt);
+				}
+
+				if (pHdr->idFrom == IDC_DLG_DATA_DIFF && pHdr->code == (DWORD)NM_CLICK) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					TCHAR name16[1024];
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 1, name16, 32);
+
+					char* name8 = utils::utf16to8(name16);
+					char query8[1024 + 4 * strlen(name8)];
+					sprintf(query8,
+						"with t as (select '->' ' ', * from \"%s\" except select '->' ' ', * from compared.\"%s\"), " \
+						"t2 as (select '<-' ' ', * from compared.\"%s\" except select '<-' ' ', * from \"%s\") " \
+						"select * from t union all select * from t2",
+						name8, name8, name8, name8);
+					delete [] name8;
+
+					HWND hRowsWnd = GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS);
+					ListView_Reset(hRowsWnd);
+
+					sqlite3_stmt *stmt;
+					sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+					ListView_SetData(hRowsWnd, stmt);
+					sqlite3_finalize(stmt);
+				}
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgDatabaseSearch (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAMES, TEXT("All"));
+				HWND hPatternWnd = GetDlgItem(hWnd, IDC_DLG_PATTERN);
+				ComboBox_AddString(hPatternWnd, TEXT("Left and right wildcard"));
+				ComboBox_AddString(hPatternWnd, TEXT("Exact match"));
+				ComboBox_AddString(hPatternWnd, TEXT("Left wildcard"));
+				ComboBox_AddString(hPatternWnd, TEXT("Rigth wildcard"));
+				ComboBox_SetCurSel(hPatternWnd, 0);
+
+				HWND hColTypeWnd = GetDlgItem(hWnd, IDC_DLG_COLTYPE);
+				ComboBox_AddString(hColTypeWnd, TEXT("Any"));
+				ComboBox_AddString(hColTypeWnd, TEXT("Number"));
+				ComboBox_AddString(hColTypeWnd, TEXT("Text"));
+				ComboBox_AddString(hColTypeWnd, TEXT("BLOB"));
+				ComboBox_SetCurSel(hColTypeWnd, 0);
+
+				HWND hNamesWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAMES);
+				LONG style = GetWindowLong(hNamesWnd, GWL_EXSTYLE);
+				style &= ~WS_EX_NOPARENTNOTIFY;
+				SetWindowLong(hNamesWnd, GWL_EXSTYLE, style);
+
+				HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+				ListView_SetExtendedListViewStyle(hTablesWnd, LVS_EX_CHECKBOXES);
+				SetWindowPos(hTablesWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+
+				sqlite3_stmt *stmt;
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db,
+					"select * from (select name from sqlite_master where type = 'table' union all select 'sqlite_master') order by 1 desc",
+					-1, &stmt, 0);
+
+				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+					TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+					LVITEM lvi;
+					lvi.mask = LVIF_TEXT;
+					lvi.iSubItem = 0;
+					lvi.pszText = name16;
+					lvi.cchTextMax = _tcslen(name16) + 1;
+					ListView_InsertItem(hTablesWnd, &lvi);
+					delete [] name16;
+				}
+
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+
+			case WM_LBUTTONDOWN: {
+				ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLES), SW_HIDE);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_SEARCH) {
+					HWND hSearchWnd = GetDlgItem(hWnd, IDC_DLG_SEARCH_TEXT);
+					int len = GetWindowTextLength(hSearchWnd);
+					if (!len)
+						return 0;
+
+					TCHAR text16[len + 1]{0};
+					GetWindowText(hSearchWnd, text16, len + 1);
+
+					HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+					BOOL isAll = TRUE;
+					for (int i = 0; isAll && i < ListView_GetItemCount(hTablesWnd); i++)
+						isAll = isAll && (ListView_GetCheckState(hTablesWnd, i) == BST_UNCHECKED);
+
+					TCHAR names[MAX_TEXT_LENGTH]{0};
+					for (int i = 0; i < ListView_GetItemCount(hTablesWnd); i++) {
+						if (isAll || (ListView_GetCheckState(hTablesWnd, i) == BST_CHECKED)) {
+							TCHAR name[256];
+							ListView_GetItemText(hTablesWnd, i, 0, name, 255);
+							_tcscat(names, _tcslen(names) > 0 ? TEXT("\", \"") : TEXT("\""));
+							_tcscat(names, name);
+						}
+					}
+					_tcscat(names, TEXT("\""));
+					char* names8 = utils::utf16to8(names);
+					int matchType = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_PATTERN));
+					int colType = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_COLTYPE));
+
+					char query8[MAX_TEXT_LENGTH]{0};
+					sprintf(query8, "select 'insert into temp.search_result (name, cnt, whr) select \"' || t.name || '\", count(1), " \
+						" ''select * from \"'|| t.name || '\" where ' || group_concat('\"' || c.name || '\" like (\"%s\" || ?1 || \"%s\")', ' or ') || ''' " \
+						"from \"' || t.name || '\" where ' || group_concat('\"' || c.name || '\" like (\"%s\" || ?1 || \"%s\")', ' or ')" \
+						"from (select name from sqlite_master where sql is not null and type = 'table' union all select 'sqlite_master') t " \
+						"left join pragma_table_info c on t.name = c.arg and c.schema = 'main' " \
+						"where %s and t.name in (%s) group by t.name order by 1",
+						matchType == 0 || matchType == 2 ? "%" : "",
+						matchType == 0 || matchType == 3 ? "%" : "",
+						matchType == 0 || matchType == 2 ? "%" : "",
+						matchType == 0 || matchType == 3 ? "%" : "",
+						colType == 1 ? "lower(c.type) in ('integer', 'real')" : colType == 2 ? "lower(c.type) = 'text'" : colType == 3 ? "lower(c.type) = 'blob'" : "1 = 1",
+						names8);
+					delete [] names8;
+
+					sqlite3_exec(db, "drop table temp.search_result", NULL, 0, NULL);
+					sqlite3_exec(db, "create table temp.search_result (name, cnt, whr)", NULL, 0, NULL);
+					sqlite3_stmt *stmt;
+					char* text8 = utils::utf16to8(text16);
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+					while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+						sqlite3_stmt *stmt2;
+						if(SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0)) {
+							sqlite3_bind_text(stmt2, 1, text8, strlen(text8), SQLITE_TRANSIENT);
+							sqlite3_step(stmt2);
+						}
+						sqlite3_finalize(stmt2);
+					}
+					sqlite3_finalize(stmt);
+					delete [] text8;
+
+					HWND hResultWnd = GetDlgItem(hWnd, IDC_DLG_SEARCH_RESULT);
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name 'Table', cnt 'Rows found', whr 'Query' from temp.search_result where cnt > 0", -1, &stmt, 0)) {
+						ListView_DeleteAllItems(hResultWnd);
+						ListView_Reset(hResultWnd);
+						ListView_SetData(hResultWnd, stmt);
+						ListView_SetColumnWidth(hResultWnd, 2, 300);
+						ListView_SetColumnWidth(hResultWnd, 3, 0);
+						ListView_Reset(GetDlgItem(hWnd, IDC_DLG_SEARCH_ROWS));
+					}
+					sqlite3_finalize(stmt);
+
+					SetDlgItemText(hWnd, IDC_DLG_SEARCH_QUERY_TEXT, text16);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_TABLENAMES && (HIWORD(wParam) == (UINT)EN_KILLFOCUS) && (GetFocus() != GetDlgItem(hWnd, IDC_DLG_TABLES)))
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLES), SW_HIDE);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+
+				if (pHdr->idFrom == IDC_DLG_TABLES && pHdr->code == LVN_ITEMCHANGED) {
+					HWND hTablesWnd = pHdr->hwndFrom;
+					TCHAR names[MAX_TEXT_LENGTH]{0};
+					for (int i = 0; i < ListView_GetItemCount(hTablesWnd); i++) {
+						if (ListView_GetCheckState(hTablesWnd, i) == BST_CHECKED) {
+							TCHAR name[256];
+							ListView_GetItemText(hTablesWnd, i, 0, name, 255);
+							if (_tcslen(names) > 0)
+								_tcscat(names, TEXT(", "));
+							_tcscat(names, name);
+						}
+					}
+
+					SetDlgItemText(hWnd, IDC_DLG_TABLENAMES, _tcslen(names) > 0 ? names : TEXT("All"));
+				}
+
+				if (pHdr->idFrom == IDC_DLG_TABLES && (pHdr->code == (UINT)NM_KILLFOCUS) && (GetFocus() != GetDlgItem(hWnd, IDC_DLG_TABLENAMES)))
+					ShowWindow(pHdr->hwndFrom, SW_HIDE);
+
+				if (pHdr->idFrom == IDC_DLG_SEARCH_RESULT && pHdr->code == (DWORD)LVN_KEYDOWN) {
+					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
+					if (kd->wVKey == 0x43 && GetKeyState(VK_CONTROL)) { // Ctrl + C
+						HWND hResultWnd = pHdr->hwndFrom;
+						int pos = ListView_GetNextItem(hResultWnd, -1, LVNI_SELECTED);
+						if (pos == -1)
+							return 0;
+
+						TCHAR text16[1024];
+						GetDlgItemText(hWnd, IDC_DLG_SEARCH_QUERY_TEXT, text16, 1024);
+
+						TCHAR query16[MAX_TEXT_LENGTH]{0};
+						ListView_GetItemText(hResultWnd, pos, 3, query16, MAX_TEXT_LENGTH);
+
+						TCHAR* res16 = utils::replaceAll(query16, TEXT("\" || ?1 || \""), text16);
+						utils::setClipboardText(res16);
+						delete [] res16;
+					}
+				}
+
+				if (pHdr->idFrom == IDC_DLG_SEARCH_RESULT && pHdr->code == (DWORD)NM_CLICK) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					TCHAR text16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_SEARCH_QUERY_TEXT, text16, 1024);
+
+					TCHAR query16[MAX_TEXT_LENGTH]{0};
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 3, query16, MAX_TEXT_LENGTH);
+
+					char* text8 = utils::utf16to8(text16);
+					char* query8 = utils::utf16to8(query16);
+					sqlite3_stmt *stmt;
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, text8, strlen(text8), SQLITE_TRANSIENT);
+						HWND hRowsWnd = GetDlgItem(hWnd, IDC_DLG_SEARCH_ROWS);
+						ListView_Reset(hRowsWnd);
+						ListView_SetData(hRowsWnd, stmt);
+					}
+					sqlite3_finalize(stmt);
+
+					delete [] text8;
+					delete [] query8;
+
+				}
+			}
+			break;
+
+			case WM_PARENTNOTIFY: {
+				if (LOWORD(wParam) == WM_LBUTTONDOWN) {
+					HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+					ShowWindow(hTablesWnd, SW_SHOW);
+				}
+			}
+			break;
+
 		}
 
 		return false;
@@ -966,21 +1534,77 @@ namespace tools {
 		return false;
 	}
 
+	BOOL CALLBACK cbDlgStatistics (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				sqlite3_exec(db, "drop table temp.row_statistics;", NULL, 0, NULL);
+				sqlite3_exec(db, "create table temp.row_statistics (name text, cnt integer);", NULL, 0, NULL);
+
+				sqlite3_stmt *stmt;
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'insert into temp.row_statistics (name, cnt) select ''' || name || ''', count(1) from \"' || name || '\"' from sqlite_master where type in ('table')", -1, &stmt, 0);
+				while (rc && SQLITE_ROW == sqlite3_step(stmt))
+					rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
+				sqlite3_finalize(stmt);
+
+				if (!rc)
+					return showDbError(hWnd);
+
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, SUM(payload) 'Payload size, B', SUM(pgsize) 'Total size, B', r.cnt 'Rows' from dbstat s left join temp.row_statistics r on s.name = r.name  group by s.name;", -1, &stmt, 0))
+					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_STATISTICS), stmt);
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->code == LVN_COLUMNCLICK) {
+					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
+					return ListView_Sort(pHdr->hwndFrom, pLV->iSubItem);
+				}
+			}
+			break;
+		}
+
+		return false;
+	}
+
 	bool importSqlFile(TCHAR *path16){
 		char* path8 = utils::utf16to8(path16);
 		char* data8 = utils::readFile(path8);
 		bool rc = true;
 		if (data8 != 0) {
+			sqlite3_exec(db, "begin transaction;", NULL, 0, NULL);
 			sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
-			rc = SQLITE_OK == sqlite3_exec(db, data8, NULL, 0, NULL);
+			bool hasBOM = data8[0] == '\xEF' && data8[1] == '\xBB' && data8[2] == '\xBF';
+			rc = SQLITE_OK == sqlite3_exec(db, hasBOM ? data8 + 3 : data8, NULL, 0, NULL);
 			if (!rc)
 				showDbError(hMainWnd);
 
 			sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
+			sqlite3_exec(db, rc ? "commit;" : "rollback;", NULL, 0, NULL);
 			delete [] data8;
 		}
 		delete [] path8;
 
+		return rc;
+	}
+
+	bool reindexDatabase() {
+		sqlite3_stmt *stmt;
+		BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'reindex \"' || name || '\"' from sqlite_master where type in ('table', 'index')", -1, &stmt, 0);
+		while (rc && SQLITE_ROW == sqlite3_step(stmt))
+			rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
+		sqlite3_finalize(stmt);
 		return rc;
 	}
 

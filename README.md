@@ -1,4 +1,4 @@
-Sqlite-gui is a lightweight GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks](http://www.codeblocks.org/).  
+Sqlite-gui is a lightweight GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks 17](http://www.codeblocks.org/).  
 Recent binaries are available at [Releases page](https://github.com/little-brother/sqlite-gui/releases).
 
 
@@ -7,10 +7,13 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 
 ### Features
 * Syntax highlighting and code completion
-* Store an execution history and user gists
+* Store an execution history and user scripts
 * Export/Import data
 * Database diagram
+* Database comparison
+* Search text in the whole database
 * [Workflow manager](https://github.com/little-brother/sqlite-wf) (ETL)
+* Quick data references ([video](https://youtu.be/XL1_lFhzLKo))
 * Data generator
 * Most usefull extensions are included
 * Demo database "Bookstore" for beginners

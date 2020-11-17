@@ -27,30 +27,6 @@ namespace utils {
 		return out;
 	}
 
-	int countChar(TCHAR* str, TCHAR chr) {
-		int count = 0;
-		for(; *str; count += (*str++ == chr));
-			return count;
-	}
-
-	TCHAR* maskQuotes(TCHAR* in) {
-		int qCount = countChar(in, TEXT('"'));
-		int len = _tcslen(in);
-		TCHAR* res = new TCHAR[len + qCount + 1]{0};
-
-		int j = 0;
-		for (int i = 0; i < len; i++) {
-			if (in[i] == TEXT('"')) {
-				res[i + j] = TEXT('\\');
-				j++;
-			}
-			res[i + j] = in[i];
-		}
-
-		res[len + qCount] = '\0';
-		return res;
-	}
-
 	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool isAll) {
 		int len = _tcslen(in);
 		int nLen = _tcslen(newStr);

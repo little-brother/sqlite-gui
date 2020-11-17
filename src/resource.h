@@ -11,12 +11,15 @@
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
 #define IDD_TOOL_IMPORT_CSV        32
-#define IDD_TOOL_GENERATE_DATA     33
-#define IDD_TOOL_DATABASE_DIAGRAM  34
+#define IDD_TOOL_IMPORT_ODBC       33
+#define IDD_TOOL_GENERATE_DATA     34
+#define IDD_TOOL_DATABASE_DIAGRAM  35
+#define IDD_TOOL_COMPARE_DATABASE  36
+#define IDD_TOOL_DATABASE_SEARCH   37
+#define IDD_TOOL_STATISTICS        38
 
 #define IDA_ACCEL                  77
 
-#define IDC_DLG_EXAMPLE            90
 #define IDC_DLG_OK                 91
 #define IDC_DLG_CANCEL             92
 #define IDC_DLG_DELETE             93
@@ -67,6 +70,7 @@
 #define IDC_DLG_CHECK              143
 #define IDC_DLG_ISUNIQUE           144
 #define IDC_DLG_ISNOTNULL          145
+#define IDC_DLG_EXAMPLE            146
 
 #define IDC_DLG_ROW_ADD            150
 #define IDC_DLG_ROW_DEL            151
@@ -76,22 +80,50 @@
 #define IDC_DLG_MORE               155
 #define IDC_DLG_FIND               156
 #define IDC_DLG_REFRESH            157
+#define IDC_DLG_CONNECTION_STRING  158
+#define IDC_DLG_ISTABLE            159
+#define IDC_DLG_ISQUERY            160
+#define IDC_DLG_SOURCE_TABLE       161
+#define IDC_DLG_SOURCE_QUERY       162
+#define IDC_DLG_HELP               163
+#define IDC_DLG_RECREATE_TARGET    164
+#define IDC_DLG_DATABASE           170
+#define IDC_DLG_DATABASE_SELECTOR  171
+#define IDC_DLG_COMPARE_SCHEMA     172
+#define IDC_DLG_COMPARE_DATA       173
+#define IDC_DLG_SCHEMA_DIFF        174
+#define IDC_DLG_DATA_DIFF          175
+#define IDC_DLG_ORIGINAL           176
+#define IDC_DLG_COMPARED           177
+#define IDC_DLG_ORIGINAL_DDL       178
+#define IDC_DLG_COMPARED_DDL       179
+#define IDC_DLG_DIFF_ROWS          180
+#define IDC_DLG_SEARCH_TEXT        181
+#define IDC_DLG_SEARCH             182
+#define IDC_DLG_PATTERN            183
+#define IDC_DLG_TABLENAMES         184
+#define IDC_DLG_TABLES             190
+#define IDC_DLG_SEARCH_QUERY       191
+#define IDC_DLG_SEARCH_QUERY_TEXT  192
+#define IDC_DLG_SEARCH_RESULT      193
+#define IDC_DLG_SEARCH_ROWS        194
+#define IDC_DLG_STATISTICS         195
 
-#define IDC_DLG_GEN_ISTRUNCATE     160
-#define IDC_DLG_GEN_ROW_COUNT      161
-#define IDC_DLG_GEN_COLUMNS        170
-#define IDC_DLG_GEN_COLUMN         171
-#define IDC_DLG_GEN_COLUMN_NAME    172
-#define IDC_DLG_GEN_COLUMN_TYPE    173
-#define IDC_DLG_GEN_OPTION         174
-#define IDC_DLG_GEN_OPTION_LABEL   180
-#define IDC_DLG_GEN_OPTION_START   181
-#define IDC_DLG_GEN_OPTION_END     182
-#define IDC_DLG_GEN_OPTION_TABLE   183
-#define IDC_DLG_GEN_OPTION_COLUMN  184
-#define IDC_DLG_GEN_OPTION_MULTIPLIER  185
-#define IDC_DLG_GEN_DICTIONARY     186
-#define IDC_DLG_GEN_DICTIONARY_HELP    187
+#define IDC_DLG_GEN_ISTRUNCATE     260
+#define IDC_DLG_GEN_ROW_COUNT      261
+#define IDC_DLG_GEN_COLUMNS        270
+#define IDC_DLG_GEN_COLUMN         271
+#define IDC_DLG_GEN_COLUMN_NAME    272
+#define IDC_DLG_GEN_COLUMN_TYPE    273
+#define IDC_DLG_GEN_OPTION         274
+#define IDC_DLG_GEN_OPTION_LABEL   280
+#define IDC_DLG_GEN_OPTION_START   281
+#define IDC_DLG_GEN_OPTION_END     282
+#define IDC_DLG_GEN_OPTION_TABLE   283
+#define IDC_DLG_GEN_OPTION_COLUMN  284
+#define IDC_DLG_GEN_OPTION_MULTIPLIER  285
+#define IDC_DLG_GEN_DICTIONARY     286
+#define IDC_DLG_GEN_DICTIONARY_HELP    287
 
 #define IDC_TAB_EDIT               300
 
@@ -133,24 +165,29 @@
 
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
-#define IDM_EXPORT_SQL             1522
-#define IDM_EXPORT_CSV             1523
-#define IDM_CHECK_INTEGRITY        1524
-#define IDM_CHECK_FOREIGN_KEY      1525
-#define IDM_VACUUM                 1526
-#define IDM_GENERATE_DATA          1527
-#define IDM_DATABASE_DIAGRAM       1528
-#define IDM_WORKFLOW_MANAGER       1529
+#define IDM_IMPORT_ODBC            1522
+#define IDM_EXPORT_SQL             1523
+#define IDM_EXPORT_CSV             1524
+#define IDM_CHECK_INTEGRITY        1525
+#define IDM_CHECK_FOREIGN_KEY      1526
+#define IDM_VACUUM                 1527
+#define IDM_REINDEX                1528
+#define IDM_STATISTICS             1529
+#define IDM_GENERATE_DATA          1530
+#define IDM_DATABASE_DIAGRAM       1531
+#define IDM_WORKFLOW_MANAGER       1532
+#define IDM_COMPARE_DATABASE       1533
+#define IDM_DATABASE_SEARCH        1534
 
-#define IDM_HELP                   1530
-#define IDM_ABOUT                  1531
-#define IDM_HOMEPAGE               1532
-#define IDM_HOTKEYS                1533
-#define IDM_TIPS                   1534
-#define IDM_EXTENSIONS             1535
-#define IDM_SQLITE_HOMEPAGE        1536
-#define IDM_TUTORIAL1              1537
-#define IDM_TUTORIAL2              1538
+#define IDM_HELP                   1540
+#define IDM_ABOUT                  1541
+#define IDM_HOMEPAGE               1542
+#define IDM_HOTKEYS                1543
+#define IDM_TIPS                   1544
+#define IDM_EXTENSIONS             1545
+#define IDM_SQLITE_HOMEPAGE        1546
+#define IDM_TUTORIAL1              1547
+#define IDM_TUTORIAL2              1548
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_CHANGE_FOCUS           1591
@@ -175,6 +212,11 @@
 #define IDM_BLOB_NULL              1620
 #define IDM_BLOB_IMPORT            1621
 #define IDM_BLOB_EXPORT            1622
+
+#define IDM_DEMODB_BOOKSTORE       1630
+#define IDM_DEMODB_CHINOOK         1631
+#define IDM_DEMODB_NORTHWIND       1632
+#define IDM_DEMODB_WORLD           1633
 
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
@@ -214,6 +256,7 @@
 #define IDS_EXTENSIONS             10013
 #define IDS_GEN_DICTIONARY         10014
 #define IDS_WELCOME                10015
+#define IDS_ODBC_HELP              10016
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -233,6 +276,7 @@
 #define WMU_REFTABLE_CHANGED       WM_USER + 8
 #define WMU_HIGHLIGHT              WM_USER + 9
 #define WMU_SHOW_TABLE_INFO        WM_USER + 10
+#define WMU_RESET_LISTVIEW         WM_USER + 11
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

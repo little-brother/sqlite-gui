@@ -10,7 +10,8 @@
     dlltool -d sqlite3.def -l libsqlite3.a -D sqlite3.dll
     ```
 
- * Extension e.g. iif
+ * Extension e.g. `json1`
     ```
     gcc -I ../include -g -shared json1.c -o json1.dll -s
     ```
+    `series.c` and `regexp.c` should be compiled with additional flag `-Os` to minimize [VirusTotal alerts](https://github.com/little-brother/sqlite-gui/issues/3)	

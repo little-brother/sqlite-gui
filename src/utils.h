@@ -7,7 +7,6 @@
 
 namespace utils {
 	TCHAR* trim(TCHAR *in);
-	TCHAR* maskQuotes(TCHAR* in);
 	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
 	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
 

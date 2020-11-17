@@ -46,7 +46,6 @@ extern HWND  hMainWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hToolti
 
 extern HTREEITEM treeItems[5]; // 0 - current
 extern HMENU treeMenus[6]; // 0 - add/refresh menu
-extern TCHAR treeEditName[255];
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 extern TCHAR searchString[255];
 
@@ -68,7 +67,7 @@ struct ListViewCell {
 };
 extern ListViewCell currCell;
 
-extern HMENU hEditDataMenu, hResultMenu, hBlobMenu;
+extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
 
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
@@ -79,13 +78,14 @@ bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
 
 bool executeCommandQuery(const TCHAR* query);
-int setListViewData(HWND hListWnd, sqlite3_stmt *stmt);
-int showRefData(HWND hListWnd, int rowNo, int colNo);
-bool sortListView(HWND hListWnd, int colNo);
+int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
+int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
+int ListView_Sort(HWND hListWnd, int colNo);
+int ListView_Reset(HWND hListWnd);
 LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
 TCHAR* getDbValue(const TCHAR* query16);
-TCHAR* getDDL(TCHAR* name16, int type);
+TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);
 bool isQueryValid(const char* query);
-bool showDbError(HWND hWnd, char* err8 = NULL);
+bool showDbError(HWND hWnd);
 
 #endif
