@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 3, 2, 0
+FILEVERSION 1, 3, 3, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.3.2\000"
+			VALUE "FileVersion", "1.3.3\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.3.2\000"
+			VALUE "ProductVersion", "1.3.3\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -46,7 +46,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_ADD_TABLE DIALOGEX 50,50,230,200
+IDD_ADD_TABLE DIALOGEX 50, 50, 230, 200
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Add table"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -61,7 +61,7 @@ BEGIN
 	PUSHBUTTON "Add", IDC_DLG_ROW_ADD, 5, 150, 30, 14, WS_TABSTOP
 	PUSHBUTTON "Delete", IDC_DLG_ROW_DEL, 40, 150, 30, 14, WS_TABSTOP
 	PUSHBUTTON "Up", IDC_DLG_ROW_UP, 160, 150, 30, 14, WS_TABSTOP
-	PUSHBUTTON "Down",IDC_DLG_ROW_DOWN, 195, 150, 30, 14, WS_TABSTOP
+	PUSHBUTTON "Down", IDC_DLG_ROW_DOWN, 195, 150, 30, 14, WS_TABSTOP
 
 	PUSHBUTTON "OK", IDC_DLG_OK, 100, 181, 60, 14, WS_TABSTOP
 	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 165, 181, 60, 14, WS_TABSTOP
@@ -77,16 +77,16 @@ BEGIN
 	EDITTEXT IDC_DLG_COLNAME, 40, 5, 90, 12, WS_BORDER | WS_TABSTOP
 
 	LTEXT "Type", IDC_DLG_LABEL, 5, 27, 30, 14, SS_LEFT
-	COMBOBOX  IDC_DLG_COLTYPE, 40, 25, 90, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	COMBOBOX IDC_DLG_COLTYPE, 40, 25, 90, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
 	LTEXT "Default", IDC_DLG_LABEL, 5, 47, 30, 14, SS_LEFT
-	EDITTEXT  IDC_DLG_DEFVALUE, 40, 45, 90, 12, WS_BORDER | WS_TABSTOP
+	EDITTEXT IDC_DLG_DEFVALUE, 40, 45, 90, 12, WS_BORDER | WS_TABSTOP
 
 	LTEXT "Check", IDC_DLG_LABEL, 5, 67, 30, 14, SS_LEFT
-	EDITTEXT  IDC_DLG_CHECK, 40, 65, 90, 12, WS_BORDER | WS_TABSTOP
+	EDITTEXT IDC_DLG_CHECK, 40, 65, 90, 12, WS_BORDER | WS_TABSTOP
 
 	LTEXT "Unique", IDC_DLG_LABEL, 5, 87, 30, 14, SS_LEFT
-	AUTOCHECKBOX  "", IDC_DLG_ISUNIQUE, 75, 83, 18, 16, BS_NOTIFY | WS_TABSTOP
+	AUTOCHECKBOX "", IDC_DLG_ISUNIQUE, 75, 83, 18, 16, BS_NOTIFY | WS_TABSTOP
 
 	LTEXT "Not null", IDC_DLG_LABEL, 5, 107, 30, 14, SS_LEFT
 	AUTOCHECKBOX "", IDC_DLG_ISNOTNULL, 75, 103, 18, 16, BS_NOTIFY | WS_TABSTOP
@@ -106,6 +106,25 @@ BEGIN
 	EDITTEXT	IDC_DLG_QUERYFILTER, 22, 0, 300, 10, WS_BORDER | WS_TABSTOP, 0
 	CONTROL "", IDC_DLG_REFRESH, WC_STATIC, SS_LEFT | SS_BITMAP | SS_CENTERIMAGE | SS_NOTIFY, 300, 0, 10, 10, 0
 	CONTROL "", IDC_DLG_QUERYLIST, WC_LISTVIEW, WS_VSCROLL | WS_TABSTOP | LVS_REPORT, 0, 10, 400, 80, WS_EX_STATICEDGE
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_EDITDATA_VALUE DIALOGEX 10, 10, 500, 400
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU
+	CAPTION "Edit value"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 498, 273, WS_EX_STATICEDGE
+	PUSHBUTTON "OK", IDC_DLG_OK, 196, 282, 50, 14, 0
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_VIEWDATA_VALUE DIALOGEX 10, 10, 500, 400
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU
+	CAPTION "View value"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 498, 273, WS_EX_STATICEDGE
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -510,6 +529,7 @@ BEGIN
 	BEGIN
 		MENUITEM "Edit\tEnter", IDM_ROW_EDIT
 		MENUITEM "Delete\tDel", IDM_ROW_DELETE
+		MENUITEM "Duplicate", IDM_ROW_DUPLICATE
 		MENUITEM SEPARATOR
 		MENUITEM "Copy cell to clipboard", IDM_RESULT_COPY_CELL
 		MENUITEM "Copy row to clipboard", IDM_RESULT_COPY_ROW
@@ -596,9 +616,7 @@ BEGIN
 		"Alt + Click - Show data if the column references to another table by foreign key e.g. execute ""select * from orders"" and click by ""8"" in ""customer_id"" column. You'll see details from customers table for id = 8. \n\n" \
 		"Etc\n" \
 		"Ctrl + Enter - Add row in ""Add row"" dialog\n" \
-		"Ctrl + Enter - Move to next row in ""View row"" dialog\n" \
-		"Ctrl + Click by cell - Edit the value as a multiline text in ""Data Edit"" dialog\n" \
-		"Ctrl + Enter - Add new line to text in the multiline mode"
+		"Ctrl + Enter - Move to next row in ""View row"" dialog\n\n" \
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n"
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
@@ -621,9 +639,9 @@ BEGIN
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
-		"Adds rownum(start), concat(str1, str2, ...) and decode(expr, key1, value1, key2, value2, ..., defValue) functions.\n\n" \
+		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), crc32(str) and md5(str) functions.\n\n" \
 		"Icu (third party)\n"\
-		"Adds partial support for national symbols e.g. ""select lower('Û');"" returns ""û""\n\n" \
+		"Adds partial support for national symbols e.g. ""select lower('Ù§);"" returns """"\n\n" \
 
 		"SQLite Workflow Manager adds auxiliary extensions: exec, odbc and transform. Check tool's Wiki to get info about them.\n\n"
 

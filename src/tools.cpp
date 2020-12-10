@@ -1715,7 +1715,7 @@ namespace tools {
 				HWND hTableWnd = 0;
 				int tblNo = 0;
 				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type),c.type, 'any'), c.pk " \
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type), c.type, 'any'), c.pk " \
 					"from sqlite_master t, pragma_table_info(t.tbl_name) c " \
 					"where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table')" \
 					"order by 1, 3", -1, &stmt, 0)) {
@@ -1730,7 +1730,7 @@ namespace tools {
 							RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
 							prefs::getDiagramRect(dbname8, (const char*)sqlite3_column_text(stmt, 0), &rect);
 							hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
-								WS_CAPTION | WS_VISIBLE| WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_NOSEL,
+								WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_NOSEL,
 								rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
 
 							cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
@@ -1921,7 +1921,6 @@ namespace tools {
 					Rectangle(hdc, p.x - 5, p.y - 5,  p.x + rc.right - rc.left + 5, p.y + rc.bottom - rc.top + 5);
 					DeleteObject(hPen);
 				}
-
 
 				int captionH = GetSystemMetrics(SM_CYCAPTION) +  ListBox_GetItemHeight(links[0].hWndFrom, 0) - 2;
 				for (int i = 0; links[i].type != 0; i++) {

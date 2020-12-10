@@ -23,5 +23,29 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Only utf-8 is supported
 * NULL is displayed as an empty string and an empty string is set to NULL when data is edit
 
+
+<details>
+ <summary>How to build</summary>
+  
+  * sqlite3.dll + sqlite3.def
+    ```
+    gcc -shared -Wl,--output-def=sqlite3.def sqlite3.c -o sqlite3.dll -DSQLITE_ENABLE_DBSTAT_VTAB -DSQLITE_ENABLE_COLUMN_METADATA  -s -O
+    ```
+
+ * libsqlite3.a
+    ```
+    dlltool -d sqlite3.def -l libsqlite3.a -D sqlite3.dll
+    ```
+
+ * Extension e.g. `json1`
+    ```
+    gcc -I ../include -g -shared json1.c -o json1.dll -s
+    ```
+    `series.c` and `regexp.c` should be compiled with additional flag `-Os` to minimize [VirusTotal alerts](https://github.com/little-brother/sqlite-gui/issues/3)	
+ 
+ * Use Code::Blocks 17 to build the app.   
+</details>
+
+
 If you liked the project, press the like-button [here](https://alternativeto.net/software/sqlite-gui/) to support it.<br>
 If you have any problems, comments or suggestions, just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.

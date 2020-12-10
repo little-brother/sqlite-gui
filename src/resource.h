@@ -7,6 +7,8 @@
 #define IDD_ADD_TABLE              17
 #define IDD_FIND                   18
 #define IDD_DDL                    19
+#define IDD_EDITDATA_VALUE         20
+#define IDD_VIEWDATA_VALUE         21
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -205,6 +207,7 @@
 #define IDM_EDITOR_DELETE          1604
 #define IDM_EDITOR_FIND            1605
 
+
 #define IDM_RESULT_COPY_CELL       1610
 #define IDM_RESULT_COPY_ROW        1611
 #define IDM_RESULT_EXPORT          1612
@@ -232,6 +235,7 @@
 
 #define IDM_ROW_EDIT               1712
 #define IDM_ROW_DELETE             1713
+#define IDM_ROW_DUPLICATE          1714
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732
@@ -277,6 +281,7 @@
 #define WMU_HIGHLIGHT              WM_USER + 9
 #define WMU_SHOW_TABLE_INFO        WM_USER + 10
 #define WMU_RESET_LISTVIEW         WM_USER + 11
+#define WMU_EDIT_VALUE             WM_USER + 12
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31
