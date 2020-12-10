@@ -163,7 +163,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.2"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.3"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1965,7 +1965,7 @@ TCHAR* getDDL(TCHAR* name16, int type, bool withDrop) {
 	TCHAR* res = 0;
 	sqlite3_stmt *stmt;
 	if (SQLITE_OK == sqlite3_prepare_v2(db, withDrop ?
-		"select group_concat('drop '|| type || ' ' || name || ';' || char(10) || char(10) || sql || ';', char(10) || char(10) || char(10)) " \
+		"select group_concat(iif(type = ?1 or type = 'table', 'drop '|| type || ' ' || name || ';' || char(10) || char(10), '') || sql || ';', char(10) || char(10) || char(10)) " \
 		"from sqlite_master where iif(?1 = 'table', tbl_name, name) = ?2 order by iif(type = 'table', 'a', type)" :
 		"select sql from sqlite_master where type = ?1 and name = ?2", -1, &stmt, 0)) {
 
@@ -2112,8 +2112,11 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_LABELTIP);
 	for (int i = 1; i <= colCount; i++) {
 		ListView_SetColumnWidth(hListWnd, i, LVSCW_AUTOSIZE_USEHEADER);
-		if (ListView_GetColumnWidth(hListWnd, i) > 200)
+		int w = ListView_GetColumnWidth(hListWnd, i);
+		if (w > 200)
 			ListView_SetColumnWidth(hListWnd, i, 200);
+		if (w > 0 && w < 60)
+			ListView_SetColumnWidth(hListWnd, i, 60);
 	}
 
 	return isStopByLimit ? -rowNo : rowNo;
