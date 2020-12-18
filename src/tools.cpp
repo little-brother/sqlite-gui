@@ -891,7 +891,7 @@ namespace tools {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (pHdr->idFrom == IDC_DLG_SCHEMA_DIFF && pHdr->code == (DWORD)NM_CLICK) {
+				if (pHdr->idFrom == IDC_DLG_SCHEMA_DIFF && pHdr->code == (DWORD)LVN_ITEMCHANGED) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 					TCHAR type16[32], name16[1024];
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 2, type16, 32);
@@ -928,7 +928,7 @@ namespace tools {
 					sqlite3_finalize(stmt);
 				}
 
-				if (pHdr->idFrom == IDC_DLG_DATA_DIFF && pHdr->code == (DWORD)NM_CLICK) {
+				if (pHdr->idFrom == IDC_DLG_DATA_DIFF && pHdr->code == (DWORD)LVN_ITEMCHANGED) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 					TCHAR name16[1024];
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 1, name16, 32);
@@ -965,7 +965,7 @@ namespace tools {
 				ComboBox_AddString(hPatternWnd, TEXT("Left and right wildcard"));
 				ComboBox_AddString(hPatternWnd, TEXT("Exact match"));
 				ComboBox_AddString(hPatternWnd, TEXT("Left wildcard"));
-				ComboBox_AddString(hPatternWnd, TEXT("Rigth wildcard"));
+				ComboBox_AddString(hPatternWnd, TEXT("Right wildcard"));
 				ComboBox_SetCurSel(hPatternWnd, 0);
 
 				HWND hColTypeWnd = GetDlgItem(hWnd, IDC_DLG_COLTYPE);

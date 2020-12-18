@@ -45,7 +45,6 @@ extern sqlite3 *db;
 extern HWND  hMainWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
 
 extern HTREEITEM treeItems[5]; // 0 - current
-extern HMENU treeMenus[6]; // 0 - add/refresh menu
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 extern TCHAR searchString[255];
 

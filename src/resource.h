@@ -136,12 +136,14 @@
 #define IDC_MENU_BLOB              504
 #define IDC_MENU_DIAGRAM           505
 
-#define IDC_MENU_TREE              510
-#define IDC_MENU_TABLE             511
-#define IDC_MENU_VIEW              512
-#define IDC_MENU_INDEX             513
-#define IDC_MENU_TRIGGER           514
-#define IDC_MENU_COLUMN            515
+#define IDC_MENU_TABLEVIEW         510
+#define IDC_MENU_INDEXTRIGGER      511
+#define IDC_MENU_TABLE             512
+#define IDC_MENU_VIEW              513
+#define IDC_MENU_INDEX             514
+#define IDC_MENU_TRIGGER           515
+#define IDC_MENU_COLUMN            516
+#define IDC_MENU_DISABLED          517
 
 // Iterable. Should have a gap
 #define IDC_ROW_LABEL              900
@@ -224,18 +226,23 @@
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
 #define IDM_EDIT                   1703
-#define IDM_DROP                   1704
+#define IDM_DELETE                 1704
 #define IDM_RENAME                 1705
 #define IDM_ADD_COLUMN             1706
 #define IDM_ERASE_DATA             1707
 #define IDM_DDL                    1708
+#define IDM_ENABLE                 1709
+#define IDM_DISABLE                1710
+#define IDM_VIEW                   1711
 
-#define IDM_ADD                    1710
-#define IDM_REFRESH                1711
+#define IDM_ADD                    1715
+#define IDM_REFRESH                1716
+#define IDM_ENABLE_ALL             1717
+#define IDM_DISABLE_ALL            1718
 
-#define IDM_ROW_EDIT               1712
-#define IDM_ROW_DELETE             1713
-#define IDM_ROW_DUPLICATE          1714
+#define IDM_ROW_EDIT               1722
+#define IDM_ROW_DELETE             1723
+#define IDM_ROW_DUPLICATE          1724
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732

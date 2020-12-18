@@ -82,6 +82,7 @@ namespace prefs {
 			"create table if not exists gists (query text not null, time real not null, primary key (query));" \
 			"create table if not exists generators (type text, value text);" \
 			"create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, query text, primary key (dbname, schema, tblname, colname)); " \
+			"create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); " \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
 			"commit;" \
 			"pragma synchronous = 0;";
