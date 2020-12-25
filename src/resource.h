@@ -32,11 +32,8 @@
 #define IDC_EDITOR                 103
 #define IDC_TAB                    104
 #define IDC_TREE                   105
-
-#define IDC_DLG_QUERYADD           106
-#define IDC_DLG_QUERYFILTER        107
-#define IDC_DLG_QUERYLIST          108
-#define IDC_DLG_USERDATA           109
+#define IDC_CLI_EDITOR             106
+#define IDC_CLI_RESULT             107
 
 #define IDC_DLG_EDITOR             110
 #define IDC_DLG_LABEL              111
@@ -65,6 +62,11 @@
 #define IDC_DLG_INDENT             133
 #define IDC_DLG_TOOLBAR            134
 #define IDC_DLG_STARTUP            135
+
+#define IDC_DLG_QUERYADD           136
+#define IDC_DLG_QUERYFILTER        137
+#define IDC_DLG_QUERYLIST          138
+#define IDC_DLG_USERDATA           139
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141

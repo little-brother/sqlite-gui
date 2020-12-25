@@ -2,4 +2,3 @@ bin/
 obj/
 extensions/*.dll
 ToDo.txt
-prefs.sqlite

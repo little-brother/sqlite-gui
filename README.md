@@ -14,6 +14,7 @@ Recent binaries are available at [Releases page](https://github.com/little-broth
 * Search text in the whole database
 * [Workflow manager](https://github.com/little-brother/sqlite-wf) (ETL)
 * Quick data references ([video](https://youtu.be/XL1_lFhzLKo))
+* Terminal mode
 * Data generator
 * Most usefull extensions are included
 * Demo database "Bookstore" for beginners

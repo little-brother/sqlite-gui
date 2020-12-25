@@ -5,10 +5,11 @@
 namespace prefs {
 	sqlite3* db;
 
-	const int ICOUNT = 31;
+	const int ICOUNT = 34;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count", "exit-by-escape",
+		"cli-font-size", "cli-row-limit", "cli-max-width",
 		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current", "query-data-in-current-tab",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
@@ -20,6 +21,7 @@ namespace prefs {
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1,
+		8, 10, 20,
 		1, 1, 1, 1, 1, 0, 0, 1, 0, 0,
 		0, 0,
 		0, 0, 1,
@@ -83,7 +85,9 @@ namespace prefs {
 			"create table if not exists generators (type text, value text);" \
 			"create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, query text, primary key (dbname, schema, tblname, colname)); " \
 			"create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); " \
+			"create table if not exists cli (\"time\" real, dbname text not null, query text not null, elapsed integer, result text); " \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
+			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
 			"commit;" \
 			"pragma synchronous = 0;";
 

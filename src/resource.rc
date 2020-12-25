@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 3, 4, 0
+FILEVERSION 1, 3, 5, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.3.4\000"
+			VALUE "FileVersion", "1.3.5\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.3.4\000"
+			VALUE "ProductVersion", "1.3.5\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -630,8 +630,8 @@ BEGIN
 		"Ctrl + O - Open database\n" \
 		"Ctrl + Q - Close database\n" \
 		"Ctrl + N - New editor\n" \
-		"Ctrl + Alt + Escape - Close current editor\n" \
-		"Ctrl + Alt + Right/Left - Toggle editor's tab\n\n" \
+		"Ctrl + Alt + Escape - Close the current editor\n" \
+		"Ctrl + Alt + Right/Left - Toggle the editor's tab\n\n" \
 		"Editor\n" \
 		"F8/Alt + Enter - Show query plan\n" \
 		"F9/Ctrl + Enter - Execute query\n" \
@@ -642,6 +642,10 @@ BEGIN
 		"Ctrl + Click - Edit the table data\n" \
 		"Ctrl + Tab - Toggle to a next result\n" \
 		"Ctrl + 1, Ctrl + 2, ... - Sort the result (should be in focus) by column 1, 2, ...\n\n" \
+		"Console editor\n" \
+		"Ctrl + Up - Previous query\n" \
+		"Ctrl + Down - Next query\n" \
+		"Ctrl + Tab - Find query beginning with input part\n\n" \
 		"Result set/Edit data dialog\n"
 		"Alt + Click - Show data if the column references to another table by foreign key e.g. execute ""select * from orders"" and click by ""8"" in ""customer_id"" column. " \
 		"You'll see details from ""customers"" table for id = 8. Edit ""preferences.refs"" data to change displayed info.\n\n" \
