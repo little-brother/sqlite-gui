@@ -168,7 +168,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.5"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.6"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1366,35 +1366,70 @@ int executeCLIQuery(bool isPlan) {
 		int colCount = sqlite3_column_count(stmt);
 
 		if (colCount && (rc == SQLITE_ROW || rc == SQLITE_DONE || rc == SQLITE_OK)) {
+			HWND hListWnd = CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 0, 0, 150, 200, hCLIResultWnd, (HMENU)0, GetModuleHandle(0), NULL);
+			size_t maxWidths[colCount]{0};
+
 			for (int i = 0; i < colCount; i++) {
 				TCHAR* name16 = utils::utf8to16(sqlite3_column_name(stmt, i));
-				TCHAR buf16[255];
-				_stprintf(buf16, TEXT("%-20s"), name16);
-				_tcscat(result16, buf16);
-				delete [] name16;
-				_tcscat(result16, i == colCount - 1 ? TEXT("\n") : TEXT(" | "));
+				ListBox_AddString(hListWnd, name16);
+				maxWidths[i] = _tcslen(name16);
 			}
-
-			TCHAR line16[colCount * 30 + 1]{0};
-			_tcscpy(line16, result16);
-			_tcsset(line16, TEXT('-'));
-			_tcscat(result16, line16);
-			_tcscat(result16, TEXT("\n"));
 
 			int rowLimit = prefs::get("cli-row-limit");
 			while (rc == SQLITE_ROW && (rowCount < rowLimit || rowLimit <= 0)) {
 				for (int i = 0; i < colCount; i++) {
-					TCHAR* value16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, i));
-					TCHAR buf16[255], vbuf16[32];
-					_tcsncpy(vbuf16, value16, 20);
-					_stprintf(buf16, TEXT("%-20s"), vbuf16);
-					_tcscat(result16, buf16);
-					delete [] value16;
-					_tcscat(result16, i == colCount - 1 ? TEXT("\n") : TEXT(" | "));
+					if (sqlite3_column_type(stmt, i) != SQLITE_BLOB) {
+						TCHAR* value16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, i));
+						TCHAR* tvalue16 = utils::replaceAll(value16, TEXT("\r\n"), TEXT(" "));
+						TCHAR trimmed16[256]{0};
+						_tcsncpy(trimmed16, tvalue16, 255);
+						delete [] tvalue16;
+						delete [] value16;
+						if (maxWidths[i] < _tcslen(trimmed16))
+							maxWidths[i] = _tcslen(trimmed16);
+
+						ListBox_AddString(hListWnd, trimmed16);
+					} else {
+						if (maxWidths[i] < 6)
+							maxWidths[i] = 6;
+						ListBox_AddString(hListWnd, TEXT("(BLOB)"));
+					}
 				}
 
 				rowCount++;
 				rc = sqlite3_step(stmt);
+			}
+
+			int w = (colCount - 1) * 3;
+			for (int i = 0; i < colCount; i++)
+				w += maxWidths[i];
+
+			TCHAR line16[w + 1]{0};
+			for (int i = 0; i < w; i++)
+				line16[i] = TEXT('-');
+			_tcscat(result16, line16);
+			_tcscat(result16, TEXT("\n"));
+
+			for (int i = 0; i < colCount; i++) {
+				TCHAR name16[255]{0};
+				ListBox_GetText(hListWnd, i, name16);
+				TCHAR buf16[maxWidths[i] + 10]{0};
+				_stprintf(buf16, TEXT("%-*s"), maxWidths[i], name16);
+				_tcscat(result16, buf16);
+				_tcscat(result16, (i < colCount - 1) ? TEXT(" | ") : TEXT("\n"));
+			}
+			_tcscat(result16, line16);
+			_tcscat(result16, TEXT("\n"));
+
+			for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+				for (int i = 0; i < colCount; i++) {
+					TCHAR value16[maxWidths[i] + 1]{0};
+					ListBox_GetText(hListWnd, i + (rowNo + 1) * colCount, value16);
+					TCHAR buf16[maxWidths[i] + 10]{0};
+					_stprintf(buf16, TEXT("%-*s"), maxWidths[i], value16);
+					_tcscat(result16, buf16);
+					_tcscat(result16, (i < colCount - 1) ? TEXT(" | ") : TEXT("\n"));
+				}
 			}
 
 			if (rc == SQLITE_ROW) {
@@ -1404,6 +1439,8 @@ int executeCLIQuery(bool isPlan) {
 
 			if (rowCount)
 				_tcscat(result16, line16);
+
+			DestroyWindow(hListWnd);
 		}
 
 		if (rc == SQLITE_DONE) {
@@ -1424,36 +1461,38 @@ int executeCLIQuery(bool isPlan) {
 		delete [] msg16;
 	}
 
-	_tcscat(result16, TEXT("\n\n============================================================\n\n"));
-	SendMessage(hCLIResultWnd, EM_SETSEL, 0, 0);
-	SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
-
-	if (rc == SQLITE_OK) {
+	if (_tcslen(result16)) {
+		_tcscat(result16, TEXT("\n\n============================================================\n\n"));
 		SendMessage(hCLIResultWnd, EM_SETSEL, 0, 0);
-		SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n"));
-		SendMessage(hCLIResultWnd, EM_SETSEL, 0, 0);
-		SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
-		SetWindowText(hCLIEditorWnd, 0);
+		SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
 
-		if(SQLITE_OK == sqlite3_prepare_v2(db, "insert into preferences.cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
-			char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
-			sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
-			delete [] dbname8;
+		if (rc == SQLITE_OK) {
+			SendMessage(hCLIResultWnd, EM_SETSEL, 0, 0);
+			SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n"));
+			SendMessage(hCLIResultWnd, EM_SETSEL, 0, 0);
+			SendMessage(hCLIResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
+			SetWindowText(hCLIEditorWnd, 0);
 
-			char* sql8 = utils::utf16to8(sql16);
-			sqlite3_bind_text(stmt, 2, sql8, strlen(sql8), SQLITE_TRANSIENT);
-			delete [] sql8;
+			if(SQLITE_OK == sqlite3_prepare_v2(db, "insert into preferences.cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
+				char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+				sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+				delete [] dbname8;
 
-			sqlite3_bind_int(stmt, 3, elapsed);
+				char* sql8 = utils::utf16to8(sql16);
+				sqlite3_bind_text(stmt, 2, sql8, strlen(sql8), SQLITE_TRANSIENT);
+				delete [] sql8;
 
-			char* result8 = utils::utf16to8(result16);
-			sqlite3_bind_text(stmt, 4, result8, strlen(result8), SQLITE_TRANSIENT);
-			delete [] result8;
+				sqlite3_bind_int(stmt, 3, elapsed);
 
-			if (SQLITE_DONE != sqlite3_step(stmt))
-				showDbError(hMainWnd);
+				char* result8 = utils::utf16to8(result16);
+				sqlite3_bind_text(stmt, 4, result8, strlen(result8), SQLITE_TRANSIENT);
+				delete [] result8;
+
+				if (SQLITE_DONE != sqlite3_step(stmt))
+					showDbError(hMainWnd);
+			}
+			sqlite3_finalize(stmt);
 		}
-		sqlite3_finalize(stmt);
 	}
 
 	delete [] sql8;
@@ -1462,6 +1501,7 @@ int executeCLIQuery(bool isPlan) {
 	SetWindowLong(hCLIEditorWnd, GWL_USERDATA, 0);
 
 	enableMainMenu();
+	updateTransactionState();
 	return 1;
 }
 
@@ -1692,11 +1732,17 @@ void suggestCLIQuery(int key) {
 	sqlite3_stmt *stmt;
 	char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 
+	int size = GetWindowTextLength(hCLIEditorWnd);
+	TCHAR sql16[size + 1] = {0};
+	GetWindowText(hCLIEditorWnd, sql16, size + 1);
+	char *sql8 = utils::utf16to8(sql16);
+
 	int rc = SQLITE_OK == sqlite3_prepare_v2(db,
-		key == VK_UP ? "select time, query from preferences.cli where dbname = ?1 and time < coalesce(?2, time + 1) order by time desc limit 1" :
-		key == VK_DOWN ? "select time, query from preferences.cli where dbname = ?1 and time > coalesce(?2, time - 1) order by time asc limit 1" :
-		key == VK_TAB ? "select time, query from preferences.cli where dbname = ?1 and query like '%' || ?2 || '%' limit 1" : "", -1, &stmt, 0);
+		key == VK_UP ? "select time, query from preferences.cli where dbname = ?1 and time < coalesce(?2, time + 1) and query <> ?3 order by time desc limit 1" :
+		key == VK_DOWN ? "select time, query from preferences.cli where dbname = ?1 and time > coalesce(?2, time - 1) and query <> ?3 order by time asc limit 1" :
+		key == VK_TAB ? "select time, query from preferences.cli where dbname = ?1 and query like '%' || ?2 || '%'  and query <> ?3 limit 1" : "", -1, &stmt, 0);
 	sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 3, sql8, strlen(sql8), SQLITE_TRANSIENT);
 
 	if (rc && (key == VK_UP || key == VK_DOWN)) {
 		int time = GetWindowLong(hCLIEditorWnd, GWL_USERDATA);
@@ -1731,6 +1777,7 @@ void suggestCLIQuery(int key) {
 
 	sqlite3_finalize(stmt);
 	delete [] dbname8;
+	delete [] sql8;
 }
 
 void openDb(const TCHAR* path) {
@@ -2025,9 +2072,6 @@ void enableMainMenu() {
 	hMenu = GetSubMenu(hMainMenu, 2);
 	for (int i = 0; i < GetMenuItemCount(hMenu); i++)
 		EnableMenuItem(hMenu, i, MF_BYPOSITION | MF_ENABLED);
-
-	hMenu = GetSubMenu(hMainMenu, 2);
-	EnableMenuItem(hMenu, IDM_GENERATE_DATA, isQueryValid("select rownum(1) from generate_series(1,1,1)") ? MF_BYCOMMAND | MF_ENABLED : MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
 
 	setToolbarButtonState(IDM_CLOSE, TBSTATE_ENABLED);
 	setToolbarButtonState(IDM_PLAN, TBSTATE_ENABLED);

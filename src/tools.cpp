@@ -1432,7 +1432,9 @@ namespace tools {
 
 					int rowCount = getDlgItemTextAsNumber(hWnd, IDC_DLG_GEN_ROW_COUNT);
 
-					sprintf(query8, "insert into temp.data_generator (rownum) select value from generate_series(1, %i, 1)", rowCount);
+					sprintf(query8,
+						"with recursive series(val) as (select 1 union all select val + 1 from series limit %i) " \
+						"insert into temp.data_generator (rownum) select val from series", rowCount);
 					execute(query8);
 
 					HWND hColumnWnd = GetWindow(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GW_CHILD);
@@ -1455,7 +1457,7 @@ namespace tools {
 
 						if (_tcscmp(type16, TEXT("sequence")) == 0) {
 							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
-							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = rownum + %i"), name16, start);
+							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = rownum + %i - 1"), name16, start);
 						}
 
 						if (_tcscmp(type16, TEXT("number")) == 0) {
@@ -1473,8 +1475,9 @@ namespace tools {
 							TCHAR refcolumn16[256]{0};
 							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
 
-							_stprintf(query16, TEXT("with t as (select %s value from \"%s\" order by random()), "\
-								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
+							_stprintf(query16, TEXT("with t as (select %s value from \"%s\" order by random()), " \
+								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
+								"t2 as (select t.value FROM t, series order by random()), " \
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
 								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
 								refcolumn16, reftable16, rowCount, rowCount, name16);

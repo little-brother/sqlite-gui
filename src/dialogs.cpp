@@ -1603,6 +1603,9 @@ namespace dialogs {
 				_stprintf(buf, TEXT("%i"), prefs::get("row-limit"));
 				SetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf);
 
+				_stprintf(buf, TEXT("%i"), prefs::get("cli-row-limit"));
+				SetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf);
+
 				char* startup8 = prefs::get("startup", "");
 				TCHAR* startup16 = utils::utf8to16(startup8);
 				SetDlgItemText(hWnd, IDC_DLG_STARTUP, startup16);
@@ -1636,6 +1639,9 @@ namespace dialogs {
 
 					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
+
+					GetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf, 255);
+					prefs::set("cli-row-limit", (int)_tcstod(buf, NULL));
 
 					setEditorFont(hEditorWnd);
 					setTreeFont(hTreeWnd);

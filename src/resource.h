@@ -75,6 +75,7 @@
 #define IDC_DLG_ISUNIQUE           144
 #define IDC_DLG_ISNOTNULL          145
 #define IDC_DLG_EXAMPLE            146
+#define IDC_DLG_CLI_ROW_LIMIT      147
 
 #define IDC_DLG_ROW_ADD            150
 #define IDC_DLG_ROW_DEL            151
