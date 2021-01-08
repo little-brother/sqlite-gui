@@ -7,8 +7,9 @@
 #define IDD_ADD_TABLE              17
 #define IDD_FIND                   18
 #define IDD_DDL                    19
-#define IDD_EDITDATA_VALUE         20
-#define IDD_VIEWDATA_VALUE         21
+#define IDD_CHART                  20
+#define IDD_EDITDATA_VALUE         21
+#define IDD_VIEWDATA_VALUE         22
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -76,6 +77,7 @@
 #define IDC_DLG_ISNOTNULL          145
 #define IDC_DLG_EXAMPLE            146
 #define IDC_DLG_CLI_ROW_LIMIT      147
+#define IDC_DLG_BEEP_ON_QUERY_END  148
 
 #define IDC_DLG_ROW_ADD            150
 #define IDC_DLG_ROW_DEL            151
@@ -189,12 +191,13 @@
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541
 #define IDM_HOMEPAGE               1542
-#define IDM_HOTKEYS                1543
-#define IDM_TIPS                   1544
-#define IDM_EXTENSIONS             1545
-#define IDM_SQLITE_HOMEPAGE        1546
-#define IDM_TUTORIAL1              1547
-#define IDM_TUTORIAL2              1548
+#define IDM_WIKI                   1543
+#define IDM_HOTKEYS                1544
+#define IDM_TIPS                   1545
+#define IDM_EXTENSIONS             1546
+#define IDM_SQLITE_HOMEPAGE        1547
+#define IDM_TUTORIAL1              1548
+#define IDM_TUTORIAL2              1549
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_CHANGE_FOCUS           1591
@@ -213,9 +216,10 @@
 #define IDM_EDITOR_FIND            1605
 
 
-#define IDM_RESULT_COPY_CELL       1610
-#define IDM_RESULT_COPY_ROW        1611
-#define IDM_RESULT_EXPORT          1612
+#define IDM_RESULT_CHART           1610
+#define IDM_RESULT_COPY_CELL       1611
+#define IDM_RESULT_COPY_ROW        1612
+#define IDM_RESULT_EXPORT          1613
 
 #define IDM_BLOB_NULL              1620
 #define IDM_BLOB_IMPORT            1621

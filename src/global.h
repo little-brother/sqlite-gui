@@ -8,6 +8,7 @@
 #define MAX_TEXT_LENGTH          32000
 #define MAX_TOOLTIP_LENGTH        1024
 #define MAX_REFCOLUMN_COUNT        128
+#define MAX_CHART_COLOR_COUNT        9
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -28,6 +29,9 @@
 #define TRIGGER                     4
 #define COLUMN                      5
 
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
@@ -38,6 +42,7 @@
 #include <ctime>
 #include <sys/stat.h>
 #include <locale.h>
+#include <math.h>
 
 #include "sqlite3.h"
 
@@ -81,6 +86,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
 int ListView_Sort(HWND hListWnd, int colNo);
 int ListView_Reset(HWND hListWnd);
+int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
 TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);

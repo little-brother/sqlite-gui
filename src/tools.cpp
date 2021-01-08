@@ -466,17 +466,13 @@ namespace tools {
 						delete [] tb;
 					};
 
-					HD_ITEM hdi = {0};
-					hdi.mask = HDI_TEXT;
-					hdi.pszText = buf16;
-					hdi.cchTextMax = 255;
 					for (int i = 0; i < colCount; i++) {
 						if (i != 0) {
 							_tcscat(create16, TEXT(", "));
 							_tcscat(insert16, TEXT(", "));
 						}
 
-						Header_GetItem(hHeader, i, &hdi);
+						Header_GetItemText(hHeader, i, buf16, 255);
 						catQuotted(create16, buf16);
 						catQuotted(insert16, buf16);
 					}
@@ -1522,7 +1518,7 @@ namespace tools {
 						execute(query8);
 					}
 
-					sprintf(query8, "insert into \"%s\" (%s) select %s from temp.data_generator", table8, columns8, columns8);
+					snprintf(query8, MAX_TEXT_LENGTH, "insert into \"%s\" (%s) select %s from temp.data_generator", table8, columns8, columns8);
 					if (execute(query8))
 						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
 					else
@@ -1901,13 +1897,6 @@ namespace tools {
 					}
 				}
 
-				auto max = [](int a, int b) {
-					return a > b ? a : b;
-				};
-				auto min = [](int a, int b) {
-					return a < b ? a : b;
-				};
-
 				bool isFk = prefs::get("link-fk");
 				bool isView = prefs::get("link-view");
 				bool isTrigger = prefs::get("link-trigger");
@@ -1977,8 +1966,8 @@ namespace tools {
 						a = {from.x + (isRightA ? wA : 0), from.y + rcFrom.top  + captionH};
 						b = {to.x + (isRightB ? wB : 0), to.y + rcTo.top  + captionH};
 
-						int midX = isRightA && isRightB ? max(from.x + wA, to.x + wB) + minStick :
-							!isRightA && !isRightB ? min(from.x, to.x) - minStick :
+						int midX = isRightA && isRightB ? MAX(from.x + wA, to.x + wB) + minStick :
+							!isRightA && !isRightB ? MIN(from.x, to.x) - minStick :
 							isRightA && !isRightB ? from.x + wA + (to.x - from.x - wA) / 2 :
 							!isRightA && isRightB ? to.x + wB + (from.x - to.x - wB) / 2 :
 							0;
@@ -2011,8 +2000,8 @@ namespace tools {
 						a = {from.x + wA/2 - shift, from.y + (isBottomA ? hA : 0)};
 						b = {to.x + wB/2 + shift, to.y + (isBottomB ? hB : 0)};
 
-						int midY = isBottomA && isBottomB ? max(from.y + hA, to.y + hB) + minStick :
-							!isBottomA && !isBottomB ? min(from.y, to.y) - minStick :
+						int midY = isBottomA && isBottomB ? MAX(from.y + hA, to.y + hB) + minStick :
+							!isBottomA && !isBottomB ? MIN(from.y, to.y) - minStick :
 							isBottomA && !isBottomB ? from.y + hA + (to.y - from.y - hA) / 2 :
 							!isBottomA && isBottomB ? to.y + hB + (from.y - to.y - hB) / 2 :
 							0;

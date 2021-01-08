@@ -19,11 +19,6 @@
 					<Add option="-D_UNICODE" />
 					<Add directory="include" />
 				</Compiler>
-				<Linker>
-					<Add library="lib/libsqlite3.a" />
-					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libcomdlg32.a" />
-					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libshlwapi.a" />
-				</Linker>
 			</Target>
 			<Target title="Release">
 				<Option output="bin/Release/sqlite-gui" prefix_auto="1" extension_auto="1" />
@@ -31,7 +26,7 @@
 				<Option type="0" />
 				<Option compiler="gcc" />
 				<Compiler>
-					<Add option="-O" />
+					<Add option="-Os" />
 					<Add option="-std=c++11" />
 					<Add option="-U__STRICT_ANSI__" />
 					<Add option="-DUNICODE" />
@@ -40,9 +35,6 @@
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
-					<Add library="lib/libsqlite3.a" />
-					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libcomdlg32.a" />
-					<Add library="C:/Program Files (x86)/CodeBlocks/MinGW/lib/libshlwapi.a" />
 				</Linker>
 			</Target>
 		</Build>
@@ -54,6 +46,9 @@
 			<Add library="user32" />
 			<Add library="kernel32" />
 			<Add library="comctl32" />
+			<Add library="C:/MinGW/lib/libcomdlg32.a" />
+			<Add library="C:/MinGW/lib/libshlwapi.a" />
+			<Add library="lib/libsqlite3.a" />
 		</Linker>
 		<Unit filename="ToDo.txt" />
 		<Unit filename="src/dialogs.cpp" />

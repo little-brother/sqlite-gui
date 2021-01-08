@@ -266,6 +266,7 @@ namespace dialogs {
 					bool isOpen = GetWindowLong(hBtn, GWL_USERDATA);
 					SetWindowLong(hBtn, GWL_USERDATA, !isOpen);
 					SetWindowText(hBtn, isOpen ? TEXT(">>") : TEXT("<<"));
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISWITHOUT_ROWID), isOpen ? SW_HIDE : SW_SHOW);
 
 					RECT rc;
 					GetWindowRect(hWnd, &rc);
@@ -616,19 +617,42 @@ namespace dialogs {
 				delete [] tablename16;
 				delete [] schema16;
 
+				sqlite3_stmt *stmt;
+				char query8[MAX_TEXT_LENGTH]{0};
+				sprintf(query8, "select rowid from \"%s\".\"%s\" limit 1", schema8, tablename8);
+				bool hasRowid = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+				sqlite3_finalize(stmt);
+
+				SetProp(hWnd, TEXT("HASROWID"), (HANDLE)hasRowid);
+				if (!hasRowid) {
+					sprintf(query8,
+						"select '\"' || group_concat(name, '\",\"') || '\"', " \
+						"'md5(\"' || group_concat(name, '\" || ''***'' || \"') || '\")', " \
+						"count(1) "
+						"from pragma_table_info('%s') where pk > 0 and schema = '%s' order by pk ", tablename8, schema8);
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0) && SQLITE_ROW == sqlite3_step(stmt)) {
+						SetProp(hWnd, TEXT("KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 0)));
+						SetProp(hWnd, TEXT("MD5KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 1)));
+						SetProp(hWnd, TEXT("KEYCOUNT"), (HANDLE)sqlite3_column_int(stmt, 2));
+					} else {
+						showDbError(hWnd);
+					}
+					sqlite3_finalize(stmt);
+				}
+
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0 , 0);
 				SetFocus(hFilterWnd);
 
 				sprintf(filterQuery8,
 					"select '\"***\" || coalesce(' || group_concat(name, ', \"\") || \"***\" || coalesce(') || ', \"\") || \"***\"', "\
-					"(select type from %s.sqlite_master where tbl_name = \"%s\" and type in ('view', 'table')) type from pragma_table_info t where schema = '%s' and arg = '%s'",
+					"(select type from %s.sqlite_master where tbl_name = \"%s\" and type in ('view', 'table')) type from pragma_table_info t where schema = '%s' and arg = '%s' and upper(t.type) <> 'BLOB'",
 					schema8, tablename8, schema8, tablename8);
 
 				bool isTable = false;
-				sqlite3_stmt *stmt;
 				if ((SQLITE_OK == sqlite3_prepare_v2(db, filterQuery8, -1, &stmt, 0)) && (SQLITE_ROW == sqlite3_step(stmt))) {
-					sprintf(filterQuery8, "select *, rowid from \"%s\".\"%s\" where %s like \"***%%%%%%s%%%%***\"", schema8, tablename8, sqlite3_column_text(stmt, 0));
+					sprintf(filterQuery8, "select *, %s from \"%s\".\"%s\" where %s like \"***%%%%%%s%%%%***\"",
+						hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")), schema8, tablename8, sqlite3_column_text(stmt, 0));
 					isTable = strcmp((char*)sqlite3_column_text(stmt, 1), "table") == 0;
 				} else {
 					showDbError(hWnd);
@@ -676,6 +700,7 @@ namespace dialogs {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 
 				int size = GetWindowTextLength(hFilterWnd);
 				TCHAR filter16[size + 1]{0};
@@ -686,10 +711,10 @@ namespace dialogs {
 				char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 
 				char query8[MAX_TEXT_LENGTH]{0};
-				sprintf(query8, "select *, rowid rowid from \"%s\".\"%s\" t %s", schema8, tablename8, filter8 && strlen(filter8) ? filter8 : "");
+				sprintf(query8, "select *, %s rowid from \"%s\".\"%s\" t %s", hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")), schema8, tablename8, filter8 && strlen(filter8) ? filter8 : "");
 
 				if (!isQueryValid(query8)) {
-					sprintf(query8, "select *, rowid rowid from \"%s\".\"%s\" where %s", schema8, tablename8, filter8);
+					sprintf(query8, "select *, %s rowid from \"%s\".\"%s\" where %s", hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")), schema8, tablename8, filter8);
 
 					// "where 4" or "where true" are valid filters
 					bool isValid = isQueryValid(query8);
@@ -706,6 +731,7 @@ namespace dialogs {
 							types[i] = stricmp(sqlite3_column_decltype(stmt, i), "blob") == 0;
 						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)types);
 					}
+
 					int rowCount = ListView_SetData(hListWnd, stmt, true);
 					ListView_SetColumnWidth(hListWnd, colCount, 0); // last column is rowid
 
@@ -726,6 +752,7 @@ namespace dialogs {
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
 				if (pHdr->code == LVN_COLUMNCLICK) {
@@ -747,6 +774,8 @@ namespace dialogs {
 
 					if (hMenu == hEditDataMenu)
 						EnableMenuItem(hMenu, IDM_ROW_EDIT, ListView_GetSelectedCount(hListWnd) == 1 ? MF_BYCOMMAND | MF_ENABLED : MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
+
+					EnableMenuItem(hMenu, IDM_ROW_DUPLICATE, hasRowid ? MF_BYCOMMAND | MF_ENABLED : MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
 
 					TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
 				}
@@ -818,6 +847,7 @@ namespace dialogs {
 			case WM_COMMAND: {
 				WORD cmd = LOWORD(wParam);
 				bool isTable = GetWindowLong(hWnd, GWL_USERDATA) == 1;
+				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
 				if (wParam == IDOK) { // User push Enter
@@ -857,11 +887,11 @@ namespace dialogs {
 						placeholders8[i] = i % 2 ? ',' : '?';
 					placeholders8[count * 2 - 1] = '\0';
 
-					char sql8[128 + count * 2]{0};
+					char sql8[1024 + count * 2]{0};
 					char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 
-					sprintf(sql8, "delete from \"%s\".\"%s\" where rowid in (%s)", schema8, tablename8, placeholders8);
+					sprintf(sql8, "delete from \"%s\".\"%s\" where %s in (%s)", schema8, tablename8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")),  placeholders8);
 					delete [] placeholders8;
 
 					sqlite3_stmt *stmt;
@@ -872,8 +902,12 @@ namespace dialogs {
 						for (int i = 0; i < count; i++) {
 							pos = ListView_GetNextItem(hListWnd, pos, LVNI_SELECTED);
 							ListView_GetItemText(hListWnd, pos, colCount - 1, buf16, 128);
-							sqlite3_bind_int64(stmt, i + 1, _tcstol(buf16, NULL, 10));
+							char* buf8 = utils::utf16to8(buf16);
+							sqlite3_bind_text(stmt, i + 1, buf8, strlen(buf8), SQLITE_TRANSIENT);
+							delete [] buf8;
 						}
+
+
 
 						if (SQLITE_DONE == sqlite3_step(stmt)) {
 							pos = -1;
@@ -903,7 +937,6 @@ namespace dialogs {
 						_tcscat(ids16, buf16);
 					}
 
-
 					char sql8[1024]{0};
 					char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
@@ -921,7 +954,6 @@ namespace dialogs {
 					sqlite3_finalize(stmt);
 
 					delete [] ids8;
-
 				}
 
 				if (cmd == IDM_BLOB_NULL || cmd == IDM_BLOB_IMPORT || cmd == IDM_BLOB_EXPORT) {
@@ -939,38 +971,37 @@ namespace dialogs {
 					HWND hListWnd = currCell.hListWnd;
 					HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
 
-					TCHAR column16[64];
-					HDITEM hdi = {0};
-					hdi.mask = HDI_TEXT;
-					hdi.pszText = column16;
-					hdi.cchTextMax = 64;
-
-					if (!hHeader || !Header_GetItem(hHeader, colNo, &hdi))
+					TCHAR column16[256];
+					if (!hHeader || !Header_GetItemText(hHeader, colNo, column16, 255))
 						return 1;
 
-					TCHAR rowid16[32] = {0};
+					TCHAR rowid16[65] = {0};
 					int colCount = Header_GetItemCount(hHeader);
 					ListView_GetItemText(hListWnd, rowNo, colCount - 1, rowid16, 64);
-					long rowid = _tcstol(rowid16, NULL, 10);
 
 					char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 					char* column8 = utils::utf16to8(column16);
 
-					char query8[256] = {0};
+					char query8[1024] = {0};
 					if (cmd == IDM_BLOB_EXPORT) {
-						sprintf(query8, "select %s from \"%s\".\"%s\" where rowid = ?1", column8, schema8, tablename8);
+						sprintf(query8, "select %s from \"%s\".\"%s\" where %s = ?1", column8, schema8, tablename8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")));
 					} else {
-						sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where rowid = ?2", schema8, tablename8, column8);
+						sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?2 where %s = ?1", schema8, tablename8, column8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")));
 					}
 
 					char* path8 = utils::utf16to8(path16);
 					sqlite3_stmt *stmt;
 
 					int	rc = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+					if (rc) {
+						char* rowid8 = utils::utf16to8(rowid16);
+						sqlite3_bind_text(stmt, 1, rowid8, strlen(rowid8), SQLITE_TRANSIENT);
+						delete [] rowid8;
+					}
+
 					if (rc && (cmd == IDM_BLOB_NULL)) {
-						sqlite3_bind_null(stmt, 1);
-						sqlite3_bind_int64(stmt, 2, rowid);
+						sqlite3_bind_null(stmt, 2);
 						rc = SQLITE_DONE == sqlite3_step(stmt);
 						ListView_SetItemText(hListWnd, rowNo, colNo, TEXT(""));
 					}
@@ -989,8 +1020,7 @@ namespace dialogs {
 							fread(data8, size, 1, fp);
 							fclose(fp);
 
-							sqlite3_bind_blob(stmt, 1, data8, size, SQLITE_TRANSIENT);
-							sqlite3_bind_int64(stmt, 2, rowid);
+							sqlite3_bind_blob(stmt, 2, data8, size, SQLITE_TRANSIENT);
 							rc = SQLITE_DONE == sqlite3_step(stmt);
 							delete [] data8;
 
@@ -999,7 +1029,6 @@ namespace dialogs {
 					}
 
 					if (rc && (cmd == IDM_BLOB_EXPORT)) {
-						sqlite3_bind_int64(stmt, 1, rowid);
 						rc = SQLITE_ROW == sqlite3_step(stmt);
 						FILE *fp = fopen (path8 , "wb");
 						if (!fp)
@@ -1065,6 +1094,19 @@ namespace dialogs {
 				bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
 				delete [] blobs;
 				RemoveProp(hWnd, TEXT("BLOBS"));
+
+				RemoveProp(hWnd, TEXT("HASROWID"));
+				RemoveProp(hWnd, TEXT("KEYCOUNT"));
+
+				char* keys = (char*)GetProp(hWnd, TEXT("KEYS8"));
+				if (keys)
+					delete [] keys;
+				RemoveProp(hWnd, TEXT("KEYS8"));
+
+				char* md5keys = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
+				if (md5keys)
+					delete [] md5keys;
+				RemoveProp(hWnd, TEXT("MD5KEYS8"));
 
 				EndDialog(hWnd, DLG_CANCEL);
 			}
@@ -1162,12 +1204,8 @@ namespace dialogs {
 					EndDialog(hWnd, DLG_CANCEL);
 
 				for (int colNo = 1; colNo < colCount; colNo++) {
-					TCHAR colName[255];
-					HDITEM hdi = { 0 };
-					hdi.mask = HDI_TEXT;
-					hdi.pszText = colName;
-					hdi.cchTextMax = 255;
-					Header_GetItem(hHeader, colNo, &hdi);
+					TCHAR colName[256];
+					Header_GetItemText(hHeader, colNo, colName, 255);
 
 					CreateWindow(WC_STATIC, colName, WS_VISIBLE | WS_CHILD | SS_RIGHT, 5, 5 + 20 * (colNo - 1), 70, 18, hWnd, (HMENU)(IDC_ROW_LABEL +  colNo), GetModuleHandle(0), 0);
 					CreateWindow(WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | WS_CLIPSIBLINGS | WS_TABSTOP | ES_AUTOHSCROLL | (mode == ROW_VIEW ? ES_READONLY : 0), 80, 3 + 20 * (colNo - 1), 284, 18, hWnd, (HMENU)(IDC_ROW_EDIT + colNo), GetModuleHandle(0), 0);
@@ -1243,6 +1281,10 @@ namespace dialogs {
 					int mode = LOWORD(GetWindowLong(hWnd, GWL_USERDATA));
 					int colCount = HIWORD(GetWindowLong(hWnd, GWL_USERDATA));
 
+					HWND hParentWnd = GetParent(hListWnd);
+					bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
+					char* md5keys8 = (char*)GetProp(hParentWnd, TEXT("MD5KEYS8"));
+
 					auto changeCurrentItem = [hListWnd, mode]() {
 						ListView_SetItemState( hListWnd, -1, LVIF_STATE, LVIS_SELECTED);
 
@@ -1294,7 +1336,7 @@ namespace dialogs {
 						values8[i] = utils::utf16to8(values16[i]);
 					}
 
-					char* sql8 = new char[MAX_TEXT_LENGTH]{0};
+					char sql8[MAX_TEXT_LENGTH]{0};
 					char buf8[256];
 					sprintf(buf8, mode == ROW_ADD ? "insert into \"%s\".\"%s\" (" : "update \"%s\".\"%s\" set ", schema8, tablename8);
 					strcat(sql8, buf8);
@@ -1310,16 +1352,17 @@ namespace dialogs {
 					}
 
 					if (mode == ROW_ADD) {
-						char* placeholders8 = new char[(valCount + 1) * 2]{0}; // count = 3 => ?, ?, ?
+						char placeholders8[(valCount + 1) * 2]{0}; // count = 3 => ?, ?, ?
 						for (int i = 0; i < (valCount + 1) * 2 - 3; i++)
 							placeholders8[i] = i % 2 ? ',' : '?';
 						placeholders8[(valCount + 1) * 2 - 1] = '\0';
 						strcat(sql8, ") values (");
 						strcat(sql8, placeholders8);
 						strcat(sql8, ")");
-						delete [] placeholders8;
 					} else {
-						strcat(sql8, " where rowid = ?");
+						strcat(sql8, " where ");
+						strcat(sql8, hasRowid ? " rowid " : md5keys8);
+						strcat(sql8, " = ? ");
 					}
 
 					struct HookUserData {
@@ -1347,23 +1390,59 @@ namespace dialogs {
 							}
 
 						if (mode == ROW_EDIT) {
-							TCHAR rowid[64];
-							ListView_GetItemText(hListWnd, currCell.iItem, colCount, rowid, 64);
-							sqlite3_bind_int64(stmt, valNo, _tcstol(rowid, NULL, 10));
+							TCHAR rowid16[64];
+							ListView_GetItemText(hListWnd, currCell.iItem, colCount, rowid16, 64);
+							char* rowid8 = utils::utf16to8(rowid16);
+							sqlite3_bind_text(stmt, valNo, rowid8, strlen(rowid8), SQLITE_TRANSIENT);
+							delete [] rowid8;
 						}
 
 						rc = SQLITE_DONE == sqlite3_step(stmt);
-						sqlite3_finalize(stmt);
-						sqlite3_update_hook(db, NULL, NULL);
 					}
+					sqlite3_finalize(stmt);
+					sqlite3_update_hook(db, NULL, NULL);
 
 					if (rc) {
-						char sql8[255];
-						sprintf(sql8, "select *, rowid from \"%s\".\"%s\" where rowid = ?", schema8, tablename8);
+						char sql8[255 + strlen(hasRowid ? "rowid" : md5keys8)];
+						sprintf(sql8, "select *, %s rowid from \"%s\".\"%s\" where %s = ?", hasRowid ? "rowid" : md5keys8, schema8, tablename8, hasRowid ? "rowid" : md5keys8);
 
 						sqlite3_stmt *stmt;
 						sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
-						sqlite3_bind_int64(stmt, 1, hud.rowid);
+						if (hasRowid) {
+							sqlite3_bind_int64(stmt, 1, hud.rowid);
+						} else {
+							char* keys8 = (char*)GetProp(hParentWnd, TEXT("KEYS8"));
+							int keyCount = (int)GetProp(hParentWnd, TEXT("KEYCOUNT"));
+							char placeholders8[(keyCount + 1) * 2]{0}; // count = 3 => ?, ?, ?
+							for (int i = 0; i < (keyCount + 1) * 2 - 3; i++)
+								placeholders8[i] = i % 2 ? ',' : '?';
+							placeholders8[(keyCount + 1) * 2 - 1] = 0;
+
+							char sub8[2 * strlen(keys8) + 256]{0};
+							sprintf(sub8, "select %s from \"%s\".\"%s\" where (%s) = (%s)", md5keys8, schema8, tablename8, keys8, placeholders8);
+
+							sqlite3_stmt *stmt2;
+							if (SQLITE_OK == sqlite3_prepare_v2(db, sub8, -1, &stmt2, 0)) {
+								int valNo = 0;
+								for (int i = 1; i < colCount && valNo < keyCount; i++) {
+									char column8[strlen(columns8[i]) + 3]{0};
+									sprintf(column8, "\"%s\"", columns8[i]);
+									if (strstr(keys8, column8)) {
+										sqlite3_bind_text(stmt2, valNo + 1, values8[i], strlen(values8[i]), SQLITE_TRANSIENT);
+										valNo++;
+									}
+								}
+
+								if (SQLITE_ROW == sqlite3_step(stmt2)) {
+									const char* md5 = (const char*)sqlite3_column_text(stmt2, 0);
+									sqlite3_bind_text(stmt, 1, md5, strlen(md5), SQLITE_TRANSIENT);
+								}
+							} else {
+								showDbError(hWnd);
+							}
+							sqlite3_finalize(stmt2);
+						}
+
 
 						if (SQLITE_ROW == sqlite3_step(stmt)) {
 							int iItem = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currCell.iItem;
@@ -1410,7 +1489,6 @@ namespace dialogs {
 
 					delete [] tablename8;
 					delete [] schema8;
-					delete [] sql8;
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -1557,6 +1635,415 @@ namespace dialogs {
 	}
 
 
+
+	#define CHART_NONE 0
+	#define CHART_PLOT 1
+	#define CHART_BARS 2
+
+	#define CHART_MAX  1.79769e+308
+	#define CHART_NULL 0.00012003
+
+	#define CHART_BORDER 40
+	#define CHART_GRID 5
+	#define CHART_BARS_LEFT 150
+	#define CHART_BAR_HEIGHT 20
+	#define CHART_BAR_SPACE 3
+
+	COLORREF COLORS[MAX_CHART_COLOR_COUNT] = {RGB(51, 34, 136), RGB(136, 204, 238), RGB(68, 170, 153), RGB(17, 119, 51), RGB(153, 153, 51), RGB(221, 204, 119), RGB(204, 102, 119), RGB(136, 34, 85), RGB(170, 68, 153)};
+	HPEN hPens[MAX_CHART_COLOR_COUNT];
+	HBRUSH hBrushes[MAX_CHART_COLOR_COUNT];
+
+	int qsortComparator (const double *i, const double *j) {
+		double s = *i - *j;
+		return s > 0 ? 1 : s < 0 ? -1 : 0;
+	}
+
+	double map (double x, double in_min, double in_max, double out_min, double out_max) {
+		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+	}
+
+	BOOL CALLBACK cbDlgChart (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLong(hWnd, GWL_USERDATA, lParam);
+				for (int i = 0; i < MAX_CHART_COLOR_COUNT; i++) {
+					hPens[i] = CreatePen(PS_SOLID, 2, COLORS[i]);
+					hBrushes[i] = CreateSolidBrush(COLORS[i]);
+				}
+
+				HWND hListWnd = (HWND)lParam;
+				int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd));
+				int rowCount = ListView_GetItemCount(hListWnd);
+				int size = colCount * rowCount;
+				double *rawdata = new double[size];
+				double *data = new double[size];
+
+				double minX = CHART_MAX;
+				double maxX = -CHART_MAX;
+				double minY = CHART_MAX;
+				double maxY = -CHART_MAX;
+
+				for (int i = 0; i < size; i++) {
+					rawdata[i] = CHART_NULL;
+					data[i] = CHART_NULL;
+				}
+
+				for (int colNo = 1; colNo < colCount; colNo++) {
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						TCHAR buf16[256]{0};
+						double val;
+						ListView_GetItemText(hListWnd, rowNo, colNo, buf16, 255);
+						if (_tcslen(buf16) && utils::isNumber(buf16, &val)) {
+							rawdata[colNo * rowCount + rowNo] = val;
+							minX = colNo == 1 ? MIN(val, minX) : minX;
+							maxX = colNo == 1 ? MAX(val, maxX) : maxX;
+							minY = colNo > 1 ? MIN(val, minY) : minY;
+							maxY = colNo > 1 ? MAX(val, maxY) : maxY;
+						}
+					}
+				}
+
+				int type = CHART_BARS;
+				for (int i = 0; i < rowCount; i++) {
+					if (rawdata[rowCount + i] != CHART_NULL)
+						type = CHART_PLOT;
+				}
+
+				int dataColCount = 0;
+				if (type == CHART_BARS) {
+					for (int i = 0; i < size; i++)
+						data[i] = rawdata[i];
+
+					for (int colNo = 2; colNo < colCount; colNo++) {
+						int dataRowCount = 0;
+						for (int rowNo = 0; rowNo < rowCount; rowNo++)
+							dataRowCount += data[rowCount * colNo + rowNo] != CHART_NULL;
+						dataColCount += dataRowCount > 0;
+					}
+					if (dataColCount == 0)
+						type = CHART_NONE;
+				}
+
+				// Sort by axis-X data
+				if (type == CHART_PLOT) {
+					double axisX[rowCount];
+					for (int i = 0; i < rowCount; i++)
+						axisX[i] = rawdata[rowCount + i];
+					qsort(axisX, rowCount, sizeof(double), (int(*) (const void *, const void *)) qsortComparator);
+
+					for (int i = 0; i < rowCount; i++)
+						data[rowCount + i] = axisX[i];
+
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						if (axisX[rowNo] == CHART_NULL)
+							continue;
+
+						int idx;
+						for (idx = 0; idx < rowCount && (rawdata[rowCount + idx] != axisX[rowNo]); idx++);
+						for (int barNo = 2; barNo < colCount; barNo++)
+							data[rowCount * barNo + rowNo] = rawdata[rowCount * barNo + idx];
+					}
+				}
+
+				delete [] rawdata;
+
+				double *minmax = new double[4];
+				minmax[0] = minX;
+				minmax[1] = maxX;
+				minmax[2] = minY;
+				minmax[3] = maxY;
+
+				SetProp(hWnd, TEXT("TYPE"), (HANDLE)type);
+				SetProp(hWnd, TEXT("DATA"), (HANDLE)data);
+				SetProp(hWnd, TEXT("MINMAX"), (HANDLE)minmax);
+				SetProp(hWnd, TEXT("COLCOUNT"), (HANDLE)colCount);
+				SetProp(hWnd, TEXT("ROWCOUNT"), (HANDLE)rowCount);
+				SetProp(hWnd, TEXT("DATACOLCOUNT"), (HANDLE)dataColCount);
+				SendMessage(hWnd, WM_PAINT, 0, 0);
+			}
+			break;
+
+			case WM_DESTROY: {
+				RemoveProp(hWnd, TEXT("TYPE"));
+				RemoveProp(hWnd, TEXT("COLCOUNT"));
+				RemoveProp(hWnd, TEXT("ROWCOUNT"));
+				RemoveProp(hWnd, TEXT("DATACOLCOUNT"));
+
+				double* data = (double*)GetProp(hWnd, TEXT("DATA"));
+				delete [] data;
+				RemoveProp(hWnd, TEXT("DATA"));
+
+				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
+				delete [] minmax;
+				RemoveProp(hWnd, TEXT("MINMAX"));
+
+				for (int i = 0; i < MAX_CHART_COLOR_COUNT; i++) {
+					DeleteObject(hPens[i]);
+					DeleteObject(hBrushes[i]);
+				}
+			}
+			break;
+
+			case WM_ERASEBKGND: {
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+				return true;
+			}
+			break;
+
+			case WM_PAINT : {
+				InvalidateRect(hWnd, NULL, true);
+
+				int type = (int)GetProp(hWnd, TEXT("TYPE"));
+				double* data = (double*)GetProp(hWnd, TEXT("DATA"));
+				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
+				int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
+				int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
+
+				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
+				double minX = minmax[0];
+				double maxX = minmax[1];
+				double minY = minmax[2];
+				double maxY = minmax[3];
+
+				HWND hListWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+				HWND hHeader = ListView_GetHeader(hListWnd);
+
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				int w = rc.right;
+				int h = rc.bottom;
+
+				PAINTSTRUCT ps{0};
+				ps.fErase = true;
+				HDC hdc = BeginPaint(hWnd, &ps);
+				SelectFont(hdc, hDefFont);
+
+				if (type == CHART_NONE) {
+					RECT rc = {0, 0, w, h}, rc2 = {0, 0, w, h};
+					TCHAR text[] = TEXT("Not enough data to chart.\nVisit Wiki if you have questions.");
+					DrawText(hdc, text, _tcslen(text), &rc2, DT_CALCRECT);
+					rc.top = rc.bottom / 2 - rc2.bottom / 2;
+					DrawText(hdc, text, _tcslen(text), &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_EXPANDTABS);
+				}
+
+				if (type == CHART_BARS) {
+					double minV = MIN(minX, minY);
+					minV = MIN(0, minV);
+					double maxV = MAX(maxX, maxY);
+
+					HBRUSH hNullBrush = CreateSolidBrush(RGB(200, 200, 200));
+
+					int barNo = 0;
+					for (int colNo = 2; colNo < colCount; colNo++) {
+						bool isEmpty = true;
+						for (int rowNo = 0; rowNo < rowCount; rowNo++)
+							isEmpty = isEmpty && (data[colNo * rowCount + rowNo] == CHART_NULL);
+
+						if (isEmpty)
+							continue;
+
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							double val = data[colNo * rowCount + rowNo];
+							bool isNull = val == CHART_NULL;
+
+							// Attribute bar
+							int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * barNo;
+							int left = CHART_BARS_LEFT + map(0, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT);
+							int right = CHART_BARS_LEFT + (!isNull ? map(val, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT) : left - CHART_BARS_LEFT + 40);
+							if (left == right)
+								right += 2;
+
+							if (left > right) {
+								int tmp = left;
+								left = right;
+								right = tmp;
+							}
+
+							SelectBrush(hdc, isNull ? hNullBrush : hBrushes[barNo % MAX_CHART_COLOR_COUNT]);
+							Rectangle(hdc, left, top, right, top + CHART_BAR_HEIGHT);
+
+							// Value and title on bar
+							bool isValueInside = (right - left > 30) || (!isNull && val < 0);
+							RECT rc {left + 10, top, isValueInside ? right - 10 : right + 30, top + CHART_BAR_HEIGHT};
+							TCHAR val16[64];
+							if (isNull)
+								_stprintf(val16, TEXT("N/A"));
+							else
+								_stprintf(val16, TEXT("%g"), data[colNo * rowCount + rowNo]);
+							SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[barNo % MAX_CHART_COLOR_COUNT] : RGB(255, 255, 255));
+							SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
+							DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
+
+							if (right - left > 60) {
+								TCHAR attr[256]{0};
+								Header_GetItemText(hHeader, colNo, attr, 255);
+								DrawText(hdc, attr, _tcslen(attr), &rc, (val > 0 ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE);
+							}
+						}
+						barNo++;
+					}
+
+					// Group title
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10);
+						RECT rc = {CHART_BORDER, top, CHART_BARS_LEFT - 10, top + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * dataColCount - CHART_BAR_SPACE};
+						TCHAR name[256]{0};
+						ListView_GetItemText(hListWnd, rowNo, 1, name, 255);
+
+						SetTextColor(hdc, RGB(0, 0, 0));
+						SetBkColor(hdc, RGB(255, 255, 255));
+						DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+					}
+
+					DeleteObject(hNullBrush);
+				}
+
+				if (type == CHART_PLOT) {
+					HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+					SelectObject(hdc, hPen);
+
+					// Grid
+					// https://stackoverflow.com/a/18049477/6121703
+					auto findDelta = [](float maxvalue, int count) {
+						float step = maxvalue/count,
+							 order = powf(10, floorf(log10(step))),
+							 delta = (int)(step/order + 0.5);
+
+						static float ndex[] = {1, 1.5, 2, 2.5, 5, 10};
+						static int ndexLenght = sizeof(ndex)/sizeof(float);
+						for (int i = ndexLenght - 2; i > 0; --i)
+							if(delta > ndex[i]) return ndex[i + 1] * order;
+						return delta * order;
+					};
+
+					double d = findDelta(maxX - minX, CHART_GRID);
+					int x = 0, y = 0;
+					for (int i = 0; minX + d * i < maxX + d; i++) {
+						x = map(minX + d * i, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+						MoveToEx(hdc, x, CHART_BORDER, NULL);
+						LineTo(hdc, x, h - CHART_BORDER);
+
+						TCHAR val[64];
+						_stprintf(val, TEXT("%g"), minX + d * i);
+						RECT rc {x - 30, 0, x + 30, CHART_BORDER - 5};
+						DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_SINGLELINE | DT_CENTER);
+						RECT rc2 {x - 30, h - CHART_BORDER + 5, x + 30, h};
+						DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_SINGLELINE | DT_CENTER);
+					}
+
+					d = findDelta(maxY - minY, CHART_GRID);
+					for (int i = 0; minY + d * i < maxY + d; i++) {
+						y = map(minY + d * i, minY, maxY, CHART_BORDER, h - CHART_BORDER);
+						MoveToEx(hdc, CHART_BORDER, y, NULL);
+						LineTo(hdc, x, y);
+
+						TCHAR val[64];
+						_stprintf(val, TEXT("%g"), minY + d * i);
+						RECT rc {0, h - y - 10, CHART_BORDER - 5, h - y + 10};
+						DrawText(hdc, val, _tcslen(val), &rc, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+						RECT rc2 {x + 5, h - y - 10, w, h - y + 8};
+						DrawText(hdc, val, _tcslen(val), &rc2, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+					}
+
+					// Lines
+					int lineNo = 0;
+					for (int colNo = 2; colNo < colCount; colNo++) {
+						SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+						int pointCount = 0;
+
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							if (data[rowCount + rowNo] == CHART_NULL || data[colNo * rowCount + rowNo] == CHART_NULL)
+								continue;
+
+							if (!pointCount) {
+								double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+								double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+								MoveToEx(hdc, x, y, NULL);
+								pointCount++;
+								continue;
+							}
+
+							double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+							double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+							LineTo(hdc, x, y);
+
+							pointCount++;
+						}
+
+						if (pointCount > 1) {
+							TCHAR name16[256];
+							Header_GetItemText(hHeader, colNo, name16, 255);
+
+							int x = w - 100;
+							int y = CHART_BORDER + 5 + lineNo * 15;
+							SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+							Ellipse(hdc, x - 15, y + 2, x - 5, y + 12);
+
+							TextOut(hdc, x, y, name16, _tcslen(name16));
+							lineNo++;
+						}
+
+						if (lineNo == 0 && type != CHART_NONE) {
+							SetProp(hWnd, TEXT("TYPE"), (HANDLE)CHART_NONE);
+							PostMessage(hWnd, WM_PAINT, 0, 0);
+						}
+					}
+					DeleteObject(hPen);
+				}
+
+				EndPaint(hWnd, &ps);
+			}
+			break;
+
+			case WM_MOUSEMOVE: {
+				int type = (int)GetProp(hWnd, TEXT("TYPE"));
+				if (type != CHART_PLOT)
+					return true;
+
+				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
+				double minX = minmax[0];
+				double maxX = minmax[1];
+				double minY = minmax[2];
+				double maxY = minmax[3];
+
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				int w = rc.right;
+				int h = rc.bottom;
+
+				TCHAR title[255]{0};
+				double x = LOWORD(lParam);
+				double y = h - HIWORD(lParam);
+				x = map(x, CHART_BORDER, w - CHART_BORDER, minX, maxX);
+				y = map(y, CHART_BORDER, h - CHART_BORDER, minY, maxY);
+
+				_stprintf(title, TEXT("X: %g, Y: %g"), x, y);
+				SetWindowText(hWnd, title);
+			}
+			break;
+
+			case WM_SIZE: {
+				SendMessage(hWnd, WM_PAINT, 0, 0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE:
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
+		}
+
+		return false;
+	}
+
 	BOOL CALLBACK cbEnumFont(LPLOGFONT lplf, LPNEWTEXTMETRIC lpntm, DWORD fontType, LPVOID hWnd)  {
 		if (fontType & TRUETYPE_FONTTYPE && lplf->lfFaceName[0] != TEXT('@'))
 			ComboBox_AddString((HWND)hWnd, lplf->lfFaceName);
@@ -1598,6 +2085,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB), prefs::get("query-data-in-current-tab") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_BEEP_ON_QUERY_END), prefs::get("beep-on-query-end") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[255];
 				_stprintf(buf, TEXT("%i"), prefs::get("row-limit"));
@@ -1635,6 +2123,7 @@ namespace dialogs {
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
 					prefs::set("query-data-in-current-tab", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB)));
+					prefs::set("beep-on-query-end", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_BEEP_ON_QUERY_END)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
 					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);
@@ -1766,34 +2255,33 @@ namespace dialogs {
 	}
 
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16) {
-		TCHAR column16[64];
-		HDITEM hdi = {0};
-		hdi.mask = HDI_TEXT;
-		hdi.pszText = column16;
-		hdi.cchTextMax = 64;
-
 		HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
-
-		if (hHeader != NULL && Header_GetItem(hHeader, colNo, &hdi)) {
+		TCHAR column16[256]{0};
+		if (hHeader != NULL && Header_GetItemText(hHeader, colNo, column16, 255)) {
 			TCHAR* schema16 = utils::getName(editTableData16, true);
 			TCHAR* tablename16 = utils::getName(editTableData16);
 
+			HWND hParentWnd = GetParent(hListWnd);
+			bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
+			TCHAR* md5keys16 = utils::utf8to16((char*)GetProp(hParentWnd, TEXT("MD5KEYS8")));
+
 			TCHAR query16[256 + _tcslen(editTableData16)];
-			_stprintf(query16, TEXT("update \"%s\".\"%s\" set %s = ?1 where rowid = ?2"), schema16, tablename16, column16);
+			_stprintf(query16, TEXT("update \"%s\".\"%s\" set %s = ?1 where %s = ?2"), schema16, tablename16, column16, hasRowid ? TEXT("rowid") : md5keys16);
 			delete [] schema16;
 			delete [] tablename16;
+			delete [] md5keys16;
 
 			int colCount = Header_GetItemCount(hHeader);
 			ListView_GetItemText(hListWnd, rowNo, colCount - 1, column16, 64);
-			long rowid = _tcstol(column16, NULL, 10);
 
 			char* query8 = utils::utf16to8(query16);
 			char* value8 = utils::utf16to8(value16);
+			char* column8 = utils::utf16to8(column16);
 
 			sqlite3_stmt *stmt;
 			if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-				utils::sqlite3_bind_variant(stmt, 1, value8);
-				sqlite3_bind_int64(stmt, 2, rowid);
+				sqlite3_bind_text(stmt, 1, value8, strlen(value8), SQLITE_TRANSIENT);
+				sqlite3_bind_text(stmt, 2, column8, strlen(column8), SQLITE_TRANSIENT);
 				if (SQLITE_DONE == sqlite3_step(stmt))
 					ListView_SetItemText(hListWnd, rowNo, colNo, value16);
 
@@ -1802,6 +2290,7 @@ namespace dialogs {
 
 			delete [] query8;
 			delete [] value8;
+			delete [] column8;
 		}
 
 		return true;

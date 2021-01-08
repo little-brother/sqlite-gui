@@ -20,7 +20,7 @@ const TCHAR *TYPES16p[5] = {TEXT(""), TEXT("Tables"), TEXT("Views"), TEXT("Index
 const TCHAR *transactionStates[] = {TEXT(" TRN"),TEXT("")};
 
 // AutoComplete
-const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), TEXT('\0')};
+const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), 0};
 TCHAR *PRAGMAS[1024] = {0};
 TCHAR *FUNCTIONS[1024] = {0};
 TCHAR *TABLES[1024] = {0};
@@ -45,7 +45,7 @@ struct TEditorTab {
 	int id;
 	HWND hEditorWnd;
 	HWND hTabWnd;
-	TCHAR tabTooltips[MAX_RESULT_COUNT][MAX_TOOLTIP_LENGTH];
+	TCHAR* tabTooltips[MAX_RESULT_COUNT];
 	TCHAR queryElapsedTimes[MAX_RESULT_COUNT][64];
 };
 TEditorTab tabs[MAX_TAB_COUNT] = {0};
@@ -168,7 +168,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.6"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.3.7"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -440,7 +440,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				if (isContextKey) {
 					RECT rc = {0};
-					TreeView_GetItemRect(hTreeWnd, ti.hItem, &rc, TRUE); // is the macros problem?
+					//TreeView_GetItemRect(hTreeWnd, ti.hItem, &rc, TRUE); // is the macros problem?
+					*(HTREEITEM*)&rc = ti.hItem;
+					SendMessage(hTreeWnd, TVM_GETITEMRECT, FALSE, (LPARAM)&rc);
 					p.x = rc.left + 10;
 					p.y = rc.top + 10;
 					ClientToScreen(hTreeWnd, &p);
@@ -825,7 +827,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetFocus(hEditorWnd);
 			}
 
-			if (cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
+			if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
 				onListViewMenu(cmd);
 
 			if (cmd == IDM_EDITOR_CUT)
@@ -856,6 +858,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_HOMEPAGE)
 				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui"), 0, 0 , SW_SHOW);
+
+			if (cmd == IDM_WIKI)
+				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/wiki"), 0, 0 , SW_SHOW);
 
 			if (cmd == IDM_DEMODB_BOOKSTORE)
 				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/raw/master/etc/bookstore.sqlite"), 0, 0 , SW_SHOW);
@@ -1507,7 +1512,7 @@ int executeCLIQuery(bool isPlan) {
 
 int executeMultiQuery(bool isPlan, bool isSplit) {
 	if (!db)
-		return 10;
+		return 0;
 
 	TabCtrl_DeleteAllItems(hTabWnd);
 	EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_DESTROY);
@@ -1520,7 +1525,7 @@ int executeMultiQuery(bool isPlan, bool isSplit) {
 	if (size <= 0)
 		return 0;
 
-	TCHAR buf[size + 1];
+	TCHAR buf[size + 1]{0};
 	if (!SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)buf))
 		return 0;
 
@@ -1528,8 +1533,12 @@ int executeMultiQuery(bool isPlan, bool isSplit) {
 	setToolbarButtonState(IDM_INTERRUPT, TBSTATE_ENABLED, (LPARAM)hTabWnd);
 
 	// Remove comments
+	TCHAR quote = 0;
 	for (int i = 0; i < size; i++) {
-		if (buf[i] == '-' && buf[i+1] == '-') {
+		if (buf[i] == TEXT('"') || buf[i] == TEXT('\''))
+			quote = (quote == 0) && (buf[i] != quote) ? buf[i] : 0;
+
+		if (buf[i] == '-' && buf[i+1] == '-' && quote == 0) {
 			while (i < size && buf[i] != '\n' && buf[i] != '\r') {
 				buf[i] = ' ';
 				i++;
@@ -1563,6 +1572,7 @@ int executeMultiQuery(bool isPlan, bool isSplit) {
 				query16[0] = 0;
 				delete [] trimmed16;
 			}
+
 			delete [] query8;
 
 			chunk16 = _tcstok (NULL, TEXT(";"));
@@ -1642,7 +1652,7 @@ int executeQuery(TCHAR* query, int tabId, bool isPlan) {
 	}
 	sqlite3_finalize(stmt);
 
-	if (rc == SQLITE_OK)
+	if (rc == SQLITE_OK || rc == SQLITE_DONE)
 		prefs::setQuery("history", sql8);
 	delete [] sql8;
 
@@ -1656,10 +1666,10 @@ int executeQuery(TCHAR* query, int tabId, bool isPlan) {
 		_stprintf(caption, TEXT("Result #%i"), resultNo + 1);
 	if (rowCount > 0)
 		_stprintf(caption, rowCount > 0 ? TEXT("Result #%i (%i rows)") : TEXT("Result #%i"), resultNo + 1, rowCount);
-	TCHAR* tooltip = utils::replaceAll(tquery, TEXT("\t"), TEXT("    "));
-	memset(tab->tabTooltips[resultNo], MAX_TOOLTIP_LENGTH, sizeof(TCHAR));
-	_tcsncpy(tab->tabTooltips[resultNo], tooltip, MAX_TOOLTIP_LENGTH - 1);
-	delete [] tooltip;
+
+	if (tab->tabTooltips[resultNo] != NULL)
+		delete [] tab->tabTooltips[resultNo];
+	tab->tabTooltips[resultNo] = utils::replaceAll(tquery, TEXT("\t"), TEXT("    "));
 
 	TCITEM tci;
 	tci.mask = TCIF_TEXT | TCIF_IMAGE;
@@ -1677,6 +1687,9 @@ int executeQuery(TCHAR* query, int tabId, bool isPlan) {
 			SendMessage(hStatusWnd, SB_SETTEXT, 3, (LPARAM)tab->queryElapsedTimes[resultNo]);
 	}
 	cbEnumChildren(hResultWnd, ACTION_RESIZETAB);
+
+	if (prefs::get("beep-on-query-end"))
+		MessageBeep(0);
 
 	return 1;
 }
@@ -2628,6 +2641,9 @@ LRESULT onListViewMenu(int cmd, bool ignoreLastColumn) {
 		return _ttoi(rowLength);
 	};
 
+	if (cmd == IDM_RESULT_CHART)
+		return DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CHART), hMainWnd, (DLGPROC)&dialogs::cbDlgChart, (LPARAM)currCell.hListWnd);
+
 	if (cmd == IDM_RESULT_COPY_CELL) {
 		int rowLength = getRowLength(currCell.hListWnd, currCell.iItem);
 		TCHAR buf[rowLength + 1];
@@ -2971,6 +2987,22 @@ int ListView_Reset(HWND hListWnd) {
 	return true;
 }
 
+int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax) {
+	if (i < 0)
+		return FALSE;
+
+	TCHAR buf[cchTextMax]{0};
+
+	HDITEM hdi {0};
+	hdi.mask = HDI_TEXT;
+	hdi.pszText = buf;
+	hdi.cchTextMax = cchTextMax;
+	int rc = Header_GetItem(hWnd, i, &hdi);
+
+	_tcsncpy(pszText, buf, cchTextMax);
+	return rc;
+}
+
 void search(HWND hWnd) {
 	int len = _tcslen(searchString);
 	if (!len)
@@ -3172,7 +3204,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 					isSuitable = p && // found
 						(_tcslen(p) == tLen || _tcschr(breakers, (p - 1)[0])) && // not xxxtablename alias
-						(p + tbl_aLen == '\0' || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : 3))[0])); // not tablename aliasxxx
+						(p + tbl_aLen == 0 || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : 3))[0])); // not tablename aliasxxx
 				}
 
 				if (isSuitable) {
