@@ -22,7 +22,7 @@ namespace prefs {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1, 0,
 		8, 10, 20,
-		1, 1, 1, 1, 1, 0, 0, 1, 0, 0,
+		0, 1, 1, 1, 1, 0, 0, 1, 0, 0,
 		0, 0,
 		0, 0, 1,
 		10000,
@@ -38,10 +38,15 @@ namespace prefs {
 		return 0;
 	}
 
-	void set(const char* name, int value) {
+	bool set(const char* name, int value) {
+		bool res = false;
 		for (int i = 0; i < ICOUNT; i++)
-			if (!strcmp(iprops[i], name))
+			if (!strcmp(iprops[i], name)) {
 				ivalues[i] = value;
+				res = true;
+			}
+
+		return res;
 	}
 
 	char* get(const char* name, const char* def) {
@@ -58,7 +63,7 @@ namespace prefs {
 		return value;
 	}
 
-	bool set(const char* name, char* value) {
+	bool set(const char* name, const char* value) {
 		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
 			return false;
@@ -87,9 +92,9 @@ namespace prefs {
 			"create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); " \
 			"create table if not exists cli (\"time\" real, dbname text not null, query text not null, elapsed integer, result text); " \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
+			"create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));" \
 			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
-			"commit;" \
-			"pragma synchronous = 0;";
+			"commit;";
 
 		if (SQLITE_OK != sqlite3_exec(db, sql8, 0, 0, 0))
 			return false;
@@ -257,6 +262,7 @@ namespace prefs {
 
 		return rc == SQLITE_DONE || rc == SQLITE_OK;
 	}
+
 	bool setDiagramRect(const char* dbname, const char* table, RECT rect) {
 		sqlite3_stmt* stmt;
 		int rc = sqlite3_prepare(db, "replace into 'diagrams' (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0);
@@ -273,5 +279,11 @@ namespace prefs {
 		sqlite3_finalize(stmt);
 
 		return rc == SQLITE_DONE || rc == SQLITE_OK;
+	}
+
+	bool setSyncMode(int mode) {
+		char query[255];
+		sprintf(query, "pragma synchronous = %i;", mode);
+		return SQLITE_DONE == sqlite3_exec(db, query, 0, 0, 0);
 	}
 }

@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 3, 7, 0
+FILEVERSION 1, 3, 8, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.3.7\000"
+			VALUE "FileVersion", "1.3.8\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.3.7\000"
+			VALUE "ProductVersion", "1.3.8\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -101,10 +101,6 @@ IDD_EDITDATA DIALOGEX 50, 50, 500, 300
 	CAPTION "View/Edit table data"
 	FONT 10, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	CONTROL "", IDC_DLG_ROW_ADD, WC_STATIC, SS_LEFT | SS_BITMAP | SS_CENTERIMAGE | SS_NOTIFY, 0, 0, 10, 10, 0
-	CONTROL "", IDC_DLG_ROW_DEL, WC_STATIC, SS_LEFT | SS_BITMAP | SS_CENTERIMAGE | SS_NOTIFY, 11, 0, 10, 10, 0
-	EDITTEXT	IDC_DLG_QUERYFILTER, 22, 0, 300, 10, WS_BORDER | WS_TABSTOP, 0
-	CONTROL "", IDC_DLG_REFRESH, WC_STATIC, SS_LEFT | SS_BITMAP | SS_CENTERIMAGE | SS_NOTIFY, 300, 0, 10, 10, 0
 	CONTROL "", IDC_DLG_QUERYLIST, WC_LISTVIEW, WS_VSCROLL | WS_TABSTOP | LVS_REPORT, 0, 10, 400, 80, WS_EX_STATICEDGE
 END
 
@@ -325,7 +321,7 @@ IDD_TOOL_GENERATE_DATA DIALOGEX 50, 50, 250, 300
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	LTEXT "Target", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
-	COMBOBOX IDC_DLG_TABLENAME, 30, 5, 120, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_SORT
+	COMBOBOX IDC_DLG_TABLENAME, 30, 5, 120, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST
 	LTEXT "Row count", IDC_DLG_LABEL, 165, 7, 40, 14, SS_LEFT
 	EDITTEXT IDC_DLG_GEN_ROW_COUNT, 205, 5, 40, 12, WS_BORDER | WS_TABSTOP | ES_NUMBER | ES_CENTER
 	AUTOCHECKBOX "Truncate data before generation", IDC_DLG_GEN_ISTRUNCATE, 5, 20, 140, 16, BS_NOTIFY
@@ -366,6 +362,15 @@ IDD_CHART DIALOGEX 40, 30, 420, 260
 BEGIN
 END
 
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_BIND_PARAMETERS DIALOGEX 40, 30, 200, 260
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Binding values"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	PUSHBUTTON "OK", IDC_DLG_OK, 0, 0, 60, 14, WS_TABSTOP
+END
+
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_MAIN MENU
 BEGIN
@@ -401,12 +406,12 @@ BEGIN
 		MENUITEM "Database search", IDM_DATABASE_SEARCH, GRAYED
 		MENUITEM "Workflow manager", IDM_WORKFLOW_MANAGER, GRAYED
 		MENUITEM SEPARATOR
-		MENUITEM "Execute SQL file", IDM_IMPORT_SQL, GRAYED
-		MENUITEM "Import from CSV file", IDM_IMPORT_CSV, GRAYED
+		MENUITEM "Import SQL file", IDM_IMPORT_SQL, GRAYED
+		MENUITEM "Import CSV file", IDM_IMPORT_CSV, GRAYED
 		MENUITEM "Import via ODBC", IDM_IMPORT_ODBC, GRAYED
 		MENUITEM "Export to SQL file", IDM_EXPORT_SQL, GRAYED
 		MENUITEM "Export as CSV file", IDM_EXPORT_CSV, GRAYED
-		MENUITEM "Data generator", IDM_GENERATE_DATA, GRAYED
+		MENUITEM "Generate data", IDM_GENERATE_DATA, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "Integrity check", IDM_CHECK_INTEGRITY, GRAYED
 		MENUITEM "Vacuum database", IDM_VACUUM, GRAYED
@@ -571,6 +576,8 @@ IDC_MENU_EDIT_DATA MENU
 BEGIN
 	POPUP "Edit data"
 	BEGIN
+		MENUITEM "Edit value", IDM_VALUE_EDIT
+		MENUITEM SEPARATOR
 		MENUITEM "Edit\tEnter", IDM_ROW_EDIT
 		MENUITEM "Delete\tDel", IDM_ROW_DELETE
 		MENUITEM "Duplicate", IDM_ROW_DUPLICATE
@@ -676,8 +683,12 @@ BEGIN
 		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires ora extension.\n\n" \
 		"* Disabled indexes and triggers are stored in ""preferences.disabled"" table.\n\n" \
-		"Cons\n* Only utf-8 is supported\n* NULL is displayed as an empty string\n* An empty string is set to NULL when data is edit\n* Data diagram isn't accurate with building references in views/triggers\n"
-	IDS_EXTENSIONS "Json1\n" \
+		"Cons\n" \
+		"* Only utf-8 is supported\n* NULL is displayed as an empty string\n" \
+		"* An empty string is set to NULL when data is edit\n" \
+		"* Data diagram isn't accurate with building references in views/triggers\n" \
+		"* The app is a single threaded, so the interface freeze on long operations \n"
+	IDS_EXTENSIONS L"Json1\n" \
 		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
 		"Math\n" \
 		"This library provides common mathematical and string functions: acos, asin, atan, atn2, atan2, acosh, asinh, atanh, difference, degrees, radians, cos, sin, tan, cot, cosh, sinh, tanh, coth, exp, log, log10, power, sign, sqrt, square, ceil, floor, pi, replicate, charindex, leftstr, rightstr, ltrim, rtrim, trim, replace, reverse, proper, padl, padr, padc, strfilter, stdev, variance, mode, median, lower_quartile, upper_quartile.\n\n" \
@@ -689,9 +700,9 @@ BEGIN
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
-		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), crc32(str) and md5(str) functions.\n\n" \
+		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), crc32(str) and md5(str) functions.\n\n" \
 		"Icu (third party)\n"\
-		"Adds partial support for national symbols e.g. ""select lower('٧);"" returns """"\n\n" \
+		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""\n\n" \
 
 		"SQLite Workflow Manager adds auxiliary extensions: exec, odbc and transform. Check tool's Wiki to get info about them.\n\n"
 
@@ -699,8 +710,7 @@ BEGIN
 		"The type is defined by ""key"" column.\nSet a ""value""-column as null if sometimes generated value should be null.\n" \
 		"You should restart master to apply changes."
 
-	IDS_WELCOME "-- Welcome!\n" \
-		"-- Thanks for choosing sqlite-gui.\n" \
+	IDS_WELCOME "-- Welcome! Thanks for choosing sqlite-gui.\n" \
 		"-- bookstore.sqlite is a demo database for beginners.\n" \
 		"-- Push ""Execute"" to get all rows from ""books"" table\n" \
 		"select * from books;"
@@ -730,7 +740,5 @@ END
 
 IDI_LOGO ICON "resources/logo.ico"
 IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
-IDB_BTN_ADD BITMAP "resources/btn_add.bmp"
-IDB_BTN_DELETE BITMAP "resources/btn_delete.bmp"
-IDB_BTN_REFRESH BITMAP "resources/btn_refresh.bmp"
+IDB_TOOLBAR_DATA BITMAP "resources/toolbar_data.bmp"
 IDB_DIAGRAM_TOOLBAR BITMAP "resources/toolbar_diagram.bmp"

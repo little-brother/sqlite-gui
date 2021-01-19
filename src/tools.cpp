@@ -453,8 +453,15 @@ namespace tools {
 					TCHAR create16[MAX_TEXT_LENGTH]{0};
 					TCHAR insert16[MAX_TEXT_LENGTH]{0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
-					_stprintf(create16, TEXT("create table \"%s\" ("), buf16);
-					_stprintf(insert16, TEXT("insert into \"%s\" ("), buf16);
+
+					TCHAR* schema16 = utils::getName(buf16, true);
+					TCHAR* tablename16 = utils::getName(buf16);
+
+					_stprintf(create16, TEXT("create table \"%s\".\"%s\" ("), schema16, tablename16);
+					_stprintf(insert16, TEXT("insert into \"%s\".\"%s\" ("), schema16, tablename16);
+
+					delete [] tablename16;
+					delete [] schema16;
 
 					auto catQuotted = [](TCHAR* a, TCHAR* b) {
 						_tcscat(a, TEXT("\""));
@@ -693,7 +700,6 @@ namespace tools {
 					if (!_tcslen(connectionString16))
 						return MessageBox(0, TEXT("Specify a valid connection string"), NULL, 0);
 
-
 					if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RECREATE_TARGET)) == BST_CHECKED) {
 						TCHAR* schema16 = utils::getName(target16, true);
 						TCHAR* tablename16 = utils::getName(target16);
@@ -788,7 +794,7 @@ namespace tools {
 
 			case WM_COMMAND: {
 				TCHAR path16[MAX_PATH]{0};
-				if (wParam == IDC_DLG_DATABASE_SELECTOR && utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db)\0*.sqlite;.sqlite3;.id\0All\0*.*\0")))
+				if (wParam == IDC_DLG_DATABASE_SELECTOR && utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db)\0*.sqlite;*.sqlite3;*.db\0All\0*.*\0")))
 					SetDlgItemText(hWnd, IDC_DLG_DATABASE, path16);
 
 				if (wParam == IDC_DLG_COMPARE_SCHEMA || wParam == IDC_DLG_COMPARE_DATA) {
@@ -1203,6 +1209,8 @@ namespace tools {
 		return CallWindowProc(cbOldCombobox, hWnd, msg, wParam, lParam);
 	}
 
+	// USERDATA = 1 if a last generation is ok
+	// lParam is a target table (optional)
 	BOOL CALLBACK cbDlgDataGenerator (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -1217,15 +1225,32 @@ namespace tools {
 				if (prefs::get("data-generator-truncate"))
 					Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_GEN_ISTRUNCATE), BST_CHECKED);
 
-				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type = 'table' and name <> 'sqlite_sequence' order by 1", -1, &stmt, 0)) {
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-						ComboBox_AddString(hTable, name16);
-						delete [] name16;
+				if (lParam)	{
+					ComboBox_AddString(hTable, (TCHAR*)lParam);
+					EnableWindow(hTable, !lParam);
+				} else {
+					sqlite3_stmt *stmt, *stmt2;
+					if (SQLITE_OK == sqlite3_prepare_v2(db,
+						"with t as (select name from pragma_database_list()) " \
+						"select name from t order by iif(name = 'main', 1, name)", -1, &stmt, 0)) {
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							char* schema8 = (char *)sqlite3_column_text(stmt, 0);
+							char query8[strlen(schema8) + 1024];
+							sprintf(query8,
+								"select iif('%s' = 'main', name, '%s' || '.' || name) from \"%s\".sqlite_master where type = 'table' and name <> 'sqlite_sequence' order by 1",
+								schema8, schema8, schema8);
+							if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt2, 0)) {
+								while (SQLITE_ROW == sqlite3_step(stmt2)) {
+									TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt2, 0));
+									ComboBox_AddString(hTable, name16);
+									delete [] name16;
+								}
+							}
+							sqlite3_finalize(stmt2);
+						}
 					}
+					sqlite3_finalize(stmt);
 				}
-				sqlite3_finalize(stmt);
 				ComboBox_SetCurSel(hTable, 0);
 
 				if (!GENERATOR_TYPE[0]) {
@@ -1261,6 +1286,7 @@ namespace tools {
 					}
 					sqlite3_finalize(stmt);
 				}
+
 				SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 				SetFocus(hTable);
 			}
@@ -1275,13 +1301,17 @@ namespace tools {
 				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS);
 				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_DESTROY);
 
-				TCHAR buf16[255]{0};
+				TCHAR name16[1024]{0};
+				GetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16, 1024);
+				TCHAR* schema16 = utils::getName(name16, true);
+				TCHAR* tablename16 = utils::getName(name16);
+
 				TCHAR query16[MAX_TEXT_LENGTH]{0};
-				GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
+				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") where schema = \"%s\" order by cid"), tablename16, schema16);
+				delete [] tablename16;
+				delete [] schema16;
 
-				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") order by cid"), buf16);
 				char* query8 = utils::utf16to8(query16);
-
 				sqlite3_stmt *stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					int rowNo = 0;
@@ -1397,7 +1427,7 @@ namespace tools {
 					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL) {
-					EndDialog(hWnd, DLG_CANCEL);
+					EndDialog(hWnd, GetWindowLong(hWnd, GWL_USERDATA) ? DLG_OK : DLG_CANCEL);
 				}
 
 				if (wParam == IDC_DLG_GEN_DICTIONARY) {
@@ -1418,12 +1448,18 @@ namespace tools {
 					if (isTruncate && MessageBox(hWnd, TEXT("All data from table will be erased. Continue?"), TEXT("Confirmation"), MB_OKCANCEL | MB_ICONASTERISK) != IDOK)
 						return true;
 
-					TCHAR table16[128]{0};
-					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 127);
+					TCHAR name16[1024]{0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16, 1024);
+					TCHAR* schema16 = utils::getName(name16, true);
+					TCHAR* tablename16 = utils::getName(name16);
 
-					char* table8 = utils::utf16to8(table16);
+					char* schema8 = utils::utf16to8(schema16);
+					char* tablename8 = utils::utf16to8(tablename16);
+					delete [] schema16;
+					delete [] tablename16;
+
 					char query8[MAX_TEXT_LENGTH]{0};
-					sprintf(query8, "create table temp.data_generator as select null rownum, t.* from \"%s\" t where 1 = 2", table8);
+					sprintf(query8, "create table temp.data_generator as select null rownum, t.* from \"%s\".\"%s\" t where 1 = 2", schema8, tablename8);
 					execute(query8);
 
 					int rowCount = getDlgItemTextAsNumber(hWnd, IDC_DLG_GEN_ROW_COUNT);
@@ -1475,7 +1511,7 @@ namespace tools {
 								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
 								"t2 as (select t.value FROM t, series order by random()), " \
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
-								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
+								"update temp.data_generator set \"%s\" = t3.value from t3 where t3.rownum = temp.data_generator.rownum"),
 								refcolumn16, reftable16, rowCount, rowCount, name16);
 						}
 
@@ -1509,22 +1545,24 @@ namespace tools {
 						hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
 					}
 
-
 					prefs::set("data-generator-row-count", rowCount);
 					prefs::set("data-generator-truncate", +isTruncate);
 
 					if (isTruncate) {
-						sprintf(query8, "delete from \"%s\"", table8);
+						sprintf(query8, "delete from \"%s\".\"%s\"", schema8, tablename8);
 						execute(query8);
 					}
 
-					snprintf(query8, MAX_TEXT_LENGTH, "insert into \"%s\" (%s) select %s from temp.data_generator", table8, columns8, columns8);
-					if (execute(query8))
+					snprintf(query8, MAX_TEXT_LENGTH, "insert into \"%s\".\"%s\" (%s) select %s from temp.data_generator", schema8, tablename8, columns8, columns8);
+					int rc = execute(query8);
+					if (rc)
 						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
 					else
 						showDbError(hWnd);
+					SetWindowLong(hWnd, GWL_USERDATA, rc);
 
-					delete [] table8;
+					delete [] schema8;
+					delete [] tablename8;
 				}
 			}
 			break;
@@ -1659,7 +1697,9 @@ namespace tools {
 			GetWindowText(hWnd, table16, 255);
 			char* table8 = utils::utf16to8(table16);
 			RECT rc = {pos.x, pos.y, rcSize.right - rcSize.left, rcSize.bottom - rcSize.top};
+			prefs::setSyncMode(0);
 			prefs::setDiagramRect(dbname8, table8, rc);
+			prefs::setSyncMode(1);
 			delete [] table8;
 		}
 
@@ -1801,7 +1841,9 @@ namespace tools {
 				}
 				sqlite3_finalize(stmt);
 
+				prefs::setSyncMode(0);
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+				prefs::setSyncMode(1);
 
 				SetWindowPos(hWnd, 0, prefs::get("x") + 30, prefs::get("y") + 70, prefs::get("width") - 60, prefs::get("height") - 100,  SWP_NOZORDER);
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
@@ -1829,6 +1871,7 @@ namespace tools {
 				int dy = cursor.y - GET_Y_LPARAM(lParam);
 
 				if (isMove && (dx != 0 ||dy != 0)) {
+					prefs::setSyncMode(0);
 					int tblNo = 0;
 					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
 						RECT rc;
@@ -1838,6 +1881,7 @@ namespace tools {
 						SetWindowPos(hTableWnd, 0, p.x - dx, p.y - dy, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 						tblNo++;
 					}
+					prefs::setSyncMode(1);
 				}
 
 				isMove = false;

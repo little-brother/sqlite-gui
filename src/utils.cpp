@@ -136,6 +136,20 @@ namespace utils {
 		CloseClipboard();
 	}
 
+	TCHAR* getClipboardText() {
+		if (OpenClipboard(NULL)) {
+			HANDLE clip = GetClipboardData(CF_UNICODETEXT);
+			TCHAR* str = (LPWSTR)GlobalLock(clip);
+			TCHAR* res = new TCHAR[_tcslen(str) + 1]{0};
+			_tcscpy(res, str);
+			GlobalUnlock(clip);
+			CloseClipboard();
+			return res;
+		}
+
+		return new TCHAR[1]{0};
+	}
+
 	int openFile(TCHAR* path, const TCHAR* filter) {
 		OPENFILENAME ofn = {0};
 

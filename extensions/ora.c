@@ -17,14 +17,19 @@
 	
 	md5(str)
 	Calculate md5 checksum
+	
+	strpart(str, delimiter, partno)
+	Returns substring for a delimiter and a part number
+	select strpart('ab-cd-ef', '-', 2) --> 'cd'
+	select strpart('20.01.2021', '.', 3) --> 2021
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <windows.h>
+
+typedef unsigned char UINT8;
+typedef unsigned int UINT;
 
 static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 	int *pCounter = (int*)sqlite3_get_auxdata(ctx, 0);
@@ -167,18 +172,18 @@ const UINT r[] = {
 
 #define LEFTROTATE(x, c) (((x) << (c)) | ((x) >> (32 - (c))))
 
-void to_bytes(UINT val, UINT8 *bytes) {
+static void to_bytes(UINT val, UINT8 *bytes) {
     bytes[0] = (UINT8) val;
     bytes[1] = (UINT8) (val >> 8);
     bytes[2] = (UINT8) (val >> 16);
     bytes[3] = (UINT8) (val >> 24);
 }
 
-UINT to_int32(const UINT8 *bytes) {
+static UINT to_int32(const UINT8 *bytes) {
     return (UINT) bytes[0] | ((UINT) bytes[1] << 8) | ((UINT) bytes[2] << 16) | ((UINT) bytes[3] << 24);
 }
 
-void _md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest) {
+static void _md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest) {
     UINT h0, h1, h2, h3;
     UINT8 *msg = NULL;
 
@@ -248,23 +253,57 @@ void _md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest) {
     to_bytes(h3, digest + 12);
 }
 
-static void md5 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
-    UINT8 r[16];
-	_md5(sqlite3_value_text(argv[0]), strlen(sqlite3_value_text(argv[0])), r);
+char const hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
-	char buf[17];
-	sprintf(buf, "%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15]);
-    sqlite3_result_text(ctx, buf, -1, SQLITE_TRANSIENT);
+static void md5 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+    UINT8 res[16];
+	_md5(sqlite3_value_text(argv[0]), strlen(sqlite3_value_text(argv[0])), res);
+
+	char buf[33];
+	for(int i = 0; i < 16; i++) {
+		char byte = res[i];
+		buf[2 * i] = hex_chars[(byte & 0xF0) >> 4];
+		buf[2 * i + 1] = hex_chars[(byte & 0x0F) >> 0];
+	}
+	buf[32] = 0;
+	
+	sqlite3_result_text(ctx, buf, -1, SQLITE_TRANSIENT);
+}
+
+static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	const char* instr = sqlite3_value_text(argv[0]);
+	const char* delim = sqlite3_value_text(argv[1]);
+	int no = sqlite3_value_int(argv[2]);
+	
+	if (no < 1) {
+		sqlite3_result_null(ctx);
+		return;
+	}
+	
+	char str[strlen(instr) + 1];
+	strcpy(str, instr);
+	
+	char *ptr = strtok(str, delim);
+	int curr = 0;
+	while (ptr != NULL && curr < no - 1) {
+		ptr = strtok(NULL, delim);
+		curr++;
+	}
+	
+	if (ptr)
+		sqlite3_result_text(ctx, ptr, -1, SQLITE_TRANSIENT);
+	else 	
+		sqlite3_result_null(ctx);
 }
 
 __declspec(dllexport) int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
-	int rc = SQLITE_OK;
 	SQLITE_EXTENSION_INIT2(pApi);
 	(void)pzErrMsg;  /* Unused parameter */
 	return SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "concat", -1, SQLITE_UTF8, 0, concat, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "decode", -1, SQLITE_UTF8, 0, decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "crc32", 1, SQLITE_UTF8, 0, crc32, 0, 0) && 
-		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8, 0, md5, 0, 0) ? 
+		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8, 0, md5, 0, 0) && 
+		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8, 0, strpart, 0, 0) ? 
 		SQLITE_OK : SQLITE_ERROR;
 }

@@ -22,20 +22,20 @@
 1562796420 d:\codes\sqlite-gui\sqlite3.h
 	<stdarg.h>
 
-1610099075 source:d:\codes\sqlite-gui\src\resource.rc
+1611058507 source:d:\codes\sqlite-gui\src\resource.rc
 	<windows.h>
 	<commctrl.h>
 	<richedit.h>
 	"resource.h"
 
-1609978095 d:\codes\sqlite-gui\src\resource.h
+1610981283 d:\codes\sqlite-gui\src\resource.h
 
-1609924139 source:d:\codes\sqlite-gui\src\prefs.cpp
+1611090146 source:d:\codes\sqlite-gui\src\prefs.cpp
 	<ctime>
 	"prefs.h"
 	"sqlite3.h"
 
-1602007947 d:\codes\sqlite-gui\src\prefs.h
+1611089165 d:\codes\sqlite-gui\src\prefs.h
 	<stdio.h>
 	<windows.h>
 	<tchar.h>
@@ -43,7 +43,7 @@
 1583506689 d:\codes\sqlite-gui\src\sqlite3.h
 	<stdarg.h>
 
-1610058432 source:d:\codes\sqlite-gui\src\main.cpp
+1611003745 source:d:\codes\sqlite-gui\src\main.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
@@ -57,19 +57,19 @@
 
 1583970008 d:\codes\sqlite-gui\src\main.h
 
-1605587592 d:\codes\sqlite-gui\src\utils.h
+1610994001 d:\codes\sqlite-gui\src\utils.h
 	<tchar.h>
 	<windows.h>
 	"sqlite3.h"
 
-1605587816 source:d:\codes\sqlite-gui\src\utils.cpp
+1610994064 source:d:\codes\sqlite-gui\src\utils.cpp
 	<windows.h>
 	<stdio.h>
 	<stdlib.h>
 	<ctype.h>
 	"utils.h"
 
-1610099913 source:d:\codes\sqlite-gui\src\tools.cpp
+1611001401 source:d:\codes\sqlite-gui\src\tools.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
@@ -78,7 +78,7 @@
 	"dialogs.h"
 	"prefs.h"
 
-1610048754 d:\codes\sqlite-gui\src\global.h
+1610376139 d:\codes\sqlite-gui\src\global.h
 	<windows.h>
 	<windowsx.h>
 	<commctrl.h>
@@ -90,20 +90,22 @@
 	<sys/stat.h>
 	<locale.h>
 	<math.h>
+	"missing.h"
 	"sqlite3.h"
 
 1605592862 d:\codes\sqlite-gui\src\tools.h
 	<windows.h>
 
-1609944947 d:\codes\sqlite-gui\src\dialogs.h
+1610981781 d:\codes\sqlite-gui\src\dialogs.h
 	<windows.h>
 
-1610099817 source:d:\codes\sqlite-gui\src\dialogs.cpp
+1611092472 source:d:\codes\sqlite-gui\src\dialogs.cpp
 	"resource.h"
 	"global.h"
 	"prefs.h"
 	"utils.h"
 	"dialogs.h"
+	"tools.h"
 
 1606840569 d:\codes\sqlite-gui\include\sqlite3.h
 	<stdarg.h>
@@ -116,7 +118,7 @@
 	"oaidl.h"
 	"ocidl.h"
 
-1609795113 d:\codes\sqlite-gui\src\missing.h
+1610377907 d:\codes\sqlite-gui\src\missing.h
 
 1595499199 c:\mingw\include\windows.h
 	<winresrc.h>

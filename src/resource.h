@@ -10,6 +10,7 @@
 #define IDD_CHART                  20
 #define IDD_EDITDATA_VALUE         21
 #define IDD_VIEWDATA_VALUE         22
+#define IDD_BIND_PARAMETERS        23
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -115,6 +116,8 @@
 #define IDC_DLG_SEARCH_RESULT      193
 #define IDC_DLG_SEARCH_ROWS        194
 #define IDC_DLG_STATISTICS         195
+#define IDC_DLG_FILTER             196
+#define IDM_LAST_SEPARATOR         197
 
 #define IDC_DLG_GEN_ISTRUNCATE     260
 #define IDC_DLG_GEN_ROW_COUNT      261
@@ -133,6 +136,9 @@
 #define IDC_DLG_GEN_DICTIONARY_HELP    287
 
 #define IDC_TAB_EDIT               300
+
+#define IDC_HEADER_EDIT            400 // Iteratable
+#define IDC_HEADER_STATIC          450 // Iteratable
 
 #define IDC_MENU_MAIN              500
 #define IDC_MENU_EDITOR            501
@@ -215,7 +221,6 @@
 #define IDM_EDITOR_DELETE          1604
 #define IDM_EDITOR_FIND            1605
 
-
 #define IDM_RESULT_CHART           1610
 #define IDM_RESULT_COPY_CELL       1611
 #define IDM_RESULT_COPY_ROW        1612
@@ -247,9 +252,12 @@
 #define IDM_ENABLE_ALL             1717
 #define IDM_DISABLE_ALL            1718
 
-#define IDM_ROW_EDIT               1722
-#define IDM_ROW_DELETE             1723
-#define IDM_ROW_DUPLICATE          1724
+#define IDM_VALUE_EDIT             1721
+#define IDM_ROW_ADD                1722
+#define IDM_ROW_EDIT               1723
+#define IDM_ROW_DELETE             1724
+#define IDM_ROW_REFRESH            1725
+#define IDM_ROW_DUPLICATE          1726
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732
@@ -258,10 +266,8 @@
 #define IDI_LOGO                   3000
 #define IDB_TREEVIEW               3001
 #define IDB_TOOLBAR                3002
-#define IDB_BTN_ADD                3003
-#define IDB_BTN_DELETE             3004
-#define IDB_BTN_REFRESH            3005
 #define IDB_DIAGRAM_TOOLBAR        3006
+#define IDB_TOOLBAR_DATA           3010
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001
@@ -296,6 +302,9 @@
 #define WMU_SHOW_TABLE_INFO        WM_USER + 10
 #define WMU_RESET_LISTVIEW         WM_USER + 11
 #define WMU_EDIT_VALUE             WM_USER + 12
+#define WMU_UPDATE_COLSIZE         WM_USER + 13
+#define WMU_SET_CURRENT_CELL       WM_USER + 14
+#define WMU_SYNC_CURRENT_CELL      WM_USER + 15
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31
@@ -304,7 +313,6 @@
 #define WMU_TAB_GET_TEXT           WM_USER + 35
 #define WMU_TAB_GET_COUNT          WM_USER + 36
 #define WMU_TAB_GET_CURRENT        WM_USER + 37
-
 
 #define NM_TAB_ADD                 WM_USER + 40
 #define NM_TAB_DELETE              WM_USER + 41

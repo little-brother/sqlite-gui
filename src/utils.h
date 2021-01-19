@@ -16,6 +16,7 @@ namespace utils {
 	char* utf16to8(const TCHAR* in);
 
 	void setClipboardText(const TCHAR* text);
+	TCHAR* getClipboardText();
 	int openFile(TCHAR* path, const TCHAR* filter);
 	int saveFile(TCHAR* path, const TCHAR* filter);
 	bool isFileExists(const TCHAR* path);

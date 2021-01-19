@@ -44,6 +44,7 @@
 #include <locale.h>
 #include <math.h>
 
+#include "missing.h"
 #include "sqlite3.h"
 
 extern sqlite3 *db;
@@ -59,8 +60,8 @@ extern const TCHAR *TYPES16u[5];
 extern const TCHAR *TYPES16p[5];
 
 extern HFONT hDefFont;
-extern WNDPROC cbOldResultList;
-LRESULT CALLBACK cbNewResultList(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+extern WNDPROC cbOldListView;
+LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 

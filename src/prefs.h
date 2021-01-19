@@ -11,10 +11,10 @@ namespace prefs {
 	bool backup();
 
 	int get(const char* name);
-	void set(const char* name, int value);
+	bool set(const char* name, int value);
 
 	char* get(const char* name, const char* def);
-	bool set(const char* name, char* value);
+	bool set(const char* name, const char* value);
 
 	bool setRecent(char* path);
 	int getRecents(char** recents);
@@ -25,6 +25,8 @@ namespace prefs {
 
 	bool getDiagramRect(const char* dbname, const char* table, RECT* rect);
 	bool setDiagramRect(const char* dbname, const char* table, RECT rect);
+
+	bool setSyncMode(int mode);
 }
 
 #endif
