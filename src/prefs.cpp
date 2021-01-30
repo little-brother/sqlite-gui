@@ -5,12 +5,12 @@
 namespace prefs {
 	sqlite3* db;
 
-	const int ICOUNT = 35;
+	const int ICOUNT = 36;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
-		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-on-query-end",
+		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
 		"cli-font-size", "cli-row-limit", "cli-max-width",
-		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current", "query-data-in-current-tab",
+		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current", "force-wal",
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns",
 		"row-limit",
@@ -20,7 +20,7 @@ namespace prefs {
 
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
-		0, 10, 1000, 1, 0,
+		0, 10, 1000, 1, 3000, 1,
 		8, 10, 20,
 		0, 1, 1, 1, 1, 0, 0, 1, 0, 0,
 		0, 0,
@@ -51,7 +51,7 @@ namespace prefs {
 
 	char* get(const char* name, const char* def) {
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare(db, "select value from 'prefs' where name = ?;", -1, &stmt, 0))
+		if (SQLITE_OK != sqlite3_prepare_v2(db, "select value from 'prefs' where name = ?;", -1, &stmt, 0))
 			return NULL;
 
 		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
@@ -65,7 +65,7 @@ namespace prefs {
 
 	bool set(const char* name, const char* value) {
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
+		if (SQLITE_OK != sqlite3_prepare_v2(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
 			return false;
 
 		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
@@ -100,7 +100,7 @@ namespace prefs {
 			return false;
 
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
+		if (SQLITE_OK != sqlite3_prepare_v2(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
 			sqlite3_finalize(stmt);
 			return false;
 		}
@@ -114,7 +114,7 @@ namespace prefs {
 
 	bool save() {
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
+		if (SQLITE_OK != sqlite3_prepare_v2(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
 			return false;
 
 		for(int i = 0; i < ICOUNT; i++) {
@@ -139,9 +139,9 @@ namespace prefs {
 		return SQLITE_OK == sqlite3_exec(db, backup8, 0, 0, 0);
 	}
 
-	bool setRecent(char* path) {
+	bool setRecentDatabase(char* path) {
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, "replace into 'recents' (path, time) values (?1, ?2);", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "replace into 'recents' (path, time) values (?1, ?2);", -1, &stmt, 0);
 		if (rc != SQLITE_OK) {
 			sqlite3_finalize(stmt);
 			return false;
@@ -154,9 +154,9 @@ namespace prefs {
 		return true;
 	}
 
-	int getRecents(char** recents) {
+	int getRecentDatabases(char** recents) {
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, "select path from recents order by time desc limit 100", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "select path from recents order by time desc limit 100", -1, &stmt, 0);
 		if (SQLITE_OK != rc) {
 			sqlite3_finalize(stmt);
 			return 0;
@@ -179,7 +179,7 @@ namespace prefs {
 		sprintf(buf, "replace into %s (query, time) values (?1, ?2);", table);
 
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, buf, -1, &stmt, 0);
 		if (rc != SQLITE_OK) {
 			sqlite3_finalize(stmt);
 			return false;
@@ -199,14 +199,11 @@ namespace prefs {
 		sprintf(buf, "delete from %s where query = ?1;", table);
 
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
-		if (rc != SQLITE_OK) {
-			sqlite3_finalize(stmt);
-			return false;
+		int rc = sqlite3_prepare_v2(db, buf, -1, &stmt, 0);
+		if (rc == SQLITE_OK) {
+			sqlite3_bind_text(stmt, 1, query, strlen(query), SQLITE_TRANSIENT);
+			rc = sqlite3_step(stmt);
 		}
-
-		sqlite3_bind_text(stmt, 1, query, strlen(query), SQLITE_TRANSIENT);
-		rc = sqlite3_step(stmt);
 		sqlite3_finalize(stmt);
 
 		return (rc == SQLITE_OK);
@@ -217,7 +214,7 @@ namespace prefs {
 		sprintf(buf, "select strftime('%%d-%%m-%%Y %%H:%%M', time, 'unixepoch') || '\t' || query from %s %s order by time desc limit %i", table, strlen(filter) ? "where query like ?1" : "", get("max-query-count"));
 
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, buf, -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, buf, -1, &stmt, 0);
 
 		if (SQLITE_OK != rc) {
 			char* err8 = (char*)sqlite3_errmsg(db);
@@ -247,7 +244,7 @@ namespace prefs {
 
 	bool getDiagramRect(const char* dbname, const char* table, RECT* rect) {
 		sqlite3_stmt * stmt;
-		int rc = sqlite3_prepare(db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0);
 		if (rc == SQLITE_OK) {
 			sqlite3_bind_text(stmt, 1, dbname, strlen(dbname), SQLITE_TRANSIENT);
 			sqlite3_bind_text(stmt, 2, table, strlen(table), SQLITE_TRANSIENT);
@@ -265,7 +262,7 @@ namespace prefs {
 
 	bool setDiagramRect(const char* dbname, const char* table, RECT rect) {
 		sqlite3_stmt* stmt;
-		int rc = sqlite3_prepare(db, "replace into 'diagrams' (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "replace into 'diagrams' (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0);
 		if (rc == SQLITE_OK) {
 			sqlite3_bind_text(stmt, 1, dbname, strlen(dbname), SQLITE_TRANSIENT);
 			sqlite3_bind_text(stmt, 2, table, strlen(table), SQLITE_TRANSIENT);

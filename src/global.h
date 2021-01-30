@@ -5,6 +5,7 @@
 #define MAX_RECENT_COUNT            10
 #define MAX_TAB_COUNT               16
 #define MAX_RESULT_COUNT            32
+#define MAX_ENTITY_COUNT          1024
 #define MAX_TEXT_LENGTH          32000
 #define MAX_TOOLTIP_LENGTH        1024
 #define MAX_REFCOLUMN_COUNT        128
@@ -82,16 +83,14 @@ bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
 
-bool executeCommandQuery(const TCHAR* query);
+int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
 int ListView_Sort(HWND hListWnd, int colNo);
 int ListView_Reset(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
-TCHAR* getDbValue(const TCHAR* query16);
 TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);
-bool isQueryValid(const char* query);
 bool showDbError(HWND hWnd);
 
 #endif

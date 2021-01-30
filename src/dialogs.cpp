@@ -94,19 +94,21 @@ namespace dialogs {
 					SendMessage(hEditorWnd, WM_PASTE, 0, 0);
 
 				if (wParam == IDM_EDITOR_DELETE)
-					SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
+					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
 				if (wParam == IDC_DLG_OK) {
 					int size = GetWindowTextLength(hEditorWnd) + 1;
-					TCHAR* text = new TCHAR[size]{0};
-					GetWindowText(hEditorWnd, text, size);
-					bool isOk = executeCommandQuery(text);
-					delete [] text;
+					TCHAR query16[size]{0};
+					GetWindowText(hEditorWnd, query16, size);
+					char* query8 = utils::utf16to8(query16);
+					int rc = sqlite3_exec(db, query8, NULL, 0 , 0);
+					delete [] query8;
 
-					if (isOk) {
+					SetFocus(hEditorWnd);
+					if (SQLITE_OK == rc) {
 						EndDialog(hWnd, DLG_OK);
 					} else {
-						SetFocus(hEditorWnd);
+						showDbError(hMainWnd);
 					}
 				}
 
@@ -250,8 +252,15 @@ namespace dialogs {
 						isWithoutRowid ? TEXT(" without rowid") : TEXT("")
 					);
 
-					if(executeCommandQuery(query16))
+					char* query8 = utils::utf16to8(query16);
+					int rc = sqlite3_exec(db, query8, NULL, 0 , 0);
+					delete [] query8;
+
+					if (SQLITE_OK == rc) {
 						EndDialog(hWnd, DLG_OK);
+					} else {
+						showDbError(hMainWnd);
+					}
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -546,7 +555,7 @@ namespace dialogs {
 				int idx = GetWindowLong(hWnd, GWL_USERDATA);
 				char* filter8 = utils::utf16to8(filter16);
 
-				char * queries[prefs::get("max-query-count")];
+				char* queries[prefs::get("max-query-count")];
 				int count = prefs::getQueries(idx == IDM_HISTORY ? "history" : "gists", filter8, queries);
 
 				ListView_DeleteAllItems(hListWnd);
@@ -669,15 +678,15 @@ namespace dialogs {
 				RECT rc{0};
 				SendMessage(hToolbarWnd, TB_GETRECT, IDM_LAST_SEPARATOR, (LPARAM)&rc);
 				HWND hFilterWnd = CreateWindowEx(0L, WC_EDIT, NULL, WS_CHILD | WS_BORDER | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL, rc.right, 2, 180, 19, hToolbarWnd, (HMENU) IDC_DLG_FILTER, GetModuleHandle(0), 0);
-                SendMessage(hFilterWnd, WM_SETFONT, (LPARAM)SendMessage(hToolbarWnd, WM_GETFONT, 0, 0), true);
-                cbOldHeaderEdit = (WNDPROC)SetWindowLong(hFilterWnd, GWL_WNDPROC, (LONG)cbNewFilterEdit);
+				SendMessage(hFilterWnd, WM_SETFONT, (LPARAM)SendMessage(hToolbarWnd, WM_GETFONT, 0, 0), true);
+				cbOldHeaderEdit = (WNDPROC)SetWindowLong(hFilterWnd, GWL_WNDPROC, (LONG)cbNewFilterEdit);
 
 				int colCount = Header_GetItemCount(hHeader);
 				HFONT hFont = (HFONT)SendMessage(hListWnd, WM_GETFONT, 0, 0);
 				for (int i = 0; i < colCount; i++) {
 					RECT rc;
 					Header_GetItemRect(hHeader, i, &rc);
-					HWND hEdit = CreateWindowEx(WS_EX_TOPMOST, WC_EDIT, NULL, ES_CENTER | ES_AUTOHSCROLL | WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, 0, 0, 0, hHeader, (HMENU)(IDC_HEADER_EDIT + i), GetModuleHandle(0), NULL);
+					HWND hEdit = CreateWindowEx(WS_EX_TOPMOST, WC_EDIT, NULL, ES_CENTER | ES_AUTOHSCROLL | WS_VISIBLE | WS_CHILD, 0, 0, 0, 0, hHeader, (HMENU)(IDC_HEADER_EDIT + i), GetModuleHandle(0), NULL);
 					SendMessage(hEdit, WM_SETFONT, (LPARAM)hFont, true);
 					cbOldHeaderEdit = (WNDPROC)SetWindowLong(hEdit, GWL_WNDPROC, (LONG)cbNewFilterEdit);
 					CreateWindowEx(WS_EX_TOPMOST, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_WHITEFRAME, 0, 0, 0, 0, hHeader, (HMENU)(IDC_HEADER_STATIC + i), GetModuleHandle(0), NULL);
@@ -734,12 +743,19 @@ namespace dialogs {
 				_tcscat(where16, TEXT(") "));
 
 				for (int colNo = 1; colNo < Header_GetItemCount(hHeader); colNo++) {
-					if (GetWindowTextLength(GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo)) > 0) {
+					HWND hEdit = GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo);
+					if (GetWindowTextLength(hEdit) > 0) {
 						TCHAR colname16[256]{0};
 						Header_GetItemText(hHeader, colNo, colname16, 255);
 						_tcscat(where16, TEXT(" and \""));
 						_tcscat(where16, colname16);
-						_tcscat(where16, TEXT("\" like '%' || ? || '%' "));
+
+						TCHAR buf16[2]{0};
+						GetWindowText(hEdit, buf16, 2);
+						_tcscat(where16,
+							buf16[0] == TCHAR('=') ? TEXT("\" = ? ") :
+							buf16[0] == TCHAR('/') ? TEXT("\" regexp ? ") :
+							TEXT("\" like '%' || ? || '%' "));
 					}
 
 				}
@@ -752,10 +768,10 @@ namespace dialogs {
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					int colCount = sqlite3_column_count(stmt);
 					if (GetProp(hWnd, TEXT("BLOBS")) == NULL) {
-						bool* types = new bool[colCount]{0};
+						bool* blobs = new bool[colCount]{0};
 						for (int i = 0; i < colCount; i++)
-							types[i] = stricmp(sqlite3_column_decltype(stmt, i), "blob") == 0;
-						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)types);
+							blobs[i] = sqlite3_column_decltype(stmt, i) != 0 && stricmp(sqlite3_column_decltype(stmt, i), "blob") == 0;
+						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)blobs);
 					}
 
 					int bindNo = 0;
@@ -763,11 +779,10 @@ namespace dialogs {
 						HWND hEdit = GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo);
 						int size = GetWindowTextLength(hEdit);
 						if (size > 0) {
-
 							TCHAR value16[size + 1]{0};
 							GetWindowText(hEdit, value16, size + 1);
-							char* value8 = utils::utf16to8(value16);
-							sqlite3_bind_text(stmt, bindNo + 1, value8, strlen(value8), SQLITE_TRANSIENT);
+							char* value8 = utils::utf16to8(value16[0] == TEXT('=') || value16[0] == TEXT('/') ? value16 + 1 : value16);
+							utils::sqlite3_bind_variant(stmt, bindNo + 1, value8);
 							delete [] value8;
 							bindNo++;
 						}
@@ -2352,9 +2367,9 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_EDITOR), prefs::get("restore-editor") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT), prefs::get("use-highlight") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_FORCE_WAL), prefs::get("force-wal") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB), prefs::get("query-data-in-current-tab") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_BEEP_ON_QUERY_END), prefs::get("beep-on-query-end") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[255];
 				_stprintf(buf, TEXT("%i"), prefs::get("row-limit"));
@@ -2362,6 +2377,9 @@ namespace dialogs {
 
 				_stprintf(buf, TEXT("%i"), prefs::get("cli-row-limit"));
 				SetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf);
+
+				_stprintf(buf, TEXT("%i"), prefs::get("beep-query-duration"));
+				SetDlgItemText(hWnd, IDC_DLG_BEEP_ON_QUERY_END, buf);
 
 				char* startup8 = prefs::get("startup", "");
 				TCHAR* startup16 = utils::utf8to16(startup8);
@@ -2391,8 +2409,8 @@ namespace dialogs {
 					prefs::set("use-highlight", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
-					prefs::set("query-data-in-current-tab", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_QUERY_IN_CURR_TAB)));
-					prefs::set("beep-on-query-end", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_BEEP_ON_QUERY_END)));
+					prefs::set("force-wal", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_FORCE_WAL)));
+					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
 					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);
@@ -2400,6 +2418,9 @@ namespace dialogs {
 
 					GetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf, 255);
 					prefs::set("cli-row-limit", (int)_tcstod(buf, NULL));
+
+					GetDlgItemText(hWnd, IDC_DLG_BEEP_ON_QUERY_END, buf, 255);
+					prefs::set("beep-query-duration", (int)_tcstod(buf, NULL));
 
 					setEditorFont(hEditorWnd);
 					setTreeFont(hTreeWnd);
@@ -2488,11 +2509,10 @@ namespace dialogs {
 					return 0;
 
 				HWND hListWnd = GetParent(hWnd);
-				int size = GetWindowTextLength(hWnd);
-				TCHAR* value16 = new TCHAR[size + 1]{0};
-				GetWindowText(hWnd, value16, size + 1);
+				int size = GetWindowTextLength(hWnd) + 1;
+				TCHAR value16[size]{0};
+				GetWindowText(hWnd, value16, size);
 				ListView_SetItemText(hListWnd, LOWORD(data), HIWORD(data), value16);
-				delete [] value16;
 
 				HWND parent = GetParent(hWnd);
 				InvalidateRect(parent, 0, TRUE);
@@ -2525,14 +2545,39 @@ namespace dialogs {
 			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldHeaderEdit, hWnd, msg, wParam, lParam));
 
 		switch(msg){
-			case WM_CHAR:
+			// Prevent beep
+			case WM_CHAR: {
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB)
+					return 0;
+			}
+			break;
+
 			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN || wParam == VK_ESCAPE) {
-					HWND hDlg = GetParent(GetParent(hWnd));
-					if (msg == WM_KEYDOWN) {
-						SendMessage(hDlg, wParam == VK_RETURN ? WMU_UPDATE_DATA : WM_CLOSE, 0, 0);
-						SendMessage(GetParent(hDlg), wParam == VK_RETURN ? WMU_UPDATE_DATA : WM_CLOSE, 0, 0);
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB) {
+					HWND hDlg = GetAncestor(hWnd, GA_ROOT);
+					if (wParam == VK_RETURN) {
+						SendMessage(hDlg, WMU_UPDATE_DATA, 0, 0);
+						SetFocus(hWnd);
 					}
+
+					if (wParam == VK_ESCAPE)
+						SendMessage(hDlg, WM_CLOSE, 0, 0);
+
+					if (wParam == VK_TAB) {
+						HWND hListWnd = GetDlgItem(hDlg, IDC_DLG_QUERYLIST);
+						HWND hHeader = ListView_GetHeader(hListWnd);
+
+						HWND hFocusWnd = GetDlgItem(hHeader, IDC_HEADER_EDIT + 1);
+						if (GetParent(hWnd) == hHeader)	{
+							int colCount = Header_GetItemCount(hHeader);
+							int colNo = GetDlgCtrlID(hWnd) - IDC_HEADER_EDIT;
+							hFocusWnd = colNo < colCount - 2 ?
+								GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo + 1) :
+								GetDlgItem(GetDlgItem(hDlg, IDC_DLG_TOOLBAR), IDC_DLG_FILTER);
+						}
+						SetFocus(hFocusWnd);
+					}
+
 					return 0;
 				}
 			}

@@ -43,8 +43,9 @@
 			<Add option="-std=c++11" />
 		</Compiler>
 		<Linker>
+			<Add option="-static-libstdc++" />
 			<Add option="-static-libgcc" />
-			<Add option="-static-libstdc++ -static-libgcc" />
+			<Add option="-static" />
 			<Add library="gdi32" />
 			<Add library="user32" />
 			<Add library="kernel32" />

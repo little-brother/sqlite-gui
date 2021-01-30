@@ -16,8 +16,8 @@ namespace prefs {
 	char* get(const char* name, const char* def);
 	bool set(const char* name, const char* value);
 
-	bool setRecent(char* path);
-	int getRecents(char** recents);
+	bool setRecentDatabase(char* path);
+	int getRecentDatabases(char** recents);
 
 	bool setQuery(const char* table, const char* query);
 	int deleteQuery(const char* table, const char* query);

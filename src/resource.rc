@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 3, 8, 0
+FILEVERSION 1, 4, 0, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
-			VALUE "FileDescription", "SQLite GUI\000"
-			VALUE "FileVersion", "1.3.8\000"
+			VALUE "FileDescription", "sqlite-gui\000"
+			VALUE "FileVersion", "1.4.0\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.3.8\000"
+			VALUE "ProductVersion", "1.4.0\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -134,7 +134,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50, 50, 200, 265
+IDD_SETTINGS DIALOGEX 50, 50, 200, 265 + 15
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -144,28 +144,31 @@ BEGIN
 	COMBOBOX		IDC_DLG_FONT_SIZE, 165, 5, 30, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
 	AUTOCHECKBOX	"Autoload extensions", IDC_DLG_AUTOLOAD, 5, 20, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Open last database on start up", IDC_DLG_RESTORE_DB, 5, 35, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Restore editor tabs on start up", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Open last database at startup", IDC_DLG_RESTORE_DB, 5, 35, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Restore editor tabs at startup", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Editor highlighter", IDC_DLG_USE_HIGHLIGHT, 5, 65, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 95, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Query table/view data in a current tab", IDC_DLG_QUERY_IN_CURR_TAB, 5, 110, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Beep on query end", IDC_DLG_BEEP_ON_QUERY_END, 5, 125, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Force database to WAL mode (multiply writers)", IDC_DLG_FORCE_WAL, 5, 95, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Turn off disk syncronization for batch operations", IDC_DLG_SYNC_OFF, 5, 110, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110 + 15, 180, 16, BS_NOTIFY
 
-	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149, 50, 14, SS_LEFT
-	COMBOBOX		IDC_DLG_INDENT, 55, 146, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20 + 15, 50, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20 + 15, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 162, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164 - 20 + 15, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 162 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Max rows in terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 155, 177, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179 - 20 + 15, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 155, 177 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Execute on database connection", IDC_DLG_LABEL, 5, 194, 150, 14, SS_LEFT
-	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 205, 190, 30, 0
+	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20 + 15, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 155, 177 + 15 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 70, 246, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 246, 60, 14, WS_TABSTOP
+	LTEXT		   "Execute on database connection", IDC_DLG_LABEL, 5, 194 + 10, 150, 14, SS_LEFT
+	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 205 + 10, 190, 40, 0
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 70, 246 + 15, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 246 + 15, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -644,7 +647,7 @@ BEGIN
 	IDS_CREATE_VIEW "create view myview\nas\nselect * from mytable"
 	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n) where colA is not null"
 	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
-	IDS_ABOUT "Sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020-2021\nlb.im@ya.ru"
+	IDS_ABOUT "sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020-2021\nlb.im@ya.ru"
 	IDS_HOTKEYS "Global\n" \
 		"Esc - App exit\n" \
 		"F5 - Refresh navigation tree\n" \
@@ -674,20 +677,28 @@ BEGIN
 		"Etc\n" \
 		"Ctrl + Enter - Add row in ""Add row"" dialog\n" \
 		"Ctrl + Enter - Move to next row in ""View row"" dialog\n\n" \
+
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
-		"* Only the selected part of the query will be executed.\n\n"
+		"* Only the selected part of the query will be executed.\n\n" \
+		"* The app uses independed connections for each tab editor. It allows to run\n   queries in parallel and to have a responsive UI. But it also has some side\n" \
+		"   effects: pragma and attach/detach commands will be applied only for the\n"
+		"   tab who called them. Check Wiki to get more.\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
-		"* By default app uses auto-transaction. All changes are applied immediately.\n\n" \
+		"* In the batch mode all queries are executed in one implicit transaction.\n\n" \
+		"* Edit data dialog \n"
+		"   Dialog uses auto-transaction. So all changes are applied immediately.\n" \
+		"   Use =ABC as a column filter to find rows with column values equal to ""ABC""\n" \
+		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database or temp schema, type in Editor\n  <db alias>.<tablename>, e.g. preferences.history\n   and click with holding Ctrl by it.\n\n"
-		"* SQLite supports a limited subset of ALTER. So there is not GUI allows\n   remove/reorder column to an existing table or something like this.\n\n" \
-		"* Do you need a newer version of sqlite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
+		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   remove/reorder column in an existing table or something like this.\n\n" \
+		"* Do you need a newer version of SQLite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires ora extension.\n\n" \
-		"* Disabled indexes and triggers are stored in ""preferences.disabled"" table.\n\n" \
 		"Cons\n" \
-		"* Only utf-8 is supported\n* NULL is displayed as an empty string\n" \
+		"* Only utf-8 is supported\n" \
+		"* NULL is displayed as an empty string\n" \
 		"* An empty string is set to NULL when data is edit\n" \
-		"* Data diagram isn't accurate with building references in views/triggers\n" \
-		"* The app is a single threaded, so the interface freeze on long operations \n"
+		"* Data diagram isn't accurate with building references in views/triggers\n"
+
 	IDS_EXTENSIONS L"Json1\n" \
 		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
 		"Math\n" \
@@ -700,7 +711,7 @@ BEGIN
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
-		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), crc32(str) and md5(str) functions.\n\n" \
+		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
 		"Icu (third party)\n"\
 		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""\n\n" \
 

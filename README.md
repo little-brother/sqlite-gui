@@ -1,4 +1,4 @@
-Sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks 17](http://www.codeblocks.org/). <br>
+sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks 17](http://www.codeblocks.org/). <br>
 
 |[**Download the latest version**](https://github.com/little-brother/sqlite-gui/releases/latest)|
 |-------------------------------------------------------------------------------------------|
@@ -29,5 +29,5 @@ Sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/inde
 * NULL is displayed as an empty string and an empty string is set to NULL when data is edit
 * The application is a single threaded. Therefore, the interface freeze on long operations
 
-If you like the project, press the like-button [here](https://alternativeto.net/software/sqlite-gui/) or write something in a [Reddit](https://www.reddit.com/r/sqlite/comments/iaao8x/a_new_lightweight_sqlite_tool_for_windows/) topic to support it.<br>
+If you like the project, press the like-button [here](https://alternativeto.net/software/sqlite-gui/about) or write something in a [Reddit](https://www.reddit.com/r/sqlite/comments/iaao8x/a_new_lightweight_sqlite_tool_for_windows/) topic to support it.<br>
 If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki) or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.

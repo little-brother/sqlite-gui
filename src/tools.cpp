@@ -1621,13 +1621,15 @@ namespace tools {
 		bool rc = true;
 		if (data8 != 0) {
 			sqlite3_exec(db, "begin transaction;", NULL, 0, NULL);
-			sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
+			if (prefs::get("synchronous-off"))
+				sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
 			bool hasBOM = data8[0] == '\xEF' && data8[1] == '\xBB' && data8[2] == '\xBF';
 			rc = SQLITE_OK == sqlite3_exec(db, hasBOM ? data8 + 3 : data8, NULL, 0, NULL);
 			if (!rc)
 				showDbError(hMainWnd);
 
-			sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
+			if (prefs::get("synchronous-off"))
+				sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
 			sqlite3_exec(db, rc ? "commit;" : "rollback;", NULL, 0, NULL);
 			delete [] data8;
 		}
@@ -1676,11 +1678,11 @@ namespace tools {
 			}
 
 			if (wParam == IDM_DDL) {
-				TCHAR query16[1024] = {0};
-				_stprintf(query16, TEXT("with t as (select sql, iif(type = 'table', 0, 1) from sqlite_master " \
-					"where tbl_name = '%s' and sql is not null order by 2) " \
-					"select group_concat(sql, ';' || char(10) || char(10)) || ';' from t"), table16);
-				TCHAR* DDL = getDbValue(query16);
+				TCHAR* DDL = getDDL(table16, TABLE, false);
+				if (!DDL) {
+					delete [] DDL;
+					DDL = getDDL(table16, VIEW, false);
+				}
 				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_DDL), hWnd, (DLGPROC)&dialogs::cbDlgDDL, (LPARAM)DDL);
 				delete [] DDL;
 			}

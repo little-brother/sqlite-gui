@@ -22,20 +22,23 @@
 #define IDD_TOOL_DATABASE_SEARCH   37
 #define IDD_TOOL_STATISTICS        38
 
-#define IDA_ACCEL                  77
+#define IDA_ACCEL                  50
 
-#define IDC_DLG_OK                 91
-#define IDC_DLG_CANCEL             92
-#define IDC_DLG_DELETE             93
+#define IDC_DLG_OK                 51
+#define IDC_DLG_CANCEL             52
+#define IDC_DLG_DELETE             53
 
-#define IDC_STATUSBAR              100
-#define IDC_TOOLBAR                101
-#define IDC_MAINTAB                102
-#define IDC_EDITOR                 103
-#define IDC_TAB                    104
-#define IDC_TREE                   105
-#define IDC_CLI_EDITOR             106
-#define IDC_CLI_RESULT             107
+#define IDC_STATUSBAR              60
+#define IDC_TOOLBAR                61
+#define IDC_MAINTAB                62
+#define IDC_EDITOR                 63
+#define IDC_TAB                    64
+#define IDC_TREE                   65
+#define IDC_CLI_EDITOR             66
+#define IDC_CLI_RESULT             67
+#define IDC_CLI_RAWDATA            68
+#define IDC_QUERYLIST              69
+#define IDC_REFLIST                70
 
 #define IDC_DLG_EDITOR             110
 #define IDC_DLG_LABEL              111
@@ -60,7 +63,7 @@
 #define IDC_DLG_USE_LEGACY         129
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_EXIT_BY_ESCAPE     131
-#define IDC_DLG_QUERY_IN_CURR_TAB  132
+#define IDC_DLG_FORCE_WAL          132
 #define IDC_DLG_INDENT             133
 #define IDC_DLG_TOOLBAR            134
 #define IDC_DLG_STARTUP            135
@@ -79,6 +82,7 @@
 #define IDC_DLG_EXAMPLE            146
 #define IDC_DLG_CLI_ROW_LIMIT      147
 #define IDC_DLG_BEEP_ON_QUERY_END  148
+#define IDC_DLG_SYNC_OFF           149
 
 #define IDC_DLG_ROW_ADD            150
 #define IDC_DLG_ROW_DEL            151
@@ -155,6 +159,9 @@
 #define IDC_MENU_TRIGGER           515
 #define IDC_MENU_COLUMN            516
 #define IDC_MENU_DISABLED          517
+
+#define IDC_TAB_ROWS               600 // iterable
+#define IDC_TAB_MESSAGE            700 // iterable
 
 // Iterable. Should have a gap
 #define IDC_ROW_LABEL              900
@@ -313,6 +320,8 @@
 #define WMU_TAB_GET_TEXT           WM_USER + 35
 #define WMU_TAB_GET_COUNT          WM_USER + 36
 #define WMU_TAB_GET_CURRENT        WM_USER + 37
+#define WMU_TAB_SET_STYLE          WM_USER + 38
+#define WMU_TAB_GET_STYLE          WM_USER + 39
 
 #define NM_TAB_ADD                 WM_USER + 40
 #define NM_TAB_DELETE              WM_USER + 41
