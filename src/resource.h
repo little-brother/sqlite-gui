@@ -15,7 +15,7 @@
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
 #define IDD_TOOL_IMPORT_CSV        32
-#define IDD_TOOL_IMPORT_ODBC       33
+#define IDD_TOOL_EXPORT_IMPORT_ODBC 33
 #define IDD_TOOL_GENERATE_DATA     34
 #define IDD_TOOL_DATABASE_DIAGRAM  35
 #define IDD_TOOL_COMPARE_DATABASE  36
@@ -63,7 +63,6 @@
 #define IDC_DLG_USE_LEGACY         129
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_EXIT_BY_ESCAPE     131
-#define IDC_DLG_FORCE_WAL          132
 #define IDC_DLG_INDENT             133
 #define IDC_DLG_TOOLBAR            134
 #define IDC_DLG_STARTUP            135
@@ -95,10 +94,10 @@
 #define IDC_DLG_CONNECTION_STRING  158
 #define IDC_DLG_ISTABLE            159
 #define IDC_DLG_ISQUERY            160
-#define IDC_DLG_SOURCE_TABLE       161
-#define IDC_DLG_SOURCE_QUERY       162
 #define IDC_DLG_HELP               163
-#define IDC_DLG_RECREATE_TARGET    164
+#define IDC_DLG_ODBC_STRATEGY      164
+#define IDC_DLG_ODBC_SCHEMA        165
+#define IDC_DLG_ODBC_SCHEMA_LABEL  166
 #define IDC_DLG_DATABASE           170
 #define IDC_DLG_DATABASE_SELECTOR  171
 #define IDC_DLG_COMPARE_SCHEMA     172
@@ -121,7 +120,7 @@
 #define IDC_DLG_SEARCH_ROWS        194
 #define IDC_DLG_STATISTICS         195
 #define IDC_DLG_FILTER             196
-#define IDM_LAST_SEPARATOR         197
+#define IDC_DLG_ODBC_MANAGER       197
 
 #define IDC_DLG_GEN_ISTRUNCATE     260
 #define IDC_DLG_GEN_ROW_COUNT      261
@@ -190,16 +189,16 @@
 #define IDM_IMPORT_ODBC            1522
 #define IDM_EXPORT_SQL             1523
 #define IDM_EXPORT_CSV             1524
-#define IDM_CHECK_INTEGRITY        1525
-#define IDM_CHECK_FOREIGN_KEY      1526
-#define IDM_VACUUM                 1527
-#define IDM_REINDEX                1528
-#define IDM_STATISTICS             1529
-#define IDM_GENERATE_DATA          1530
-#define IDM_DATABASE_DIAGRAM       1531
-#define IDM_WORKFLOW_MANAGER       1532
-#define IDM_COMPARE_DATABASE       1533
-#define IDM_DATABASE_SEARCH        1534
+#define IDM_EXPORT_ODBC            1525
+#define IDM_CHECK_INTEGRITY        1526
+#define IDM_CHECK_FOREIGN_KEY      1527
+#define IDM_VACUUM                 1528
+#define IDM_REINDEX                1529
+#define IDM_STATISTICS             1530
+#define IDM_GENERATE_DATA          1531
+#define IDM_DATABASE_DIAGRAM       1532
+#define IDM_COMPARE_DATABASE       1534
+#define IDM_DATABASE_SEARCH        1535
 
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541
@@ -265,6 +264,7 @@
 #define IDM_ROW_DELETE             1724
 #define IDM_ROW_REFRESH            1725
 #define IDM_ROW_DUPLICATE          1726
+#define IDM_LAST_SEPARATOR         1727
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732
@@ -312,6 +312,7 @@
 #define WMU_UPDATE_COLSIZE         WM_USER + 13
 #define WMU_SET_CURRENT_CELL       WM_USER + 14
 #define WMU_SYNC_CURRENT_CELL      WM_USER + 15
+#define WMU_UPDATE_DIAGRAM         WM_USER + 16
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

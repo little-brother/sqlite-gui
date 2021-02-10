@@ -608,24 +608,37 @@ namespace tools {
 		return false;
 	}
 
-	BOOL CALLBACK cbDlgImportODBC (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	// USERDATA: 0 - import 1 - export
+	BOOL CALLBACK cbDlgExportImportODBC (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, TEXT("odbc_data"));
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RECREATE_TARGET), BST_CHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE), BST_CHECKED);
-				EnableWindow(GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE), FALSE);
-				SendMessage(hWnd, WM_COMMAND, IDC_DLG_ISTABLE, 0);
+				bool isExport = lParam;
+				SetWindowLong(hWnd, GWL_USERDATA, isExport);
+				SetWindowText(hWnd, isExport ? TEXT("Export data via ODBC") : TEXT("Import data via ODBC"));
+				SetDlgItemText(hWnd, IDC_DLG_ODBC_SCHEMA_LABEL, isExport ? TEXT("Source schema") : TEXT("Import to schema"));
+				SetDlgItemText(hWnd, IDC_DLG_OK, isExport ? TEXT("Export table(s)") : TEXT("Import table(s)"));
 
-				HWND hCSWnd = GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING);
-				sqlite3_stmt *stmt;
-				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'DSN=' || value from json_each(json_extract(odbc_dsn(), '$.result'))", -1, &stmt, 0);
-				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
-					TCHAR* connectionString16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
-					ComboBox_AddString(hCSWnd, connectionString16);
-					delete [] connectionString16;
+				HWND hStrategyWnd = GetDlgItem(hWnd, IDC_DLG_ODBC_STRATEGY);
+				ComboBox_AddString(hStrategyWnd, TEXT("Do nothing"));
+				ComboBox_AddString(hStrategyWnd, TEXT("Skip"));
+				ComboBox_AddString(hStrategyWnd, TEXT("Clear existing data"));
+				ComboBox_AddString(hStrategyWnd, TEXT("Drop and create new table"));
+				ComboBox_SetCurSel(hStrategyWnd, prefs::get("odbc-strategy"));
+
+				HWND hSchemaWnd = GetDlgItem(hWnd, IDC_DLG_ODBC_SCHEMA);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_database_list where name not in ('temp', 'preferences') order by iif(name = 'main', 0, name)", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* schema16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hSchemaWnd, schema16);
+						delete [] schema16;
+					}
 				}
 				sqlite3_finalize(stmt);
+				ComboBox_SetCurSel(hSchemaWnd, 0);
+
+				if (isExport)
+					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 			}
 			break;
 
@@ -634,30 +647,54 @@ namespace tools {
 				break;
 
 			case WM_COMMAND: {
-				if (wParam == IDC_DLG_ISQUERY || wParam == IDC_DLG_ISTABLE) {
-					BOOL isTable = wParam == IDC_DLG_ISTABLE;
-					HWND hSrcWnd = GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE);
-					EnableWindow(hSrcWnd, isTable && ComboBox_GetCount(hSrcWnd) > 0);
-					EnableWindow(GetDlgItem(hWnd, IDC_DLG_SOURCE_QUERY), !isTable);
-				}
+				bool isExport = GetWindowLong(hWnd, GWL_USERDATA);
 
 				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && HIWORD(wParam) == CBN_SELCHANGE)
 					PostMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CONNECTION_STRING, CBN_EDITCHANGE), (LPARAM)GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING));
 
-				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && (HIWORD(wParam) == CBN_EDITCHANGE)) {
+				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && HIWORD(wParam) == CBN_DROPDOWN) {
+					HWND hCSWnd = GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING);
+					int size = ComboBox_GetTextLength(hCSWnd) + 1;
+					TCHAR cs[size];
+					ComboBox_GetText(hCSWnd, cs, size);
+					ComboBox_ResetContent(hCSWnd);
+					ComboBox_SetText(hCSWnd, cs);
+
+					sqlite3_stmt *stmt;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'DSN=' || value from json_each(json_extract(odbc_dsn(), '$.result'))", -1, &stmt, 0);
+					while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* connectionString16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hCSWnd, connectionString16);
+						delete [] connectionString16;
+					}
+					sqlite3_finalize(stmt);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_ODBC_SCHEMA && HIWORD(wParam) == CBN_SELCHANGE && isExport)
+					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
+
+				if (LOWORD(wParam) == IDC_DLG_ODBC_MANAGER) {
+					TCHAR winPath[MAX_PATH], appPath[MAX_PATH];
+					GetWindowsDirectory(winPath, MAX_PATH);
+					_stprintf(appPath, TEXT("%s/SysWOW64/odbcad32.exe"), winPath);
+					ShellExecute(0, 0, appPath, 0, 0, SW_SHOW);
+					SetFocus(0);
+					return 0;
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && (HIWORD(wParam) == CBN_EDITCHANGE) && !isExport) {
 					TCHAR connectionString16[1024]{0};
 					GetDlgItemText(hWnd, IDC_DLG_CONNECTION_STRING, connectionString16, 1024);
-					HWND hSrcWnd = GetDlgItem(hWnd, IDC_DLG_SOURCE_TABLE);
-					EnableWindow(hSrcWnd, FALSE);
 
 					if (!_tcslen(connectionString16))
 						return 0;
 
-					sqlite3_exec(db, "drop table if exists temp.odbc_tables", NULL, NULL, NULL);
-					sqlite3_stmt *stmt;
-					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select odbc_read(?1, 'TABLES', 'temp.odbc_tables')", -1, &stmt, 0);
+					if (SQLITE_OK != sqlite3_exec(db, "drop table if exists temp.odbc_tables", NULL, NULL, NULL))
+						return showDbError(hWnd);
 
-					if (rc) {
+					bool rc = false;
+					sqlite3_stmt *stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select odbc_read(?1, 'TABLES', 'temp.odbc_tables')", -1, &stmt, 0)) {
 						char* connectionString8 = utils::utf16to8(connectionString16);
 						sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
 						delete [] connectionString8;
@@ -666,20 +703,14 @@ namespace tools {
 					}
 					sqlite3_finalize(stmt);
 
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+					ListView_Reset(hListWnd);
 					if (rc) {
-						ComboBox_ResetContent(hSrcWnd);
-
-						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select table_name from temp.odbc_tables where table_type in ('TABLE', 'VIEW', 'SYSTEM TABLE') order by 1", -1, &stmt, 0);
-						while (rc && (SQLITE_ROW == sqlite3_step(stmt))) {
-							TCHAR* name16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
-							ComboBox_AddString(hSrcWnd, name16);
-							delete [] name16;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select table_name from temp.odbc_tables where table_type in ('TABLE', 'VIEW', 'SYSTEM TABLE') order by 1", -1, &stmt, 0)) {
+							ListView_SetData(hListWnd, stmt);
+							ListView_SetColumnWidth(hListWnd, 1, 290);
 						}
-
 						sqlite3_finalize(stmt);
-
-						ComboBox_SetCurSel(hSrcWnd, 0);
-						EnableWindow(hSrcWnd, Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE)) == BST_CHECKED && ComboBox_GetCount(hSrcWnd) > 0);
 					}
 				}
 
@@ -690,76 +721,180 @@ namespace tools {
 				}
 
 				if (wParam == IDC_DLG_OK) {
-					TCHAR target16[1024];
-					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, target16, 1024);
-					if (!_tcslen(target16))
-						return MessageBox(0, TEXT("Specify a name for the target table"), NULL, 0);
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+					if (ListView_GetSelectedCount(hListWnd) == 0)
+						return MessageBox(0, TEXT("You should specify at least one table"), NULL, 0);
 
 					TCHAR connectionString16[1024];
 					GetDlgItemText(hWnd, IDC_DLG_CONNECTION_STRING, connectionString16, 1024);
-					if (!_tcslen(connectionString16))
-						return MessageBox(0, TEXT("Specify a valid connection string"), NULL, 0);
+					if (_tcslen(connectionString16) == 0)
+						return MessageBox(0, TEXT("You should provide connection string"), NULL, 0);
 
-					if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RECREATE_TARGET)) == BST_CHECKED) {
-						TCHAR* schema16 = utils::getName(target16, true);
-						TCHAR* tablename16 = utils::getName(target16);
-						TCHAR query16[_tcslen(target16) + 64];
-						_stprintf(query16, TEXT("drop table if exists \"%s\".\"%s\""), schema16, tablename16);
-						char* query8 = utils::utf16to8(query16);
-						BOOL rc = SQLITE_OK == sqlite3_exec(db, query8, NULL, NULL, NULL);
-						delete [] query8;
-						delete [] tablename16;
-						delete [] schema16;
+					char* connectionString8 = utils::utf16to8(connectionString16);
 
-						if (!rc)
-							return showDbError(hWnd);
-					}
+					TCHAR result16[MAX_TEXT_LENGTH]{0};
 
-					sqlite3_stmt *stmt;
-					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select json_extract(odbc_read(?1, ?2, ?3), '$.error')", -1, &stmt, 0);
-					if (rc) {
-						TCHAR query16[MAX_TEXT_LENGTH];
-						if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTABLE)) == BST_CHECKED) {
-							TCHAR tblname16[1024];
-							GetDlgItemText(hWnd, IDC_DLG_SOURCE_TABLE, tblname16, MAX_TEXT_LENGTH);
-							_stprintf(query16, TEXT("select * from \"%s\""), tblname16);
+					// 0 - do nothing, 1 - skip, 2 - clear, 3 - drop
+					int strategy = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ODBC_STRATEGY));
+
+					int rowNo = -1;
+					int rc = true;
+					while((rowNo = ListView_GetNextItem(hListWnd, rowNo, LVNI_SELECTED)) != -1) {
+						TCHAR table16[1024];
+						ListView_GetItemText(hListWnd, rowNo, 1, table16, 1023);
+						char* table8 = utils::utf16to8(table16);
+
+						TCHAR schema16[255];
+						GetDlgItemText(hWnd, IDC_DLG_ODBC_SCHEMA, schema16, 255);
+						char* schema8 = utils::utf16to8(schema16);
+
+						TCHAR res16[_tcslen(table16) + 1024]{0};
+
+						if (strategy && !isExport) {
+							bool isExists = false;
+							sqlite3_stmt* stmt;
+							if (SQLITE_OK == sqlite3_prepare_v2(db, "select 1 from sqlite_master where tbl_name = ?1 ", -1, &stmt, 0)) {
+								sqlite3_bind_text(stmt, 1, table8, strlen(table8), SQLITE_TRANSIENT);
+								isExists = SQLITE_ROW == sqlite3_step(stmt);
+							}
+							sqlite3_finalize(stmt);
+
+							if (isExists) {
+								if (strategy == 1) {
+									_stprintf(res16, TEXT("%s - skipped\n"), table16);
+									_tcscat(result16, res16);
+									continue;
+								}
+
+								char query8[strlen(table8) + 255];
+								sprintf(query8, strategy == 3 ? "drop table if exists \"%s\".\"%s\"" : "delete from \"%s\".\"%s\"", schema8, table8);
+								sqlite3_exec(db, query8, NULL, NULL, NULL);
+							}
+						}
+
+						bool isError = false;
+						if (strategy && isExport) {
+							bool isExists = false;
+							sqlite3_stmt* stmt;
+							if (SQLITE_OK == sqlite3_prepare_v2(db,
+									"with t(res) as (select odbc_query(?1, 'select * from \"'|| ?2 || '\" where 1=2')) " \
+									"select 1 from t where coalesce(json_extract(res, '$.error'),'') = ''", -1, &stmt, 0)) {
+								sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
+								sqlite3_bind_text(stmt, 2, table8, strlen(table8), SQLITE_TRANSIENT);
+
+								isExists = SQLITE_ROW == sqlite3_step(stmt);
+							}
+							sqlite3_finalize(stmt);
+
+							if (isExists) {
+								if (strategy == 1) {
+									_stprintf(res16, TEXT("%s - skipped\n"), table16);
+									_tcscat(result16, res16);
+									continue;
+								}
+
+								sqlite3_stmt* stmt;
+								if (SQLITE_OK == sqlite3_prepare_v2(db,
+									"select json_extract(odbc_query(?1, printf('%s \"%s\"', ?3, ?2)), '$.error')", -1, &stmt, 0)) {
+									sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
+									sqlite3_bind_text(stmt, 2, table8, strlen(table8), SQLITE_TRANSIENT);
+									sqlite3_bind_text(stmt, 3, strategy == 3 ?  "drop table " : "delete from ", 12, SQLITE_TRANSIENT);
+
+									if (SQLITE_ROW == sqlite3_step(stmt)) {
+										const char* err8 = (const char*)sqlite3_column_text(stmt, 0);
+										if (err8 && strlen(err8)) {
+											TCHAR res16[1024];
+											TCHAR* err16 = utils::utf8to16(err8);
+											_stprintf(res16, TEXT("Couldn't %s table %s. Perhaps the driver doesn't support this operation.\n%s"), strategy == 3 ? TEXT("drop") : TEXT("clear"), table16, err16);
+											MessageBox(hWnd, res16, TEXT("Error"), MB_OK);
+											delete [] err16;
+											isError = true;
+										}
+									} else {
+										showDbError(hWnd);
+									}
+								} else {
+									showDbError(hWnd);
+								}
+								sqlite3_finalize(stmt);
+							}
+						}
+
+						if (!isError) {
+							sqlite3_stmt *stmt;
+							rc = SQLITE_OK == sqlite3_prepare_v2(db,
+								isExport ?
+									"with t(res) as (select odbc_write(?2, ?1, ?3)) select coalesce(json_extract(res, '$.error'), printf('read: %i, inserted: %i', json_extract(res, '$.read'), json_extract(res, '$.inserted')) ) from t" :
+									"with t(res) as (select odbc_read(?1, ?2, ?3)) select coalesce(json_extract(res, '$.error'), printf('read: %i, inserted: %i', json_extract(res, '$.read'), json_extract(res, '$.inserted')) ) from t",
+								-1, &stmt, 0);
+
+							if (rc) {
+								sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
+
+								char query8[strlen(schema8) + strlen(table8) + 64];;
+								if (isExport)
+									sprintf(query8, "select * from \"%s\".\"%s\"", schema8, table8);
+								else
+									sprintf(query8, "select * from \"%s\"", table8);
+								sqlite3_bind_text(stmt, 2, query8, strlen(query8), SQLITE_TRANSIENT);
+
+								char target8[strlen(schema8) + strlen(table8) + 64];
+								if (isExport)
+									sprintf(target8, "\"%s\"", table8);
+								else
+									sprintf(target8, "\"%s\".\"%s\"", schema8, table8);
+								sqlite3_bind_text(stmt, 3, target8, strlen(target8), SQLITE_TRANSIENT);
+
+								rc = SQLITE_ROW == sqlite3_step(stmt);
+							}
+
+							TCHAR* _res16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							_stprintf(res16, TEXT("%s - %s\n"), table16, _res16);
+							_tcscat(result16, res16);
+							delete [] _res16;
+
+							sqlite3_finalize(stmt);
 						} else {
-							GetDlgItemText(hWnd, IDC_DLG_SOURCE_QUERY, query16, MAX_TEXT_LENGTH);
+							_stprintf(res16, TEXT("%s - error\n"), table16);
+							_tcscat(result16, res16);
 						}
 
-						char* connectionString8 = utils::utf16to8(connectionString16);
-						char* query8 = utils::utf16to8(query16);
-						char* target8 = utils::utf16to8(target16);
-
-						sqlite3_bind_text(stmt, 1, connectionString8, strlen(connectionString8), SQLITE_TRANSIENT);
-						sqlite3_bind_text(stmt, 2, query8, strlen(query8), SQLITE_TRANSIENT);
-						sqlite3_bind_text(stmt, 3, target8, strlen(target8), SQLITE_TRANSIENT);
-						delete [] connectionString8;
-						delete [] query8;
-						delete [] target8;
-
-						rc = SQLITE_ROW == sqlite3_step(stmt);
+						delete [] table8;
+						delete [] schema8;
 					}
 
+					delete [] connectionString8;
+
 					if (rc) {
-						TCHAR* res = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-						if (_tcslen(res)) {
-							MessageBox(0, res, NULL, 0);
-							rc = FALSE;
-						}
-						delete [] res;
+						prefs::set("odbc-strategy", strategy);
+						MessageBox(hWnd, result16, isExport ? TEXT("Export result") : TEXT("Import result"), MB_OK);
 					} else {
 						showDbError(hWnd);
 					}
-
-					sqlite3_finalize(stmt);
-
-					if (rc)
-						EndDialog(hWnd, DLG_OK);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_TARGET_CHANGED: {
+				TCHAR schema16[255];
+				GetDlgItemText(hWnd, IDC_DLG_ODBC_SCHEMA, schema16, 255);
+				HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
+
+				sqlite3_stmt* stmt;
+				char query8[1024];
+				char* schema8 = utils::utf16to8(schema16);
+				sprintf(query8, "select name from \"%s\".sqlite_master where type in ('table', 'view') order by type, name", schema8);
+				delete [] schema8;
+
+				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+					ListView_SetData(hTablesWnd, stmt);
+					ListView_SetColumnWidth(hTablesWnd, 1, 290);
+				}
+
+				sqlite3_finalize(stmt);
 			}
 			break;
 		}
@@ -1231,7 +1366,7 @@ namespace tools {
 				} else {
 					sqlite3_stmt *stmt, *stmt2;
 					if (SQLITE_OK == sqlite3_prepare_v2(db,
-						"with t as (select name from pragma_database_list()) " \
+						"with t as (select name from pragma_database_list() where name not in ('temp', 'preferences')) " \
 						"select name from t order by iif(name = 'main', 1, name)", -1, &stmt, 0)) {
 						while (SQLITE_ROW == sqlite3_step(stmt)) {
 							char* schema8 = (char *)sqlite3_column_text(stmt, 0);
@@ -1650,7 +1785,7 @@ namespace tools {
 	#define LINK_FK 1
 	#define LINK_VIEW 2
 	#define LINK_TRIGGER 3
-	#define MAX_LINK_COUNT 255
+	#define MAX_LINK_COUNT 1024
 	struct Link {
 		HWND hWndFrom;
 		int posFrom;
@@ -1666,7 +1801,7 @@ namespace tools {
 	POINT cursor = {0, 0};
 	HMENU hDiagramMenu = 0;
 
-	WNDPROC cbOldTable;
+	WNDPROC cbOldTable, cbOldDatabaseDiagramToolbar;
 	LRESULT CALLBACK cbNewTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_COMMAND) {
 			TCHAR table16[255]{0};
@@ -1734,6 +1869,16 @@ namespace tools {
 		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
 	}
 
+	LRESULT CALLBACK cbNewDatabaseDiagramToolbar(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldDatabaseDiagramToolbar, hWnd, msg, wParam, lParam));
+
+		if (msg == WM_COMMAND && (LOWORD(wParam) == IDC_DLG_FILTER) && (HIWORD(wParam) == EN_CHANGE))
+			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_UPDATE_DIAGRAM, 0, 0);
+
+		return CallWindowProc(cbOldDatabaseDiagramToolbar, hWnd, msg, wParam, lParam);
+	}
+
 	// USERDATA stores a handle of current diagram table
 	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -1743,15 +1888,25 @@ namespace tools {
 				TBBUTTON tbButtons [] = {
 					{0, IDM_LINK_FK, (byte)(prefs::get("link-fk") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("Foreign keys")},
 					{1, IDM_LINK_VIEW, (byte)(prefs::get("link-view") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in views")},
-					{2, IDM_LINK_TRIGGER, (byte)(prefs::get("link-trigger") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in triggers")}
+					{2, IDM_LINK_TRIGGER, (byte)(prefs::get("link-trigger") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in triggers")},
+					{-1, IDM_LAST_SEPARATOR, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0}
 				};
 
-				HWND hToolWnd = CreateToolbarEx (hWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
+				HWND hToolbarWnd = CreateToolbarEx (hWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
 					tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
 
-				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DIAGRAM_TOOLBAR), 32, 0, RGB(255,255,255));
-				SendMessage(hToolWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
-				SendMessage(hToolWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
+				// Should be run before TB_SETIMAGELIST to get the correct delimiter position
+				RECT rc{0};
+				SendMessage(hToolbarWnd, TB_GETRECT, IDM_LAST_SEPARATOR, (LPARAM)&rc);
+				cbOldDatabaseDiagramToolbar = (WNDPROC)SetWindowLong(hToolbarWnd, GWL_WNDPROC, (LONG)cbNewDatabaseDiagramToolbar);
+
+				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DIAGRAM_TOOLBAR), 32, 0, RGB(255, 255, 255));
+				SendMessage(hToolbarWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
+				SendMessage(hToolbarWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
+
+				CreateWindow(WC_STATIC, TEXT("Find"), WS_CHILD | WS_VISIBLE, rc.right + 16 * 3 - 5, 5, 30, 14, hToolbarWnd, 0, GetModuleHandle(0), 0);
+				HWND hFilterWnd = CreateWindow(WC_EDIT, NULL, WS_CHILD | WS_BORDER | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL, rc.right + 16 * 3 + 25, 3, 180, 19, hToolbarWnd, (HMENU) IDC_DLG_FILTER, GetModuleHandle(0), 0);
+				SendMessage(hFilterWnd, WM_SETFONT, (LPARAM)SendMessage(hToolbarWnd, WM_GETFONT, 0, 0), true);
 
 				HWND hTableWnd = 0;
 				int tblNo = 0;
@@ -1771,7 +1926,7 @@ namespace tools {
 							RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
 							prefs::getDiagramRect(dbname8, (const char*)sqlite3_column_text(stmt, 0), &rect);
 							hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
-								WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_NOSEL,
+								WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
 								rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
 
 							cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
@@ -1838,8 +1993,8 @@ namespace tools {
 						delete [] refname16;
 					}
 				} else {
-					SendMessage(hToolWnd, TB_SETSTATE, IDM_LINK_VIEW, 0);
-					SendMessage(hToolWnd, TB_SETSTATE, IDM_LINK_TRIGGER, 0);
+					SendMessage(hToolbarWnd, TB_SETSTATE, IDM_LINK_VIEW, 0);
+					SendMessage(hToolbarWnd, TB_SETSTATE, IDM_LINK_TRIGGER, 0);
 				}
 				sqlite3_finalize(stmt);
 
@@ -1947,6 +2102,24 @@ namespace tools {
 				bool isView = prefs::get("link-view");
 				bool isTrigger = prefs::get("link-trigger");
 				HWND hCurrWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+
+				int tblNo = 0;
+				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+					tblNo++;
+
+					if (GetProp(hTableWnd, TEXT("HIGHLIGHTED")) == 0 || !IsWindowVisible(hTableWnd))
+						continue;
+
+					RECT rc{0};
+					GetWindowRect(hTableWnd, &rc);
+					POINT p = {rc.left, rc.top};
+					ScreenToClient(hWnd, &p);
+
+					HPEN hPen = CreatePen(PS_DOT, 3, RGB(255, 200, 255));
+					SelectObject(hdc, hPen);
+					Rectangle(hdc, p.x - 5, p.y - 5,  p.x + rc.right - rc.left + 5, p.y + rc.bottom - rc.top + 5);
+					DeleteObject(hPen);
+				}
 
 				if (hCurrWnd) {
 					RECT rc{0};
@@ -2098,6 +2271,10 @@ namespace tools {
 					InvalidateRect(hWnd, NULL, true);
 				}
 
+				if (HIWORD(wParam) == LBN_SELCHANGE && GetParent((HWND)lParam) == hWnd)
+					return SendMessage(hWnd, WMU_UPDATE_DIAGRAM, 0, 0);
+
+
 				if (wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
 			}
@@ -2107,7 +2284,43 @@ namespace tools {
 				delete [] dbname8;
 				for (int i = 0; i < MAX_LINK_COUNT; i++)
 					links[i].type = 0;
+
+				int tblNo = 0;
+				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+					RemoveProp(hTableWnd, TEXT("HIGHLIGHTED"));
+					tblNo++;
+				}
 				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_UPDATE_DIAGRAM: {
+				HWND hFilterWnd = GetDlgItem(GetDlgItem(hWnd, IDC_DLG_TOOLBAR), IDC_DLG_FILTER);
+
+				TCHAR filter[256]{0};
+				GetWindowText(hFilterWnd, filter, 255);
+				_tcslwr(filter);
+
+				int tblNo = 0;
+				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+					TCHAR title[256]{0};
+					GetWindowText(hTableWnd, title, 255);
+					_tcslwr(title);
+					SetProp(hTableWnd, TEXT("HIGHLIGHTED"), (HANDLE)(_tcslen(filter) > 0 && _tcsstr(title, filter) != 0));
+
+					ListBox_SetSel(hTableWnd, 0, -1);
+					int rowCount = ListBox_GetCount(hTableWnd);
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						int size = ListBox_GetTextLen(hTableWnd, rowNo) + 1;
+						TCHAR buf[size]{0};
+						ListBox_GetText(hTableWnd, rowNo, buf);
+						_tcslwr(buf);
+						_tcstok(buf, TEXT(":"));
+						ListBox_SetSel(hTableWnd, _tcslen(filter) > 0 && _tcsstr(buf, filter) != 0, rowNo);
+					}
+					tblNo++;
+				}
+				InvalidateRect(hWnd, NULL, false);
 			}
 			break;
 		}

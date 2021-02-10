@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 0, 0
+FILEVERSION 1, 4, 1, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.0\000"
+			VALUE "FileVersion", "1.4.1\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.0\000"
+			VALUE "ProductVersion", "1.4.1\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -134,7 +134,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50, 50, 200, 265 + 15
+IDD_SETTINGS DIALOGEX 50, 50, 200, 265
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -148,27 +148,27 @@ BEGIN
 	AUTOCHECKBOX	"Restore editor tabs at startup", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Editor highlighter", IDC_DLG_USE_HIGHLIGHT, 5, 65, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Force database to WAL mode (multiply writers)", IDC_DLG_FORCE_WAL, 5, 95, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Turn off disk syncronization for batch operations", IDC_DLG_SYNC_OFF, 5, 110, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110 + 15, 180, 16, BS_NOTIFY
 
-	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20 + 15, 50, 14, SS_LEFT
-	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20 + 15, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	AUTOCHECKBOX	"Turn off disk synchronization for batch operations", IDC_DLG_SYNC_OFF, 5, 95, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110, 180, 16, BS_NOTIFY
 
-	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164 - 20 + 15, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_ROW_LIMIT, 155, 162 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20, 50, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	LTEXT		   "Max rows in terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179 - 20 + 15, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 155, 177 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164 - 20, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_ROW_LIMIT, 160, 162 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20 + 15, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 155, 177 + 15 - 20 + 15, 38, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in the terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179 - 20, 155, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 160, 177 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Execute on database connection", IDC_DLG_LABEL, 5, 194 + 10, 150, 14, SS_LEFT
-	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 205 + 10, 190, 40, 0
+	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 160, 177 + 15 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 70, 246 + 15, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 246 + 15, 60, 14, WS_TABSTOP
+	LTEXT		   "Execute on a database connection", IDC_DLG_LABEL, 5, 190, 150, 14, SS_LEFT
+	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 200, 190, 40, 0
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 70, 246, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 246, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -258,31 +258,6 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_TOOL_IMPORT_ODBC DIALOGEX 50, 50, 222, 185
-	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
-	CAPTION "Import data via ODBC"
-	FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-	LTEXT "Target table", IDC_DLG_LABEL, 5, 7, 45, 14, SS_LEFT
-	EDITTEXT IDC_DLG_TABLENAME, 50, 5, 165, 12, WS_BORDER | WS_TABSTOP
-	AUTOCHECKBOX "Drop and create new if the table exists", IDC_DLG_RECREATE_TARGET, 5, 20, 180, 16, BS_NOTIFY
-
-	LTEXT "Connection string", IDC_DLG_LABEL, 5, 40, 100, 14, SS_LEFT
-	COMBOBOX IDC_DLG_CONNECTION_STRING, 5, 51, 210, 120, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS
-
-	CONTROL "Source table", IDC_DLG_ISTABLE, WC_BUTTON, BS_AUTORADIOBUTTON, 5, 72, 60, 10
-	CONTROL "Query result", IDC_DLG_ISQUERY, WC_BUTTON, BS_AUTORADIOBUTTON, 5, 86, 60, 10
-
-	COMBOBOX IDC_DLG_SOURCE_TABLE, 70, 72, 145, 120, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-	CONTROL "", IDC_DLG_SOURCE_QUERY, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL,
-		5, 100, 210, 55, WS_EX_STATICEDGE
-
-	PUSHBUTTON "?", IDC_DLG_HELP, 5, 165, 20, 14
-	PUSHBUTTON "OK", IDC_DLG_OK, 90, 165, 60, 14
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 155, 165, 60, 14
-END
-
-LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_TOOL_EXPORT_SQL DIALOGEX 50, 50, 174, 120
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Export structure and data to SQL file"
@@ -315,6 +290,30 @@ BEGIN
 
 	PUSHBUTTON "OK", IDC_DLG_OK, 65, 82, 50, 14, 0
 	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 120, 82, 50, 14, 0
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_TOOL_EXPORT_IMPORT_ODBC DIALOGEX 50, 50, 222, 205
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Import/Export data via ODBC"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Connection string", IDC_DLG_LABEL, 5, 5, 100, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CONNECTION_STRING, 5, 16, 190, 120, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS
+	PUSHBUTTON "...", IDC_DLG_ODBC_MANAGER, 200, 16, 14, 13
+
+	LTEXT "If a target table exists", IDC_DLG_LABEL, 5, 35, 70, 14, SS_LEFT
+	COMBOBOX IDC_DLG_ODBC_STRATEGY, 80, 33, 135, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Schema", IDC_DLG_ODBC_SCHEMA_LABEL, 5, 55, 70, 14, SS_LEFT
+	COMBOBOX IDC_DLG_ODBC_SCHEMA, 80, 53, 135, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Available tables", IDC_DLG_LABEL, 5, 70, 200, 10, SS_LEFT
+	CONTROL "", IDC_DLG_TABLES, WC_LISTVIEW, WS_TABSTOP | LVS_AUTOARRANGE | LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS, 5, 80, 210, 95, WS_EX_STATICEDGE
+
+	PUSHBUTTON "Help", IDC_DLG_HELP, 5, 185, 60, 14
+	PUSHBUTTON "OK", IDC_DLG_OK, 115, 185, 100, 14
+
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -407,13 +406,13 @@ BEGIN
 		MENUITEM "Database diagram", IDM_DATABASE_DIAGRAM, GRAYED
 		MENUITEM "Database comparison", IDM_COMPARE_DATABASE, GRAYED
 		MENUITEM "Database search", IDM_DATABASE_SEARCH, GRAYED
-		MENUITEM "Workflow manager", IDM_WORKFLOW_MANAGER, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "Import SQL file", IDM_IMPORT_SQL, GRAYED
 		MENUITEM "Import CSV file", IDM_IMPORT_CSV, GRAYED
 		MENUITEM "Import via ODBC", IDM_IMPORT_ODBC, GRAYED
 		MENUITEM "Export to SQL file", IDM_EXPORT_SQL, GRAYED
 		MENUITEM "Export as CSV file", IDM_EXPORT_CSV, GRAYED
+		MENUITEM "Export via ODBC", IDM_EXPORT_ODBC, GRAYED
 		MENUITEM "Generate data", IDM_GENERATE_DATA, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "Integrity check", IDM_CHECK_INTEGRITY, GRAYED
@@ -680,16 +679,16 @@ BEGIN
 
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
-		"* The app uses independed connections for each tab editor. It allows to run\n   queries in parallel and to have a responsive UI. But it also has some side\n" \
-		"   effects: pragma and attach/detach commands will be applied only for the\n"
-		"   tab who called them. Check Wiki to get more.\n\n" \
+		"* Each tab uses an own independed connection to the database and hence \n" \
+		"   has own TEMP-schema. So if you need to share in-memory data between\n"
+		"   tabs you should use SHARED-schema instead TEMP. Check Wiki for details.\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
-		"* In the batch mode all queries are executed in one implicit transaction.\n\n" \
+		"* In the batch mode all queries are executed in a one implicit transaction.\n\n" \
 		"* Edit data dialog \n"
 		"   Dialog uses auto-transaction. So all changes are applied immediately.\n" \
 		"   Use =ABC as a column filter to find rows with column values equal to ""ABC""\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
-		"* To edit data in an attached database or temp schema, type in Editor\n  <db alias>.<tablename>, e.g. preferences.history\n   and click with holding Ctrl by it.\n\n"
+		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   remove/reorder column in an existing table or something like this.\n\n" \
 		"* Do you need a newer version of SQLite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
 		"* Data generator requires ora extension.\n\n" \
@@ -712,10 +711,15 @@ BEGIN
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
 		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
+		"ODBC\n"\
+		"Adds odbc_read(connectionString, query, target), odbc_write(query, connectionString, target), odbc_query(connectionString, query) and odbc_dsn() functions.\n\n" \
+		"Exec\n"\
+		"Adds exec(cmd, codepage) function and virtual table.\n\n" \
+		"Transform\n"\
+		"Adds pivot(query, target), unpivot(query, target), jsontable(json, target), txttable(text, target) functions.\n\n" \
 		"Icu (third party)\n"\
-		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""\n\n" \
-
-		"SQLite Workflow Manager adds auxiliary extensions: exec, odbc and transform. Check tool's Wiki to get info about them.\n\n"
+		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""" \
+		"\n\n                         >>>   Check Wiki to get details  <<<"
 
 	IDS_GEN_DICTIONARY "You can define your own types to generate one-of-set values by add rows to ""preferences.generators"" table. " \
 		"The type is defined by ""key"" column.\nSet a ""value""-column as null if sometimes generated value should be null.\n" \
@@ -734,12 +738,13 @@ BEGIN
 		"Driver={Microsoft Excel Driver (*.xls)};Dbq=C:/book.xls;ReadOnly=0;\n" \
 		"Visit www.connectionstrings.com to get more examples\n\n" \
 		"Keep in mind Windows makes no distinction between 32 and 64bit DSN, so " \
-		"part of DSN dropdown list could be invalid. " \
+		"some of DSN dropdown list could be invalid. " \
 		"You should use 32bit ODBC manager to operate DSN: " \
 		"C:\\Windows\\SysWOW64\\odbcad32.exe\n\n" \
 		"This tool uses odbc-extension that is in alpha version. "\
-		"So you could have some bugs with datetime and database specific types. "\
-		"To avoid them you could import data via executing an query with data convertation to text/number."
+		"So some bugs with datetime and database specific types are expected. "\
+		"To avoid this issue you could convert types to text/number before export or import.\n\n" \
+		"Check the Wiki for troubleshooting."
 
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"

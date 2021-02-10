@@ -39,7 +39,6 @@ HMENU treeMenus[IDC_MENU_DISABLED]{0};
 
 TCHAR editTableData16[255]; // filled on DataEdit Dialog; app buffer
 TCHAR searchString[255]{0};
-char journal_mode8[32]{0};
 
 HFONT hDefFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 HACCEL hAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL));
@@ -165,12 +164,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	TBBUTTON tbButtons [ ] = {
 		{0, IDM_OPEN, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Open")},
-		{1, IDM_CLOSE, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Close")},
+		{1, IDM_CLOSE, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Close")},
 		{-1, 0, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0},
 		{2, IDM_SAVE, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Save")},
-		{3, IDM_PLAN, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Plan")},
-		{4, IDM_EXECUTE, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Execute")},
-		{5, IDM_INTERRUPT, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Interrupt")}
+		{3, IDM_PLAN, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Plan")},
+		{4, IDM_EXECUTE, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Execute")},
+		{5, IDM_INTERRUPT, TBSTATE_HIDDEN, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Interrupt")}
 	};
 
 	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST, IDC_TOOLBAR, 0, NULL, 0,
@@ -185,7 +184,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.1"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -229,13 +228,11 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	}
 
 	TCHAR wfPath16[MAX_PATH] = {0};
-	_stprintf(wfPath16, TEXT("%s/sqlite-wf.exe"), APP_PATH);
-	if (!utils::isFileExists(wfPath16))
-		RemoveMenu(GetSubMenu(hMainMenu, 2), IDM_WORKFLOW_MANAGER, MF_BYCOMMAND);
 	_stprintf(wfPath16, TEXT("%s/extensions/odbc.dll"), APP_PATH);
-	if (!utils::isFileExists(wfPath16))
+	if (!utils::isFileExists(wfPath16)) {
 		RemoveMenu(GetSubMenu(hMainMenu, 2), IDM_IMPORT_ODBC, MF_BYCOMMAND);
-	_stprintf(wfPath16, TEXT("%s/extensions/exec.dll"), APP_PATH);
+		RemoveMenu(GetSubMenu(hMainMenu, 2), IDM_EXPORT_ODBC, MF_BYCOMMAND);
+	}
 
 	EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
 	setTreeFont(hTreeWnd);
@@ -660,7 +657,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 
 				if (cmd == IDM_EDIT_DATA) {
-					_tcscpy(editTableData16, name16);
+					_stprintf(editTableData16, (_tcschr(name16, TEXT('.')) == NULL) ? TEXT("%s") : TEXT("\"%s\""), name16);
 					DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData);
 					SetFocus(hTreeWnd);
 				}
@@ -934,9 +931,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 
-			if ((cmd == IDM_IMPORT_ODBC) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_IMPORT_ODBC), hMainWnd, (DLGPROC)&tools::cbDlgImportODBC) == DLG_OK)) {
-				updateTree();
-				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
+			if (cmd == IDM_IMPORT_ODBC || cmd == IDM_EXPORT_ODBC) {
+				bool isExport = cmd == IDM_EXPORT_ODBC;
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_IMPORT_ODBC), hMainWnd, (DLGPROC)&tools::cbDlgExportImportODBC, isExport);
+				if (!isExport)
+					updateTree();
 			}
 
 			if ((cmd == IDM_EXPORT_CSV) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_CSV), hMainWnd, (DLGPROC)&tools::cbDlgExportCSV) == DLG_OK))
@@ -950,9 +949,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_DATABASE_DIAGRAM)
 				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_DATABASE_DIAGRAM), hMainWnd, (DLGPROC)&tools::cbDlgDatabaseDiagram);
-
-			if (cmd == IDM_WORKFLOW_MANAGER)
-				ShellExecute(0, 0, TEXT("sqlite-wf.exe"), 0, APP_PATH, SW_SHOW);
 
 			if (cmd == IDM_COMPARE_DATABASE)
 				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_COMPARE_DATABASE), hMainWnd, (DLGPROC)&tools::cbDlgCompareDatabase);
@@ -1258,7 +1254,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				updateSizes(true);
 
 				bool isRunning = tabNo >=0 ? tabs[tabNo].thread : cli.thread;
-				updateExecuteMenu(!isRunning);
+				updateExecuteMenu(!isRunning && db != NULL);
 				Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, isRunning ? TBSTATE_ENABLED : TBSTATE_HIDDEN);
 				updateTransactionState();
 			}
@@ -1409,7 +1405,7 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 }
 
 bool openConnection(sqlite3** _db) {
-	if (SQLITE_OK != sqlite3_open(sqlite3_db_filename(db, 0), _db)) {
+	if (SQLITE_OK != sqlite3_open_v2(sqlite3_db_filename(db, 0), _db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_SHAREDCACHE | SQLITE_OPEN_URI, NULL)) {
 		MessageBox(hMainWnd, TEXT("Unable to open a new connection to the database"), TEXT("Error"), MB_OK | MB_ICONSTOP);
 		return 0;
 	}
@@ -1436,10 +1432,13 @@ bool openConnection(sqlite3** _db) {
 
 	// attach databases
 	sqlite3_stmt* stmt;
-	if (SQLITE_OK == sqlite3_prepare_v2(db, "select 'attach \"' || file || '\" as \"' || name || '\"' from pragma_database_list t where seq > 0", -1, &stmt, 0)) {
+	if (SQLITE_OK == sqlite3_prepare_v2(db, "select 'attach database \"' || file || '\" as \"' || name || '\"' from pragma_database_list t where seq > 0 and name <> 'shared' and name <> 'preferences'", -1, &stmt, 0)) {
 		while (SQLITE_ROW == sqlite3_step(stmt))
 			sqlite3_exec(*_db, (const char*)sqlite3_column_text(stmt, 0), NULL, NULL, NULL);
 	}
+
+	if (SQLITE_OK != sqlite3_exec(*_db, "attach database 'file::memory:?cache=shared' as shared", NULL, NULL, NULL))
+		showDbError(hMainWnd);
 
 	if (prefs::get("use-legacy-rename"))
 		sqlite3_exec(*_db, "pragma legacy_alter_table = 1", 0, 0, 0);
@@ -2009,7 +2008,7 @@ bool openDb(const TCHAR* path) {
 		return false;
 
 	char* path8 = utils::utf16to8(path);
-	if (SQLITE_OK != sqlite3_open(path8, &db)) {
+	if (SQLITE_OK != sqlite3_open_v2(path8, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_SHAREDCACHE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, NULL)) {
 		MessageBox(hMainWnd, TEXT("Error to open database"), TEXT("Error"), MB_OK);
 		return false;
 	}
@@ -2062,22 +2061,19 @@ bool openDb(const TCHAR* path) {
 		showDbError(hMainWnd);
 	delete [] startup8;
 
-	if (prefs::get("force-wal")) {
-		sqlite3_stmt* stmt;
-		sqlite3_prepare_v2(db, "pragma main.journal_mode", -1, &stmt, 0);
-		sqlite3_step(stmt);
-		strcpy(journal_mode8, (char*)sqlite3_column_text(stmt, 0));
-		sqlite3_finalize(stmt);
-		sqlite3_exec(db, "pragma main.journal_mode = wal", 0, 0, 0);
-	}
-
 	char query8[1024] = {0};
 	// attach prefs
 	char* appPath8 = utils::utf16to8(APP_PATH);
 	sprintf(query8, "attach database '%s/prefs.sqlite' as preferences", appPath8);
-	if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL))
-		showDbError(hMainWnd);
 	delete [] appPath8;
+	if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL)) {
+		showDbError(hMainWnd);
+		sqlite3_close(db);
+		return 0;
+	}
+
+	if (SQLITE_OK != sqlite3_exec(db, "attach database 'file::memory:?cache=shared' as shared", NULL, NULL, NULL))
+		showDbError(hMainWnd);
 
 	updateTree();
 	EnableWindow(hTreeWnd, true);
@@ -2190,16 +2186,6 @@ bool closeDb() {
 			sqlite3_close(tab->db);
 			tab->db = 0;
 		}
-	}
-
-	if (prefs::get("force-wal") && strcmp(journal_mode8, "wal") != 0) {
-		sqlite3_exec(db, "detach preferences", 0, 0, 0);
-		char sql8[255];
-		sprintf(sql8, "pragma main.journal_mode=%s", journal_mode8);
-		sqlite3_stmt* stmt;
-		sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
-		sqlite3_step(stmt);
-		sqlite3_finalize(stmt);
 	}
 
 	sqlite3_close(db);
@@ -2680,7 +2666,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		ListBox_AddString(hColumnsWnd, TEXT(""));
 		char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 		sqlite3_stmt *stmt2;
-		if (SQLITE_OK == sqlite3_prepare_v2(stmtDb, "select r.query from preferences.refs r where dbname = ?1 and \"schema\" = ?2 and tblname = ?3 and colname = ?4", -1, &stmt2, 0)) {
+		if (SQLITE_OK == sqlite3_prepare_v2(db, "select r.query from preferences.refs r where dbname = ?1 and \"schema\" = ?2 and tblname = ?3 and colname = ?4", -1, &stmt2, 0)) {
 			for (int i = 0; i < colCount; i++) {
 				if (!sqlite3_column_origin_name(stmt, i)) {
 					ListBox_AddString(hColumnsWnd, TEXT(""));

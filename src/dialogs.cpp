@@ -646,6 +646,7 @@ namespace dialogs {
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				LONG_PTR styles = GetWindowLongPtr(hHeader, GWL_STYLE);
 				SetWindowLongPtr(hHeader, GWL_STYLE, styles | HDS_FILTERBAR);
+				CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 300, 0, 400, 100, hListWnd, (HMENU)IDC_REFLIST, GetModuleHandle(0), 0);
 
 				bool isTable = false;
 				sprintf(query8, "select lower(type) = 'table' from %s.sqlite_master where tbl_name = \"%s\" and type in ('view', 'table')", schema8, tablename8);
@@ -798,7 +799,9 @@ namespace dialogs {
 					ShowWindow(hListWnd, SW_SHOW);
 
 					TCHAR buf[256]{0};
-					_stprintf(buf, TEXT("%s \"%s\" [%s%i rows]"), isTable ? TEXT("Table") : TEXT("View"), editTableData16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					TCHAR* tablename16 = utils::utf8to16(tablename8);
+					_stprintf(buf, TEXT("%s \"%s\" [%s%i rows]"), isTable ? TEXT("Table") : TEXT("View"), tablename16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					delete [] tablename16;
 					SetWindowText(hWnd, buf);
 				} else {
 					showDbError(hWnd);
@@ -911,6 +914,7 @@ namespace dialogs {
 
 				if (pHdr->code == (DWORD)NM_CLICK && GetAsyncKeyState(VK_MENU)) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					SendMessage(hWnd, WMU_SET_CURRENT_CELL, ia->iItem, ia->iSubItem);
 					return ListView_ShowRef(hListWnd, ia->iItem, ia->iSubItem);
 				}
 
@@ -951,6 +955,7 @@ namespace dialogs {
 							LineTo(hdc, rc.right - 1, rc.bottom - 2);
 							LineTo(hdc, rc.left + 1, rc.bottom - 2);
 							LineTo(hdc, rc.left + 1, rc.top);
+							DeleteObject(hPen);
 						}
 					}
 
@@ -1404,20 +1409,20 @@ namespace dialogs {
 					TCHAR colName[256];
 					Header_GetItemText(hHeader, colNo, colName, 255);
 
-					CreateWindow(WC_STATIC, colName, WS_VISIBLE | WS_CHILD | SS_RIGHT, 5, 5 + 20 * (colNo - 1), 70, 18, hWnd, (HMENU)(IDC_ROW_LABEL +  colNo), GetModuleHandle(0), 0);
-					CreateWindow(WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | WS_CLIPSIBLINGS | WS_TABSTOP | ES_AUTOHSCROLL | (mode == ROW_VIEW ? ES_READONLY : 0), 80, 3 + 20 * (colNo - 1), 284, 18, hWnd, (HMENU)(IDC_ROW_EDIT + colNo), GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, colName, WS_VISIBLE | WS_CHILD | SS_RIGHT, 5, 5 + 20 * (colNo - 1), 120, 18, hWnd, (HMENU)(IDC_ROW_LABEL +  colNo), GetModuleHandle(0), 0);
+					CreateWindow(WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | WS_CLIPSIBLINGS | WS_TABSTOP | ES_AUTOHSCROLL | (mode == ROW_VIEW ? ES_READONLY : 0), 130, 3 + 20 * (colNo - 1), 234, 18, hWnd, (HMENU)(IDC_ROW_EDIT + colNo), GetModuleHandle(0), 0);
 					CreateWindow(WC_BUTTON, TEXT("..."), WS_VISIBLE | WS_CHILD | BS_FLAT, 365, 3 + 20 * (colNo - 1), 18, 18, hWnd, (HMENU)(IDC_ROW_SWITCH + colNo), GetModuleHandle(0), 0);
 				}
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
-				SetWindowPos(hWnd, 0, 0, 0, 400, colCount * 20 + 50, SWP_NOMOVE | SWP_NOZORDER);
+				SetWindowPos(hWnd, 0, 0, 0, 400, colCount * 20 + 53, SWP_NOMOVE | SWP_NOZORDER);
 
 				SetWindowText(hWnd, mode == ROW_ADD ? TEXT("New row") : mode == ROW_EDIT ? TEXT("Edit row") : TEXT("View row"));
 
 				HWND hOkBtn = GetDlgItem(hWnd, IDC_DLG_OK);
 				HWND hCancelBtn = GetDlgItem(hWnd, IDC_DLG_CANCEL);
 				SetWindowText(hOkBtn, mode == ROW_ADD ? TEXT("Save and New") : mode == ROW_EDIT ? TEXT("Save and Next") : TEXT("Next"));
-				SetWindowPos(hOkBtn, 0, 202, colCount * 20 - 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-				SetWindowPos(hCancelBtn, 0, 297, colCount * 20 - 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+				SetWindowPos(hOkBtn, 0, 200, colCount * 20 - 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+				SetWindowPos(hCancelBtn, 0, 295, colCount * 20 - 4, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 
 				SetWindowLong(hWnd, GWL_USERDATA, MAKELPARAM(mode, colCount));
 				SetWindowLong(GetDlgItem(hWnd, IDC_DLG_USERDATA), GWL_USERDATA, (LONG)hListWnd);
@@ -2367,7 +2372,6 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_EDITOR), prefs::get("restore-editor") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT), prefs::get("use-highlight") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_FORCE_WAL), prefs::get("force-wal") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
 
@@ -2409,7 +2413,6 @@ namespace dialogs {
 					prefs::set("use-highlight", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
-					prefs::set("force-wal", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_FORCE_WAL)));
 					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
@@ -2554,17 +2557,17 @@ namespace dialogs {
 
 			case WM_KEYDOWN: {
 				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB) {
-					HWND hDlg = GetAncestor(hWnd, GA_ROOT);
+					HWND hDlgWnd = GetAncestor(hWnd, GA_ROOT);
 					if (wParam == VK_RETURN) {
-						SendMessage(hDlg, WMU_UPDATE_DATA, 0, 0);
+						SendMessage(hDlgWnd, WMU_UPDATE_DATA, 0, 0);
 						SetFocus(hWnd);
 					}
 
 					if (wParam == VK_ESCAPE)
-						SendMessage(hDlg, WM_CLOSE, 0, 0);
+						SendMessage(hDlgWnd, WM_CLOSE, 0, 0);
 
 					if (wParam == VK_TAB) {
-						HWND hListWnd = GetDlgItem(hDlg, IDC_DLG_QUERYLIST);
+						HWND hListWnd = GetDlgItem(hDlgWnd, IDC_DLG_QUERYLIST);
 						HWND hHeader = ListView_GetHeader(hListWnd);
 
 						HWND hFocusWnd = GetDlgItem(hHeader, IDC_HEADER_EDIT + 1);
@@ -2573,7 +2576,7 @@ namespace dialogs {
 							int colNo = GetDlgCtrlID(hWnd) - IDC_HEADER_EDIT;
 							hFocusWnd = colNo < colCount - 2 ?
 								GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo + 1) :
-								GetDlgItem(GetDlgItem(hDlg, IDC_DLG_TOOLBAR), IDC_DLG_FILTER);
+								GetDlgItem(GetDlgItem(hDlgWnd, IDC_DLG_TOOLBAR), IDC_DLG_FILTER);
 						}
 						SetFocus(hFocusWnd);
 					}
@@ -2586,7 +2589,6 @@ namespace dialogs {
 
 		return CallWindowProc(cbOldHeaderEdit, hWnd, msg, wParam, lParam);
 	}
-
 
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16) {
 		HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
