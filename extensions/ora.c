@@ -40,7 +40,7 @@ SQLITE_EXTENSION_INIT1
 typedef unsigned char UINT8;
 typedef unsigned int UINT;
 
-static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){
+static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){		
 	int *pCounter = (int*)sqlite3_get_auxdata(ctx, 0);
 	if (pCounter == 0) {
 		pCounter = sqlite3_malloc(sizeof(*pCounter));
@@ -49,7 +49,7 @@ static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 			return;
 		}
 		
-		*pCounter = sqlite3_value_int(argv[0]);
+		*pCounter = sqlite3_value_type(argv[0]) == SQLITE_NULL ? 0 : sqlite3_value_int(argv[0]);
 		sqlite3_set_auxdata(ctx, 0, pCounter, sqlite3_free);
 	} else {
 		++*pCounter;
@@ -81,7 +81,7 @@ static void concat (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 
 static void decode (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	if (argc < 2)
-		return sqlite3_result_error(ctx, "Too many values", -1);
+		return sqlite3_result_error(ctx, "Not enough values", -1);
 
 	int keyCount = (argc - 1) / 2;
 	const char* expr = sqlite3_value_text(argv[0]);
@@ -140,6 +140,9 @@ const UINT crc32_tab[] = {
 };
 
 static void crc32 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {    
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+
 	const UINT8 *p = sqlite3_value_text(argv[0]);
 	size_t size = strlen(sqlite3_value_text(argv[0]));
     UINT crc;
@@ -265,6 +268,9 @@ static void _md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest) {
 char const hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
 static void md5 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+
     UINT8 res[16];
 	_md5(sqlite3_value_text(argv[0]), strlen(sqlite3_value_text(argv[0])), res);
 
@@ -441,6 +447,9 @@ static unsigned int _base64_decode(const char *in, unsigned int inlen, unsigned 
 }
 
 static void base64_encode (sqlite3_context *ctx, int argc, sqlite3_value **argv) {	 
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+		
 	const char* in = sqlite3_value_text(argv[0]);
 	int len = strlen(in);
 	unsigned char* out = malloc(BASE64_ENCODE_OUT_SIZE(len));
@@ -451,7 +460,10 @@ static void base64_encode (sqlite3_context *ctx, int argc, sqlite3_value **argv)
 	free(out);
 }
 
-static void base64_decode (sqlite3_context *ctx, int argc, sqlite3_value **argv) {	 
+static void base64_decode (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+			 
 	const char* in = sqlite3_value_text(argv[0]);
 	int len = strlen(in);
 	unsigned char* out = malloc(BASE64_DECODE_OUT_SIZE(len));
@@ -463,6 +475,9 @@ static void base64_decode (sqlite3_context *ctx, int argc, sqlite3_value **argv)
 }
 
 static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || sqlite3_value_type(argv[1]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+
 	const char* instr = sqlite3_value_text(argv[0]);
 	const char* delim = sqlite3_value_text(argv[1]);
 	int no = sqlite3_value_int(argv[2]);

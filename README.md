@@ -1,5 +1,5 @@
 sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks 17](http://www.codeblocks.org/). <br>
-Small, simple, powerfull, fast, free. Modern Windows95 style interface as a bonus.
+Small, simple, powerfull, fast, free.
 
 |[**Download the latest version**](https://github.com/little-brother/sqlite-gui/releases/latest)|
 |-------------------------------------------------------------------------------------------|
@@ -15,6 +15,7 @@ Small, simple, powerfull, fast, free. Modern Windows95 style interface as a bonu
 * Database diagram
 * Database comparison
 * Search text in the whole database
+* Edit multiple tables at the same time
 * [Quick data references](https://github.com/little-brother/sqlite-gui/wiki#quick-references) ([video](https://youtu.be/XL1_lFhzLKo))
 * [Terminal mode](https://raw.githubusercontent.com/little-brother/sqlite-gui/master/resources/terminal.webp)
 * [Charts](https://github.com/little-brother/sqlite-gui/wiki#charts)
@@ -28,5 +29,5 @@ Small, simple, powerfull, fast, free. Modern Windows95 style interface as a bonu
 * Only utf-8 is supported
 * NULL is displayed as an empty string and an empty string is set to NULL when data is edit
 
-If you like the project, press the like-button on [AlternativeTo](https://alternativeto.net/software/sqlite-gui/about), rate the app on [Softpedia](https://www.softpedia.com/get/Internet/Servers/Database-Utils/SQLite-GUI-LB.shtml) or write something in a [Reddit](https://www.reddit.com/r/sqlite/comments/iaao8x/a_new_lightweight_sqlite_tool_for_windows/) topic to support it.<br>
-If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki) or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.
+If you like the project, press the like-button on [AlternativeTo](https://alternativeto.net/software/sqlite-gui/about) or rate the app on [Softpedia](https://www.softpedia.com/get/Internet/Servers/Database-Utils/SQLite-GUI-LB.shtml) to support it.<br>
+If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki), create a [Discussion](https://github.com/little-brother/sqlite-gui/discussions) topic or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.

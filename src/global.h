@@ -10,6 +10,7 @@
 #define MAX_TOOLTIP_LENGTH        1024
 #define MAX_REFCOLUMN_COUNT        128
 #define MAX_CHART_COLOR_COUNT        9
+#define MAX_DIALOG_COUNT            32
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -55,10 +56,10 @@ extern HTREEITEM treeItems[5]; // 0 - current
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 extern TCHAR searchString[255];
 
-extern const char *TYPES8[5];
-extern const TCHAR *TYPES16[5];
-extern const TCHAR *TYPES16u[5];
-extern const TCHAR *TYPES16p[5];
+extern const char *TYPES8[6];
+extern const TCHAR *TYPES16[6];
+extern const TCHAR *TYPES16u[6];
+extern const TCHAR *TYPES16p[6];
 
 extern HFONT hDefFont;
 extern WNDPROC cbOldListView;

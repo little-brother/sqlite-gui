@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 1, 0
+FILEVERSION 1, 4, 2, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.1\000"
+			VALUE "FileVersion", "1.4.2\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.1\000"
+			VALUE "ProductVersion", "1.4.2\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -40,7 +40,6 @@ IDD_ROW DIALOGEX 50,50,300,300
 	CAPTION "Add/Edit/View row"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	LTEXT "ListViewHandle", IDC_DLG_USERDATA, 0, 0, 0, 0
 	PUSHBUTTON "OK", IDC_DLG_OK, 0, 0, 60, 14, WS_TABSTOP
 	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 0, 0, 60, 14, WS_TABSTOP
 END
@@ -77,7 +76,7 @@ BEGIN
 	EDITTEXT IDC_DLG_COLNAME, 40, 5, 90, 12, WS_BORDER | WS_TABSTOP
 
 	LTEXT "Type", IDC_DLG_LABEL, 5, 27, 30, 14, SS_LEFT
-	COMBOBOX IDC_DLG_COLTYPE, 40, 25, 90, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	COMBOBOX IDC_DLG_COLTYPE, 40, 25, 90, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS
 
 	LTEXT "Default", IDC_DLG_LABEL, 5, 47, 30, 14, SS_LEFT
 	EDITTEXT IDC_DLG_DEFVALUE, 40, 45, 90, 12, WS_BORDER | WS_TABSTOP
@@ -490,6 +489,7 @@ BEGIN
 	POPUP "Column"
 	BEGIN
 		MENUITEM "Rename", IDM_RENAME
+		MENUITEM "Delete", IDM_DELETE
 	END
 END
 
@@ -628,8 +628,6 @@ BEGIN
 	"S", IDM_SAVE, CONTROL, VIRTKEY
 	"H", IDM_HISTORY, CONTROL, VIRTKEY
 	"G", IDM_GISTS, CONTROL, VIRTKEY
-	VK_TAB, IDM_PROCESS_TAB, VIRTKEY
-	VK_TAB, IDM_PROCESS_TAB, SHIFT, VIRTKEY
 
 	VK_TAB, IDM_CHANGE_FOCUS, CONTROL SHIFT, VIRTKEY
 
@@ -660,8 +658,9 @@ BEGIN
 		"F8/Alt + Enter - Show query plan\n" \
 		"F9/Ctrl + Enter - Execute query\n" \
 		"F12/Ctrl + Alt + Enter - Execute as batch (synchronous is off, joint output)\n" \
-		"Tab - Add indents in Editor.\n" \
-		"Tab + Shift - Remove indents in Editor.\n" \
+		"Tab - Add indents in Editor\n" \
+		"Tab + Shift - Remove indents in Editor\n" \
+		"Ctrl + W - Toggle word wrap mode\n" \
 		"Ctrl + ? - Get the table columns desc\n" \
 		"Ctrl + Click - Edit the table data\n" \
 		"Ctrl + Tab - Toggle to a next result\n" \
@@ -685,8 +684,10 @@ BEGIN
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
 		"* In the batch mode all queries are executed in a one implicit transaction.\n\n" \
 		"* Edit data dialog \n"
-		"   Dialog uses auto-transaction. So all changes are applied immediately.\n" \
+		"   The dialog uses auto-transaction. So all changes are applied immediately.\n" \
+		"   The dialog doesn't block the main window, so you can open multiply tables \n" \
 		"   Use =ABC as a column filter to find rows with column values equal to ""ABC""\n" \
+		"   Use !ABC to find rows without ""ABC""\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   remove/reorder column in an existing table or something like this.\n\n" \

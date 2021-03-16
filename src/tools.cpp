@@ -296,6 +296,36 @@ namespace tools {
 		return false;
 	}
 
+	TCHAR* csvReadLine(FILE* f) {
+		size_t size = 32000, bsize = 2000;
+		TCHAR* line = new TCHAR[size + 1] {0};
+		TCHAR buf[bsize + 1]{0};
+		int qCount = 0;
+
+		while (!feof(f)) {
+			if (_fgetts(buf, bsize + 1, f)) {
+				if (_tcslen(line) + bsize > size) {
+					size *= 2;
+					TCHAR* oLine = line;
+					line = new TCHAR[size + 1]{0};
+					_tcscpy(line, oLine);
+					delete [] oLine;
+				}
+				_tcscat(line, buf);
+
+				for (size_t i = 0; i < _tcslen(buf); i++)
+					qCount += buf[i] == TEXT('"');
+
+				if ((_tcslen(buf) < bsize) && (qCount % 2 == 0))
+					break;
+			} else {
+				break;
+			}
+		}
+
+		return line;
+	}
+
 	BOOL CALLBACK cbDlgImportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -373,54 +403,37 @@ namespace tools {
 					}
 				};
 
-				size_t size = 32000, bsize = 2000;
-				TCHAR* line = new TCHAR[size + 1] {0};
-				TCHAR buf[bsize + 1]{0};
-
 				int lineNo = 0;
 				while(!feof (f) && lineNo < 5) {
-					if (_fgetts(buf, bsize + 1, f)) {
-						if (_tcslen(line) + bsize > size) {
-							size *= 2;
-							TCHAR* oLine = line;
-							line = new TCHAR[size + 1]{0};
-							_tcscpy(line, oLine);
-							delete [] oLine;
+					TCHAR* line = csvReadLine(f);
+					int colNo = 0;
+
+					TCHAR value[_tcslen(line)];
+					bool inQuotes = false;
+					int valuePos = 0;
+					int i = 0;
+					do {
+						value[valuePos++] = line[i];
+
+						if ((!inQuotes && (line[i] == delimiter[0] || line[i] == TEXT('\n'))) || !line[i + 1]) {
+							value[valuePos - (line[i + 1] != 0 || inQuotes)] = 0;
+							valuePos = 0;
+							addCell(lineNo, colNo, value);
+							colNo++;
 						}
-						_tcscat(line, buf);
-						if (_tcslen(buf) == bsize)
-							continue;
 
-						int colNo = 0;
+						if (line[i] == TEXT('"') && line[i + 1] != TEXT('"')) {
+							valuePos--;
+							inQuotes = !inQuotes;
+						}
 
-						TCHAR value[size + 1];
-						bool inQuotes = false;
-						int valuePos = 0;
-						int i = 0;
-						do {
-							value[valuePos++] = line[i];
+						if (line[i] == TEXT('"') && line[i + 1] == TEXT('"'))
+							i++;
+					} while (line[++i]);
 
-							if ((!inQuotes && (line[i] == delimiter[0] || line[i] == TEXT('\n'))) || !line[i + 1]) {
-								value[valuePos - (line[i + 1] != 0 || inQuotes)] = 0;
-								valuePos = 0;
-								addCell(lineNo, colNo, value);
-								colNo++;
-							}
-
-							if (line[i] == TEXT('"') && line[i + 1] != TEXT('"')) {
-								valuePos--;
-								inQuotes = !inQuotes;
-							}
-
-							if (line[i] == TEXT('"') && line[i + 1] == TEXT('"'))
-								i++;
-						} while (line[++i]);
-					}
 					lineNo++;
-					memset(line, 0, (size + 1) * sizeof (TCHAR));
+					delete [] line;
 				}
-
-				delete [] line;
 
 				fclose(f);
 				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
@@ -507,74 +520,57 @@ namespace tools {
 					sqlite3_stmt *stmt;
 					bool rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
 					if (rc) {
-						size_t size = 32000, bsize = 2000;
-						TCHAR* line16 = new TCHAR[size + 1] {0};
-						TCHAR buf16[bsize + 1]{0};
-
 						while(!feof (f)) {
-							memset(buf16, 0, (bsize + 1) * sizeof(TCHAR));
-							if (_fgetts(buf16, bsize + 1, f)) {
-								if (_tcslen(line16) + bsize > size) {
-									size *= 2;
-									TCHAR* oLine16 = line16;
-									line16 = new TCHAR[size + 1]{0};
-									_tcscpy(line16, oLine16);
-									delete [] oLine16;
-								}
-								_tcscat(line16, buf16);
-								if (_tcslen(buf16) == bsize && !_tcschr(buf16, TEXT('\n')))
-									continue;
-
-								if (lineNo == 0 && isColumns) {
-									memset(line16, 0, (size + 1) * sizeof (TCHAR));
-									lineNo++;
-									continue;
-								}
-
-								int colNo = 0;
-
-								TCHAR value[size + 1];
-								bool inQuotes = false;
-								int valuePos = 0;
-								int i = 0;
-								do {
-									value[valuePos++] = line16[i];
-
-									if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
-										value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
-										valuePos = 0;
-
-										TCHAR* tvalue16 = utils::trim(value);
-										char* value8 = utils::utf16to8(tvalue16);
-										utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
-										delete [] value8;
-										delete [] tvalue16;
-
-										colNo++;
-									}
-
-									if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
-										valuePos--;
-										inQuotes = !inQuotes;
-									}
-
-									if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
-										i++;
-
-								} while (line16[++i]);
-
-								for (int i = colNo; i < colCount; i++)
-									sqlite3_bind_null(stmt, i + 1);
-
-								rc = sqlite3_step(stmt) == SQLITE_DONE;
-								sqlite3_reset(stmt);
+							TCHAR* line16 = csvReadLine(f);
+							if (lineNo == 0 && isColumns) {
 								lineNo++;
-								memset(line16, 0, (size + 1) * sizeof (TCHAR));
+								continue;
 							}
-						}
-						delete [] line16;
-					}
 
+							if (_tcslen(line16) == 0)
+								continue;
+
+							int colNo = 0;
+
+							TCHAR value[_tcslen(line16) + 1];
+							bool inQuotes = false;
+							int valuePos = 0;
+							int i = 0;
+							do {
+								value[valuePos++] = line16[i];
+
+								if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
+									value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
+									valuePos = 0;
+
+									TCHAR* tvalue16 = utils::trim(value);
+									char* value8 = utils::utf16to8(tvalue16);
+									utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+									delete [] value8;
+									delete [] tvalue16;
+
+									colNo++;
+								}
+
+								if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
+									valuePos--;
+									inQuotes = !inQuotes;
+								}
+
+								if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
+									i++;
+
+							} while (line16[++i]);
+
+							for (int i = colNo; i < colCount; i++)
+								sqlite3_bind_null(stmt, i + 1);
+
+							rc = sqlite3_step(stmt) == SQLITE_DONE;
+							sqlite3_reset(stmt);
+							lineNo++;
+							delete [] line16;
+						}
+					}
 
 					delete [] create8;
 					delete [] insert8;
