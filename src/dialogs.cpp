@@ -23,34 +23,22 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				bool isEdit = lParam == IDM_EDIT;
-
-				TCHAR name16[256] = {0};
-				TV_ITEM tv;
-				tv.mask = TVIF_TEXT | TVIF_HANDLE | TVIF_PARAM;
-				tv.hItem = treeItems[0];
-				tv.pszText = name16;
-				tv.cchTextMax = 256;
-
-				if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam || tv.lParam == COLUMN)
-					return EndDialog(hWnd, -1);
-
-				int type = abs(tv.lParam);
+				bool isEdit = LOWORD(lParam) == IDM_EDIT;
+				int type = HIWORD(lParam);
 				SetWindowLong(hWnd, GWL_USERDATA, type);
 
-				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				TCHAR buf[512];
-				_stprintf(buf, isEdit ? TEXT("Edit %s \"%s\"") : TEXT("Add %s"), TYPES16[type], name16);
+				TCHAR buf[64 + _tcslen(editTableData16)];
+				_stprintf(buf, isEdit ? TEXT("Edit %s \"%s\"") : TEXT("Add %s"), TYPES16[type], editTableData16);
 				SetWindowText(hWnd, buf);
 
+				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hDlgEditorWnd);
-
 				SetFocus(hDlgEditorWnd);
 
 				if (isEdit) {
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
-					TCHAR* sql16 = getDDL(name16, type, true);
+					TCHAR* sql16 = getDDL(editTableData16, type, true);
 					if (sql16) {
 						SetWindowText(hDlgEditorWnd, sql16);
 						delete [] sql16;
@@ -58,6 +46,21 @@ namespace dialogs {
 						SetWindowText(hDlgEditorWnd, TEXT("Error to get DDL"));
 					}
 				}
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				HWND hOkWnd = GetDlgItem(hWnd, IDC_DLG_OK);
+				HWND hCancelWnd = GetDlgItem(hWnd, IDC_DLG_CANCEL);
+				HWND hExampleWnd = GetDlgItem(hWnd, IDC_DLG_EXAMPLE);
+
+				RECT rc;
+				GetClientRect(hWnd, &rc);
+				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right - rc.left - 0, rc.bottom - rc.top - 43, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(hExampleWnd, 0, 7, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(hOkWnd, 0, rc.right - rc.left - 165, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(hCancelWnd, 0, rc.right - rc.left - 83, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 			}
 			break;
 
@@ -106,7 +109,8 @@ namespace dialogs {
 
 					SetFocus(hEditorWnd);
 					if (SQLITE_OK == rc) {
-						EndDialog(hWnd, DLG_OK);
+						SendMessage(hMainWnd, WMU_OBJECT_CREATED, (WPARAM)GetWindowLong(hWnd, GWL_USERDATA), 0);
+						SendMessage(hWnd, WM_CLOSE, 0, 0);
 					} else {
 						showDbError(hMainWnd);
 					}
@@ -142,7 +146,8 @@ namespace dialogs {
 			break;
 
 			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
 				break;
 		}
 
@@ -899,7 +904,6 @@ namespace dialogs {
 
 				ListView_GetSubItemRect(hListWnd, currCell.iItem, currCell.iSubItem, LVIR_BOUNDS, &rect);
 				InvalidateRect(hListWnd, &rect, true);
-				//SetFocus(hListWnd);
 			}
 			break;
 
@@ -1214,6 +1218,9 @@ namespace dialogs {
 						}
 					}
 					sqlite3_finalize(stmt);
+
+					if (GetProp(hWnd, TEXT("FORCEUPDATE")))
+						SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 				}
 
 				if (cmd == IDM_ROW_DUPLICATE) {
@@ -1405,11 +1412,13 @@ namespace dialogs {
 				RemoveProp(hWnd, TEXT("KEYS8"));
 
 				char* md5keys = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
-				if (md5keys)
+				if (md5keys != NULL) {
 					delete [] md5keys;
-				RemoveProp(hWnd, TEXT("MD5KEYS8"));
+					RemoveProp(hWnd, TEXT("MD5KEYS8"));
+				}
 
 				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				EndDialog(hWnd, DLG_CANCEL);
 				DestroyWindow(hWnd);
 			}
 			break;
@@ -1636,20 +1645,18 @@ namespace dialogs {
 					int len = 0;
 					// A first column in the listview is always a rowno. Should be ignored.
 					for (int i = 1; i < colCount; i++) {
-						if (!IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i)))
-							continue;
+						HWND hEdit = GetDlgItem(hWnd, IDC_ROW_EDIT + i);
+						len = IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i)) ? GetWindowTextLength(hEdit) : 0;
+
+						values16[i] = new TCHAR[len + 1]{0};
+						GetWindowText(hEdit, values16[i], len + 1);
+						values8[i] = utils::utf16to8(values16[i]);
 
 						HWND hLabel = GetDlgItem(hWnd, IDC_ROW_LABEL + i);
 						len = GetWindowTextLength(hLabel);
 						columns16[i] = new TCHAR[len + 1]{0};
 						GetWindowText(hLabel, columns16[i], len + 1);
 						columns8[i] = utils::utf16to8(columns16[i]);
-
-						HWND hEdit = GetDlgItem(hWnd, IDC_ROW_EDIT + i);
-						len = GetWindowTextLength(hEdit);
-						values16[i] = new TCHAR[len + 1]{0};
-						GetWindowText(hEdit, values16[i], len + 1);
-						values8[i] = utils::utf16to8(values16[i]);
 					}
 
 					char sql8[MAX_TEXT_LENGTH]{0};
@@ -1661,6 +1668,9 @@ namespace dialogs {
 						if (!IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i)))
 							continue;
 
+						if (mode == ROW_ADD && !strlen(values8[i]))
+							continue;
+
 						sprintf(buf8, mode == ROW_ADD ? "%s\"%s\"" : "%s\"%s\" = ?", valCount > 0 ? ", " : "", columns8[i]);
 						strcat(sql8, buf8);
 
@@ -1668,13 +1678,18 @@ namespace dialogs {
 					}
 
 					if (mode == ROW_ADD) {
-						char placeholders8[(valCount + 1) * 2]{0}; // count = 3 => ?, ?, ?
-						for (int i = 0; i < (valCount + 1) * 2 - 3; i++)
-							placeholders8[i] = i % 2 ? ',' : '?';
-						placeholders8[(valCount + 1) * 2 - 1] = '\0';
-						strcat(sql8, ") values (");
-						strcat(sql8, placeholders8);
-						strcat(sql8, ")");
+						if (valCount > 0) {
+							char placeholders8[(valCount + 1) * 2]{0}; // count = 3 => ?, ?, ?
+							for (int i = 0; i < (valCount + 1) * 2 - 3; i++)
+								placeholders8[i] = i % 2 ? ',' : '?';
+							placeholders8[(valCount + 1) * 2 - 1] = '\0';
+							strcat(sql8, ") values (");
+							strcat(sql8, placeholders8);
+							strcat(sql8, ")");
+						} else {
+							sprintf(sql8, "insert into \"%s\".\"%s\" default values", schema8, tablename8);
+						}
+
 					} else {
 						strcat(sql8, " where ");
 						strcat(sql8, hasRowid ? " rowid " : md5keys8);
@@ -1700,7 +1715,8 @@ namespace dialogs {
 					if (rc) {
 						int valNo = 1;
 						for (int i = 1; i < colCount; i++)
-							if (IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i))) {
+							if (IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i)) &&
+								(mode == ROW_EDIT || mode == ROW_ADD && strlen(values8[i]) > 0)) {
 								utils::sqlite3_bind_variant(stmt, valNo, values8[i]);
 								valNo++;
 							}
@@ -2545,8 +2561,6 @@ namespace dialogs {
 					GetDlgItemText(hWnd, IDC_DLG_BEEP_ON_QUERY_END, buf, 255);
 					prefs::set("beep-query-duration", (int)_tcstod(buf, NULL));
 
-					setEditorFont(hEditorWnd);
-					setTreeFont(hTreeWnd);
 					sqlite3_exec(db, prefs::get("use-legacy-rename") ? "pragma legacy_alter_table = 1" : "pragma legacy_alter_table = 0", 0, 0, 0);
 
 					TCHAR startup16[MAX_TEXT_LENGTH]{0};
@@ -2608,11 +2622,13 @@ namespace dialogs {
 			case WM_KEYDOWN: {
 				if (wParam == VK_RETURN) {
 					DestroyWindow(hWnd);
+					return true;
 				}
 
 				if (wParam == VK_ESCAPE) {
 					SetWindowLong(hWnd, GWL_USERDATA, 0);
 					DestroyWindow(hWnd);
+					return true;
 				}
 			}
 			break;
@@ -2728,7 +2744,7 @@ namespace dialogs {
 			bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
 
 			char query8[256 + strlen(schema8) + strlen(tablename8)];
-			sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where \"%s\" = ?2", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
+			sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where %s = ?2", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
 
 			sqlite3_stmt *stmt;
 			if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {

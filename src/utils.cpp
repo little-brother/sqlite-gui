@@ -233,8 +233,8 @@ namespace utils {
 		if (len == 0)
 			return sqlite3_bind_null(stmt, pos);
 
-		if (len > 20) // 18446744073709551615
-			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+		//if (len > 20) // 18446744073709551615
+		//	return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
 
 		if (len == 1 && value8[0] == '0')
 			return sqlite3_bind_int(stmt, pos, 0);
@@ -242,8 +242,8 @@ namespace utils {
 		bool isNum = true;
 		int dotCount = false;
 		for (int i = +(value8[0] == '-' /* is negative */); i < len; i++) {
-			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.');
-			dotCount += value8[i] == '.';
+			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.' || value8[i] == ',');
+			dotCount += value8[i] == '.' || value8[i] == ',';
 		}
 
 		if (isNum && dotCount == 0) {
@@ -252,8 +252,12 @@ namespace utils {
 				sqlite3_bind_int64(stmt, pos, atoll(value8));
 		}
 
-		if (isNum && dotCount == 1)
-			return sqlite3_bind_int(stmt, pos, strtod(value8, 0));
+		double d = 0;
+		if (isNum && dotCount == 1 && isNumber(value8, &d)) {
+			printf("%s -> %.30lf\n", value8, d);
+			return sqlite3_bind_double(stmt, pos, d);
+		}
+
 
 		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
 	}
@@ -280,6 +284,34 @@ namespace utils {
 
 		errno = 0;
 		d = _tcstod(str2, &endptr);
+		rc = !(errno != 0 || *endptr != '\0');
+		if (rc && out != NULL)
+			*out = d;
+
+		return rc;
+	}
+
+	bool isNumber(const char* str, double *out) {
+		double d;
+		char *endptr;
+		errno = 0;
+		d = strtold(str, &endptr);
+		bool rc = !(errno != 0 || *endptr != '\0');
+		if (rc && out != NULL)
+				*out = d;
+
+		if (rc)
+			return true;
+
+		int len = strlen(str);
+		char str2[len + 1]{0};
+		strcpy(str2, str);
+		for (int i = 0; i < len; i++)
+			if (str2[i] == TEXT('.'))
+				str2[i] = TEXT(',');
+
+		errno = 0;
+		d = strtold(str2, &endptr);
 		rc = !(errno != 0 || *endptr != '\0');
 		if (rc && out != NULL)
 			*out = d;

@@ -24,6 +24,7 @@ namespace utils {
 	char* getFileName(const char* path);
 
 	bool isNumber(const TCHAR* str, double *out);
+	bool isNumber(const char* str, double *out);
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8);
 }

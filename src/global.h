@@ -50,7 +50,7 @@
 #include "sqlite3.h"
 
 extern sqlite3 *db;
-extern HWND  hMainWnd, hTreeWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
+extern HWND  hMainWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
 
 extern HTREEITEM treeItems[5]; // 0 - current
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog

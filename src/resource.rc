@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 2, 0
+FILEVERSION 1, 4, 3, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.2\000"
+			VALUE "FileVersion", "1.4.3\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.2\000"
+			VALUE "ProductVersion", "1.4.3\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -24,11 +24,11 @@ FILETYPE VFT_APP {
 
 LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_ADDEDIT DIALOGEX 50, 50, 500, 300
-	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | DS_MODALFRAME
 	CAPTION "Edit table/view; Add/edit index/trigger"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 1, 1, 498, 273, WS_EX_STATICEDGE
+	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL, 1, 1, 498, 273, WS_EX_STATICEDGE
 	PUSHBUTTON "Example", IDC_DLG_EXAMPLE, 5, 282, 50, 14, WS_TABSTOP
 	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 445, 282, 50, 14, WS_TABSTOP
 	PUSHBUTTON "Execute", IDC_DLG_OK, 390, 282, 50, 14, WS_TABSTOP
@@ -96,7 +96,7 @@ END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_EDITDATA DIALOGEX 50, 50, 500, 300
-	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SIZEBOX | DS_MODALFRAME
 	CAPTION "View/Edit table data"
 	FONT 10, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
@@ -630,8 +630,8 @@ BEGIN
 	"G", IDM_GISTS, CONTROL, VIRTKEY
 
 	VK_TAB, IDM_CHANGE_FOCUS, CONTROL SHIFT, VIRTKEY
-
 	VK_TAB, IDM_NEXT_RESULT, CONTROL, VIRTKEY
+
 	"N", IDM_OPEN_EDITOR, CONTROL, VIRTKEY
 	VK_ESCAPE, IDM_CLOSE_EDITOR, CONTROL ALT, VIRTKEY
 	VK_LEFT, IDM_PREV_EDITOR, CONTROL ALT, VIRTKEY
@@ -690,9 +690,9 @@ BEGIN
 		"   Use !ABC to find rows without ""ABC""\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
-		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   remove/reorder column in an existing table or something like this.\n\n" \
-		"* Do you need a newer version of SQLite?\n  Just replace sqlite3.dll! 32-bit version is required.\n\n" \
-		"* Data generator requires ora extension.\n\n" \
+		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
+		"* Do you need a newer version of SQLite?\n   Recompile it (check wiki) and replace sqlite3.dll. 32-bit version is required.\n\n" \
+		"* The Ora extension is used for: data generator, edit tables without rowid\n   and edit views with ""instead of""-triggers.\n\n" \
 		"Cons\n" \
 		"* Only utf-8 is supported\n" \
 		"* NULL is displayed as an empty string\n" \

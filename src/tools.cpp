@@ -1499,7 +1499,7 @@ namespace tools {
 					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD, 45, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
 					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 53, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
 					CreateWindow(WC_STATIC, TEXT("x"), WS_VISIBLE | WS_CHILD, 100, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
-					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 110, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_MULTIPLIER, GetModuleHandle(0), 0);
+					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER | WS_TABSTOP, 110, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_MULTIPLIER, GetModuleHandle(0), 0);
 				}
 
 				if (_tcscmp(buf16, TEXT("date")) == 0) {
@@ -1603,7 +1603,8 @@ namespace tools {
 					HWND hColumnWnd = GetWindow(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GW_CHILD);
 					char columns8[MAX_TEXT_LENGTH]{0};
 
-					while(IsWindow(hColumnWnd)){
+					bool rc = true;
+					while(IsWindow(hColumnWnd) && rc){
 						TCHAR name16[128]{0};
 						GetDlgItemText(hColumnWnd, IDC_DLG_GEN_COLUMN_NAME, name16, 127);
 						char* name8 = utils::utf16to8(name16);
@@ -1626,9 +1627,12 @@ namespace tools {
 						if (_tcscmp(type16, TEXT("number")) == 0) {
 							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
 							int end = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_END);
-							int multi = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER);
+							TCHAR multi[32]{0};
+							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER, multi, 31);
+							TCHAR* multi2 = utils::replace(multi, TEXT(","), TEXT("."));
 
-							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %i"), name16, start, end, start, multi);
+							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %s"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
+							delete [] multi2;
 						}
 
 						if (_tcscmp(type16, TEXT("reference to")) == 0) {
@@ -1670,10 +1674,15 @@ namespace tools {
 						}
 
 						char* query8 = utils::utf16to8(query16);
-						execute(query8);
+						rc = execute(query8);
 						delete [] query8;
 
 						hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
+					}
+
+					if (!rc) {
+						showDbError(hWnd);
+						return 0;
 					}
 
 					prefs::set("data-generator-row-count", rowCount);
@@ -1685,7 +1694,7 @@ namespace tools {
 					}
 
 					snprintf(query8, MAX_TEXT_LENGTH, "insert into \"%s\".\"%s\" (%s) select %s from temp.data_generator", schema8, tablename8, columns8, columns8);
-					int rc = execute(query8);
+					rc = execute(query8);
 					if (rc)
 						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
 					else
@@ -1904,41 +1913,71 @@ namespace tools {
 				HWND hFilterWnd = CreateWindow(WC_EDIT, NULL, WS_CHILD | WS_BORDER | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL, rc.right + 16 * 3 + 25, 3, 180, 19, hToolbarWnd, (HMENU) IDC_DLG_FILTER, GetModuleHandle(0), 0);
 				SendMessage(hFilterWnd, WM_SETFONT, (LPARAM)SendMessage(hToolbarWnd, WM_GETFONT, 0, 0), true);
 
+				auto addTable = [hWnd](char* name8, int tblNo) {
+					TCHAR* tblname16 = utils::utf8to16((char *)name8);
+					RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
+					prefs::getDiagramRect(dbname8, (const char*)name8, &rect);
+					HWND hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
+						WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
+						rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
+
+					cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
+					ShowWindow(hTableWnd, SW_SHOW);
+
+					delete [] tblname16;
+					return hTableWnd;
+				};
+
+				auto addColumn = [] (HWND hTableWnd, char* name8, char* type8) {
+					TCHAR* colname16 = utils::utf8to16(name8);
+					TCHAR* type16 = utils::utf8to16(type8);
+					TCHAR buf[1024]{0};
+					_stprintf(buf, TEXT("%s: %s"), colname16, type16);
+					ListBox_AddString(hTableWnd, buf);
+
+					delete [] type16;
+					delete [] colname16;
+				};
+
 				HWND hTableWnd = 0;
 				int tblNo = 0;
 				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type), c.type, 'any'), c.pk " \
-					"from sqlite_master t, pragma_table_info(t.tbl_name) c " \
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type), c.type, 'any') || iif(c.pk, ' [PK]', '') " \
+					"from sqlite_master t, pragma_table_xinfo(t.tbl_name) c " \
 					"where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table')" \
 					"order by 1, 3", -1, &stmt, 0)) {
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* tblname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-						TCHAR* colname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 1));
-						int no = sqlite3_column_int(stmt, 2);
-						TCHAR* type16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 3));
-						int isPk = sqlite3_column_int(stmt, 4);
-
-						if (!no) {
-							RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
-							prefs::getDiagramRect(dbname8, (const char*)sqlite3_column_text(stmt, 0), &rect);
-							hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
-								WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
-								rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
-
-							cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
-							ShowWindow(hTableWnd, SW_SHOW);
+						int colNo = sqlite3_column_int(stmt, 2);
+						if (colNo == 0) {
+							hTableWnd = addTable((char *)sqlite3_column_text(stmt, 0), tblNo);
 							tblNo++;
 						}
 
-						TCHAR buf[1024]{0};
-						_stprintf(buf, TEXT("%s: %s %s"), colname16, type16, isPk? TEXT(" [PK]") : TEXT(""));
-						ListBox_AddString(hTableWnd, buf);
-
-						delete [] tblname16;
-						delete [] colname16;
+						addColumn(hTableWnd, (char*)sqlite3_column_text(stmt, 1), (char*)sqlite3_column_text(stmt, 3));
 					}
 				}
 				sqlite3_finalize(stmt);
+
+				if (SQLITE_OK != sqlite3_errcode(db) || tblNo == 0) {
+					sqlite3_prepare_v2(db, "select name from sqlite_master t where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table') order by 1", -1, &stmt, 0);
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						char* name8 = (char*)sqlite3_column_text(stmt, 0);
+						hTableWnd = addTable(name8, tblNo);
+						tblNo++;
+
+						sqlite3_stmt *substmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select name, cid, iif(length(c.type), c.type, 'any') || iif(c.pk, ' [PK]', '') from pragma_table_xinfo(?1) c order by cid", -1, &substmt, 0)) {
+							sqlite3_bind_text(substmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
+							while (SQLITE_ROW == sqlite3_step(substmt))
+								addColumn(hTableWnd, (char*) sqlite3_column_text(substmt, 0), (char *) sqlite3_column_text(substmt, 2));
+
+							if (ListBox_GetCount(hTableWnd) == 0)
+								addColumn(hTableWnd, (char*)"Error", (char*)sqlite3_errmsg(db));
+						}
+						sqlite3_finalize(substmt);
+					}
+					sqlite3_finalize(stmt);
+				}
 
 				int linkNo = 0;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblfrom, c.'from' colfrom, c.'table' tblto, c.'to' colto " \

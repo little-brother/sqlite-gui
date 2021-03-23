@@ -145,7 +145,7 @@ static void crc32 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 
 	const UINT8 *p = sqlite3_value_text(argv[0]);
 	size_t size = strlen(sqlite3_value_text(argv[0]));
-    UINT crc;
+    UINT crc = 0;
 
     crc = ~0U;
     while (size--)
@@ -516,7 +516,10 @@ static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 		sqlite3_result_null(ctx);
 }
 
-__declspec(dllexport) int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
 	(void)pzErrMsg;  /* Unused parameter */
 	return SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&

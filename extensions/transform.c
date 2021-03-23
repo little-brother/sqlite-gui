@@ -22,18 +22,20 @@
 	The target table always has one column c1.
 	select txttable('line1'|| x'0d' || x'0a' || 'line2'|| x'0a' || 'line3', 'mytable') 
 */
-#define UNICODE
-#define _UNICODE
-
 #define MAX_DATA_LENGTH 32000
 #define MAX_COLUMN_LENGTH 2000
 
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
-#include <windows.h>
 #include <stdio.h>
-#include <tchar.h>
+#include <stdlib.h>
 #include <time.h>
+#include <string.h>
+#include <ctype.h>
+
+typedef int BOOL;
+#define TRUE 1
+#define FALSE 0
 
 char* getName(const char* in, BOOL isSchema) {
 	char* res = (char*)calloc(strlen(in) + 5, sizeof(char));
@@ -41,7 +43,7 @@ char* getName(const char* in, BOOL isSchema) {
 		return strcat(res, isSchema ? "main" : "");
 
 	const char* p = in;
-	while (p[0] && !_istgraph(p[0]))
+	while (p[0] && !isgraph(p[0]))
 		p++;
 
 	char* q = p ? strchr("'`\"[", p[0]) : 0;
@@ -351,7 +353,10 @@ static void txttable(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 	}
 }
 
-__declspec(dllexport) int sqlite3_transform_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+int sqlite3_transform_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
 	int rc = SQLITE_OK;
 	SQLITE_EXTENSION_INIT2(pApi);
 	(void)pzErrMsg;  /* Unused parameter */
