@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 3, 0
+FILEVERSION 1, 4, 4, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.3\000"
+			VALUE "FileVersion", "1.4.4\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.3\000"
+			VALUE "ProductVersion", "1.4.4\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -692,7 +692,8 @@ BEGIN
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite?\n   Recompile it (check wiki) and replace sqlite3.dll. 32-bit version is required.\n\n" \
-		"* The Ora extension is used for: data generator, edit tables without rowid\n   and edit views with ""instead of""-triggers.\n\n" \
+		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
+		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
 		"Cons\n" \
 		"* Only utf-8 is supported\n" \
 		"* NULL is displayed as an empty string\n" \
@@ -711,7 +712,7 @@ BEGIN
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
-		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
+		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), tosize(nBytes), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
 		"ODBC\n"\
 		"Adds odbc_read(connectionString, query, target), odbc_write(query, connectionString, target), odbc_query(connectionString, query) and odbc_dsn() functions.\n\n" \
 		"Exec\n"\

@@ -50,7 +50,7 @@
 #include "sqlite3.h"
 
 extern sqlite3 *db;
-extern HWND  hMainWnd, hEditorWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
+extern HWND  hMainWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
 
 extern HTREEITEM treeItems[5]; // 0 - current
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
@@ -79,6 +79,7 @@ extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
 
+void search(HWND hWnd);
 void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);

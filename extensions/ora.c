@@ -31,11 +31,18 @@
 	Returns substring for a delimiter and a part number
 	select strpart('ab-cd-ef', '-', 2) --> 'cd'
 	select strpart('20.01.2021', '.', 3) --> 2021
+	
+	tosize(nBytes)
+	Returns a human readable size
+	select tosize(1024) --> 1.00KB
+	select tosize(2 * 1024 * 1024) --> 2.00MB
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
 
 typedef unsigned char UINT8;
 typedef unsigned int UINT;
@@ -516,6 +523,25 @@ static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 		sqlite3_result_null(ctx);
 }
 
+const char* sizes[] = {"b", "KB", "MB", "GB", "TB"};
+
+static void tosize (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+			 
+	double size = sqlite3_value_double(argv[0]);
+	char res[64];
+    if (size != 0) {
+    	int mag = floor(log10(size)/log10(1024));
+        double tosize = (double) size / (1L << (mag * 10));
+        sprintf(res, "%.2lf%s", tosize, mag < 5 ? sizes[mag] : "Error");
+    } else {
+		sprintf(res, "0b");
+    } 
+	
+	sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
+}
+
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
@@ -529,6 +555,7 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8, 0, md5, 0, 0) && 
 		SQLITE_OK == sqlite3_create_function(db, "base64_encode", 1, SQLITE_UTF8, 0, base64_encode, 0, 0) && 
 		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8, 0, base64_decode, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8, 0, strpart, 0, 0) ?
+		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8, 0, strpart, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8, 0, tosize, 0, 0) ?		
 		SQLITE_OK : SQLITE_ERROR;
 }

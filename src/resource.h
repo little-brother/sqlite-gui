@@ -315,6 +315,7 @@
 #define WMU_UPDATE_DIAGRAM         WM_USER + 16
 #define WMU_UNREGISTER_DIALOG      WM_USER + 17
 #define WMU_OBJECT_CREATED         WM_USER + 18
+#define WMU_APPEND_TEXT            WM_USER + 19
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

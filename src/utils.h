@@ -23,6 +23,8 @@ namespace utils {
 	char* readFile(const char* path);
 	char* getFileName(const char* path);
 
+	TCHAR* toBlobSize(INT64 bSize);
+
 	bool isNumber(const TCHAR* str, double *out);
 	bool isNumber(const char* str, double *out);
 

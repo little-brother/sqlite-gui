@@ -1726,7 +1726,7 @@ namespace tools {
 				if (!rc)
 					return showDbError(hWnd);
 
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, SUM(payload) 'Payload size, B', SUM(pgsize) 'Total size, B', r.cnt 'Rows' from dbstat s left join temp.row_statistics r on s.name = r.name  group by s.name;", -1, &stmt, 0))
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' from dbstat s left join temp.row_statistics r on s.name = r.name  group by s.name;", -1, &stmt, 0))
 					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_STATISTICS), stmt);
 				sqlite3_finalize(stmt);
 			}

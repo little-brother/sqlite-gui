@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <math.h>
 #include "utils.h"
 
 namespace utils {
@@ -260,6 +261,21 @@ namespace utils {
 
 
 		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+	}
+
+	const TCHAR* sizes[] = { TEXT("b"), TEXT("KB"), TEXT("MB"), TEXT("GB"), TEXT("TB") };
+	TCHAR* toBlobSize(INT64 bSize) {
+		TCHAR* res = new TCHAR[64]{0};
+        if (bSize == 0) {
+			_stprintf(res, TEXT("(BLOB: empty)"));
+			return res;
+        }
+
+        int mag = floor(log10(bSize)/log10(1024));
+        double size = (double) bSize / (1L << (mag * 10));
+
+        _stprintf(res, TEXT("(BLOB: %.2lf%s)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
+        return res;
 	}
 
 	// Supports both 2.7 and 2,7

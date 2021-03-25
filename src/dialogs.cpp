@@ -31,21 +31,21 @@ namespace dialogs {
 				_stprintf(buf, isEdit ? TEXT("Edit %s \"%s\"") : TEXT("Add %s"), TYPES16[type], editTableData16);
 				SetWindowText(hWnd, buf);
 
-				HWND hDlgEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				SendMessage(hDlgEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
-				setEditorFont(hDlgEditorWnd);
-				SetFocus(hDlgEditorWnd);
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
+				setEditorFont(hEditorWnd);
 
 				if (isEdit) {
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
 					TCHAR* sql16 = getDDL(editTableData16, type, true);
 					if (sql16) {
-						SetWindowText(hDlgEditorWnd, sql16);
+						SetWindowText(hEditorWnd, sql16);
 						delete [] sql16;
 					} else {
-						SetWindowText(hDlgEditorWnd, TEXT("Error to get DDL"));
+						SetWindowText(hEditorWnd, TEXT("Error to get DDL"));
 					}
 				}
+				SetFocus(hEditorWnd);
 			}
 			break;
 
@@ -98,6 +98,11 @@ namespace dialogs {
 
 				if (wParam == IDM_EDITOR_DELETE)
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, 0);
+
+				if ((wParam == IDM_EDITOR_FIND) && (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hWnd, (DLGPROC)&cbDlgFind, (LPARAM)hEditorWnd) == DLG_OK)) {
+					search(hEditorWnd);
+					SetFocus(hEditorWnd);
+				}
 
 				if (wParam == IDC_DLG_OK) {
 					int size = GetWindowTextLength(hEditorWnd) + 1;
@@ -532,18 +537,7 @@ namespace dialogs {
 					TCHAR buf[MAX_TEXT_LENGTH];
 					ListView_GetItemText(hListWnd, iPos, 1, buf, MAX_TEXT_LENGTH);
 
-					int crPos;
-					SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&crPos, (LPARAM)&crPos);
-					int lineNo = SendMessage(hEditorWnd, EM_LINEFROMCHAR, crPos, 0);
-					int lineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, lineNo, 0);
-					int lineSize = SendMessage(hEditorWnd, EM_LINELENGTH, lineIdx, 0);
-					if (lineSize > 0 && crPos <= lineIdx + lineSize) {
-						lineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, lineNo + 1, 0);
-						SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)lineIdx, (LPARAM)lineIdx);
-					}
-
-					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)buf);
-					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)(buf[_tcslen(buf) - 1] != TEXT(';') ? TEXT(";\n") : TEXT("\n")));
+					SendMessage(hMainWnd, WMU_APPEND_TEXT, (WPARAM)buf, 0);
 					EndDialog(hWnd, DLG_OK);
 				}
 			}
@@ -708,7 +702,7 @@ namespace dialogs {
 					tbButtons[btnCount] = {1, IDM_ROW_DELETE, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Delete")};
 					btnCount++;
 				}
-				if (isTable) {
+				if (isTable && IsWindow(hMainWnd)) {
 					tbButtons[btnCount] = {3, IDM_GENERATE_DATA, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Generate data")};
 					btnCount++;
 				}
@@ -931,7 +925,7 @@ namespace dialogs {
 				TCHAR buf[MAX_TEXT_LENGTH];
 				ListView_GetItemText(hListWnd, currCell.iItem, currCell.iSubItem, buf, MAX_TEXT_LENGTH);
 
-				if (_tcscmp(buf, TEXT("(BLOB)")) == 0 || currCell.iSubItem < 1)
+				if (_tcsstr(buf, TEXT("(BLOB:")) != NULL || currCell.iSubItem < 1)
 					return true;
 
 				HWND hEdit = CreateWindowEx(0, WC_EDIT, withText ? buf : NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, rect.left, rect.top, w, h, hListWnd, 0, GetModuleHandle(NULL), NULL);
@@ -974,7 +968,7 @@ namespace dialogs {
 					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, 10);
 
 					bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
-					HMENU hMenu = !canUpdate ? hResultMenu : blobs[ia->iSubItem - 1] || !_tcscmp(buf, TEXT("(BLOB)")) ? hBlobMenu : hEditDataMenu;
+					HMENU hMenu = !canUpdate ? hResultMenu : blobs[ia->iSubItem - 1] || _tcsstr(buf, TEXT("(BLOB:")) != NULL ? hBlobMenu : hEditDataMenu;
 
 					if (hMenu == hEditDataMenu) {
 						bool* generated = (bool*)GetProp(GetParent(hListWnd), TEXT("GENERATED"));
@@ -1143,6 +1137,7 @@ namespace dialogs {
 				WORD cmd = LOWORD(wParam);
 				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 				bool canUpdate = GetProp(hWnd, TEXT("CANUPDATE"));
+				char* md5keys8 = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
 				if (wParam == IDOK) { // User push Enter
@@ -1188,11 +1183,11 @@ namespace dialogs {
 						placeholders8[i] = i % 2 ? ',' : '?';
 					placeholders8[count * 2 - 1] = '\0';
 
-					char sql8[1024 + count * 2]{0};
 					char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 
-					sprintf(sql8, "delete from \"%s\".\"%s\" where %s in (%s)", schema8, tablename8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")),  placeholders8);
+					char sql8[1024 + strlen(tablename8) + strlen(schema8) + (hasRowid ? 0 : strlen(md5keys8)) + count * 2]{0};
+					sprintf(sql8, "delete from \"%s\".\"%s\" where %s in (%s)", schema8, tablename8, hasRowid ? "rowid" : md5keys8,  placeholders8);
 					delete [] placeholders8;
 
 					sqlite3_stmt *stmt;
@@ -1239,10 +1234,11 @@ namespace dialogs {
 						_tcscat(ids16, buf16);
 					}
 
-					char sql8[1024]{0};
 					char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 					char* ids8 = utils::utf16to8(ids16);
+
+					char sql8[1024 + 2 * strlen(schema8) + 2 * strlen(tablename8) + (hasRowid ? 0 : strlen(md5keys8))]{0};
 					sprintf(sql8, "select 'insert into \"%s\".\"%s\" (' || group_concat(name, ', ') || ') " \
 						"select ' || group_concat(name, ', ') || ' from \"%s\".\"%s\" where rowid in (%s)' " \
 						"from pragma_table_info('%s') where schema = '%s' and pk = 0", schema8, tablename8, schema8, tablename8, ids8, tablename8, schema8);
@@ -1285,11 +1281,11 @@ namespace dialogs {
 					char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 					char* column8 = utils::utf16to8(column16);
 
-					char query8[1024] = {0};
+					char query8[1024 + strlen(schema8) + strlen(tablename8) + strlen(column8) + (hasRowid ? 0 : strlen(md5keys8))] = {0};
 					if (cmd == IDM_BLOB_EXPORT) {
-						sprintf(query8, "select %s from \"%s\".\"%s\" where %s = ?1", column8, schema8, tablename8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")));
+						sprintf(query8, "select %s from \"%s\".\"%s\" where %s = ?1", column8, schema8, tablename8, hasRowid ? "rowid" : md5keys8);
 					} else {
-						sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?2 where %s = ?1", schema8, tablename8, column8, hasRowid ? "rowid" : (char*)GetProp(hWnd, TEXT("MD5KEYS8")));
+						sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?2 where %s = ?1", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
 					}
 
 					char* path8 = utils::utf16to8(path16);
@@ -1326,7 +1322,9 @@ namespace dialogs {
 							rc = SQLITE_DONE == sqlite3_step(stmt);
 							delete [] data8;
 
-							ListView_SetItemText(hListWnd, rowNo, colNo, TEXT("(BLOB)"));
+							TCHAR* bsize = utils::toBlobSize(size);
+							ListView_SetItemText(hListWnd, rowNo, colNo, bsize);
+							delete [] bsize;
 						}
 					}
 
@@ -1411,9 +1409,9 @@ namespace dialogs {
 					delete [] keys;
 				RemoveProp(hWnd, TEXT("KEYS8"));
 
-				char* md5keys = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
-				if (md5keys != NULL) {
-					delete [] md5keys;
+				char* md5keys8 = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
+				if (md5keys8 != NULL) {
+					delete [] md5keys8;
 					RemoveProp(hWnd, TEXT("MD5KEYS8"));
 				}
 
@@ -1562,11 +1560,14 @@ namespace dialogs {
 					ListView_GetItemText(hListWnd, currCell.iItem, i, val, MAX_TEXT_LENGTH);
 					HWND hEdit = GetDlgItem(hWnd, IDC_ROW_EDIT + i);
 					SetWindowText(hEdit, val);
-					bool isBlob = _tcscmp(val, TEXT("(BLOB)")) == 0;
+					bool isBlob = _tcsstr(val, TEXT("(BLOB:")) != NULL;
 					bool isGenerated = generated != NULL && generated[i] != 0;
 					bool isEnable = !isBlob && !isGenerated;
 					EnableWindow(hEdit, isEnable);
 					EnableWindow(GetDlgItem(hWnd, IDC_ROW_SWITCH + i), isEnable);
+
+					// Reset Edit flag
+					SetWindowLong(hEdit, GWL_USERDATA, 0);
 				}
 				return true;
 			}
@@ -1594,6 +1595,9 @@ namespace dialogs {
 
 					SetFocus(hEdit);
 				}
+
+				if (HIWORD(wParam) == EN_UPDATE && LOWORD(wParam) >= IDC_ROW_EDIT && LOWORD(wParam) < IDC_ROW_EDIT + 100)
+					SetWindowLong((HWND)lParam, GWL_USERDATA, 1);
 
 				if (wParam == IDOK) {
 					int id = GetDlgCtrlID(GetFocus());
@@ -1629,6 +1633,19 @@ namespace dialogs {
 						return true;
 					}
 
+					if (mode == ROW_EDIT) {
+						bool isChanged = false;
+						for (int i = 1; i < colCount; i++)
+							isChanged = isChanged || GetWindowLong(GetDlgItem(hWnd, IDC_ROW_EDIT + i), GWL_USERDATA);
+
+						if (!isChanged) {
+							changeCurrentItem();
+							if (mode == ROW_EDIT)
+								SendMessage(hWnd, WMU_SET_DLG_ROW_DATA, 0, 0);
+							return false;
+						}
+					}
+
 					TCHAR* columns16[colCount]{0};
 					char* values8[colCount]{0};
 					TCHAR* values16[colCount]{0};
@@ -1660,7 +1677,7 @@ namespace dialogs {
 					}
 
 					char sql8[MAX_TEXT_LENGTH]{0};
-					char buf8[256];
+					char buf8[256 + strlen(schema8) + strlen(tablename8)];
 					sprintf(buf8, mode == ROW_ADD ? "insert into \"%s\".\"%s\" (" : "update \"%s\".\"%s\" set ", schema8, tablename8);
 					strcat(sql8, buf8);
 					int valCount = 0;
@@ -1669,6 +1686,9 @@ namespace dialogs {
 							continue;
 
 						if (mode == ROW_ADD && !strlen(values8[i]))
+							continue;
+
+						if (mode == ROW_EDIT && GetWindowLong(GetDlgItem(hWnd, IDC_ROW_EDIT + i), GWL_USERDATA) == 0)
 							continue;
 
 						sprintf(buf8, mode == ROW_ADD ? "%s\"%s\"" : "%s\"%s\" = ?", valCount > 0 ? ", " : "", columns8[i]);
@@ -1689,7 +1709,6 @@ namespace dialogs {
 						} else {
 							sprintf(sql8, "insert into \"%s\".\"%s\" default values", schema8, tablename8);
 						}
-
 					} else {
 						strcat(sql8, " where ");
 						strcat(sql8, hasRowid ? " rowid " : md5keys8);
@@ -1714,12 +1733,14 @@ namespace dialogs {
 					bool rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
 					if (rc) {
 						int valNo = 1;
-						for (int i = 1; i < colCount; i++)
-							if (IsWindowEnabled(GetDlgItem(hWnd, IDC_ROW_EDIT + i)) &&
-								(mode == ROW_EDIT || mode == ROW_ADD && strlen(values8[i]) > 0)) {
+						for (int i = 1; i < colCount; i++) {
+							HWND hEdit = GetDlgItem(hWnd, IDC_ROW_EDIT + i);
+							if (IsWindowEnabled(hEdit) &&
+								((mode == ROW_EDIT && GetWindowLong(hEdit, GWL_USERDATA)) || (mode == ROW_ADD && strlen(values8[i]) > 0))) {
 								utils::sqlite3_bind_variant(stmt, valNo, values8[i]);
 								valNo++;
 							}
+						}
 
 						if (mode == ROW_EDIT) {
 							TCHAR rowid16[64];
@@ -1735,7 +1756,7 @@ namespace dialogs {
 					sqlite3_update_hook(db, NULL, NULL);
 
 					if (rc) {
-						char sql8[255 + strlen(hasRowid ? "rowid" : md5keys8)];
+						char sql8[1024 + 2 * strlen(hasRowid ? "rowid" : md5keys8) + strlen(schema8) + strlen(tablename8)];
 						sprintf(sql8, "select *, %s rowid from \"%s\".\"%s\" where %s = ?", hasRowid ? "rowid" : md5keys8, schema8, tablename8, hasRowid ? "rowid" : md5keys8);
 
 						sqlite3_stmt *stmt;
@@ -1750,7 +1771,7 @@ namespace dialogs {
 								placeholders8[i] = i % 2 ? ',' : '?';
 							placeholders8[(keyCount + 1) * 2 - 1] = 0;
 
-							char sub8[2 * strlen(keys8) + 256]{0};
+							char sub8[0124 + 2 * strlen(md5keys8) + strlen(schema8) + strlen(tablename8)]{0};
 							sprintf(sub8, "select %s from \"%s\".\"%s\" where (%s) = (%s)", md5keys8, schema8, tablename8, keys8, placeholders8);
 
 							sqlite3_stmt *stmt2;
@@ -1779,10 +1800,8 @@ namespace dialogs {
 							int iItem = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currCell.iItem;
 							for (int i = 0; i < sqlite3_column_count(stmt); i++) {
 								int colType = sqlite3_column_type(stmt, i);
-								TCHAR* value16 = utils::utf8to16(
-									colType == SQLITE_NULL ? "" :
-									colType == SQLITE_BLOB ? "(BLOB)" :
-									(char*)sqlite3_column_text(stmt, i));
+								TCHAR* value16 = colType == SQLITE_BLOB ? utils::toBlobSize(sqlite3_column_bytes(stmt, i)) :
+									utils::utf8to16(colType == SQLITE_NULL ? "" : (char *) sqlite3_column_text(stmt, i));
 
 								LVITEM  lvi = {0};
 								if (mode == ROW_ADD && i == 0) {
@@ -2569,17 +2588,6 @@ namespace dialogs {
 					prefs::set("startup", startup8);
 					delete [] startup8;
 
-					if (!prefs::get("use-highlight")) {
-						CHARFORMAT cf = {0};
-						cf.cbSize = sizeof(CHARFORMAT2) ;
-						SendMessage(hEditorWnd, EM_GETCHARFORMAT, SCF_DEFAULT, (LPARAM) &cf);
-						cf.dwMask = CFM_COLOR;
-						cf.dwEffects = 0;
-						cf.crTextColor = RGB(0, 0, 0);
-
-						SendMessage(hEditorWnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM) &cf);
-					}
-
 					EndDialog(hWnd, DLG_OK);
 				}
 
@@ -2743,7 +2751,7 @@ namespace dialogs {
 			char* md5keys8 = (char*)GetProp(hParentWnd, TEXT("MD5KEYS8"));
 			bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
 
-			char query8[256 + strlen(schema8) + strlen(tablename8)];
+			char query8[256 + 2 * strlen(schema8) + strlen(tablename8) + strlen(column8) + (hasRowid ? 0 : strlen(md5keys8))];
 			sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where %s = ?2", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
 
 			sqlite3_stmt *stmt;
