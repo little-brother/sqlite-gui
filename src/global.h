@@ -84,6 +84,7 @@ void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireP
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
+bool toggleWordWrap(HWND hEditorWnd);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);

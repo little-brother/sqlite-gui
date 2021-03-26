@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 4, 0
+FILEVERSION 1, 4, 5, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.4\000"
+			VALUE "FileVersion", "1.4.5\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.4\000"
+			VALUE "ProductVersion", "1.4.5\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -119,7 +119,7 @@ IDD_VIEWDATA_VALUE DIALOGEX 10, 10, 500, 400
 	CAPTION "View value"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 498, 273, WS_EX_STATICEDGE
+	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 498, 273, WS_EX_STATICEDGE
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -654,6 +654,9 @@ BEGIN
 		"Ctrl + N - New editor\n" \
 		"Ctrl + Alt + Escape - Close the current editor\n" \
 		"Ctrl + Alt + Right/Left - Toggle the editor's tab\n\n" \
+		"Navigation tree\n" \
+		"Ctrl + C - copy the text of the selected item to the clipboard\n" \
+		"Ctrl + Shift + C - copy the DDL of the selected item to the clipboard\n\n" \
 		"Editor\n" \
 		"F8/Alt + Enter - Show query plan\n" \
 		"F9/Ctrl + Enter - Execute query\n" \

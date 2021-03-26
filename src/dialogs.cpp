@@ -10,7 +10,7 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-	BOOL CALLBACK cbDlgEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	BOOL CALLBACK cbDlgViewEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
 
 	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("null"), TEXT("blob"), TEXT("json"), 0};
@@ -137,9 +137,8 @@ namespace dialogs {
 					isRequireParenthesisHighligth = true;
 				}
 
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER) {
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
 					return processEditorEvents((MSGFILTER*)lParam);
-				}
 			}
 			break;
 
@@ -1164,7 +1163,7 @@ namespace dialogs {
 					TCHAR buf[MAX_TEXT_LENGTH]{0};
 					ListView_GetItemText(hListWnd, currCell.iItem, currCell.iSubItem, buf, MAX_TEXT_LENGTH);
 
-					if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)&cbDlgEditDataValue, (LPARAM)buf))
+					if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf))
 						ListView_UpdateCell(hListWnd, currCell.iItem, currCell.iSubItem, buf);
 				}
 
@@ -1426,23 +1425,30 @@ namespace dialogs {
 	}
 
 	// USERDATA - buffer with text
-	BOOL CALLBACK cbDlgEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	BOOL CALLBACK cbDlgViewEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 				setEditorFont(hEditorWnd);
 				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
+				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_KEYEVENTS);
 			}
 			break;
 
 			case WM_SIZE: {
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				HWND hOkWnd = GetDlgItem(hWnd, IDC_DLG_OK);
+				bool isReadOnly = GetWindowLong(hEditorWnd, GWL_STYLE) & ES_READONLY;
+
 				RECT rc = {0};
 				GetClientRect(hWnd, &rc);
-				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom - 40, SWP_NOMOVE | SWP_NOZORDER);
-				SetWindowPos(hOkWnd, 0, rc.right - 82, rc.bottom - 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+				if (!isReadOnly) {
+					HWND hOkWnd = GetDlgItem(hWnd, IDC_DLG_OK);
+					SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom - 40, SWP_NOMOVE | SWP_NOZORDER);
+					SetWindowPos(hOkWnd, 0, rc.right - 82, rc.bottom - 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+				} else {
+					SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
+				}
 				SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)0, (LPARAM)0);
 			}
 			break;
@@ -1458,37 +1464,20 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
-		}
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER) {
+					MSGFILTER* pF = (MSGFILTER*)lParam;
+					int key = pF->wParam;
+					bool isKeyDown = pF->lParam & (1U << 31);
+					if (key == 0x57 && GetAsyncKeyState(VK_CONTROL)) { // Ctrl + W
+						if (isKeyDown)
+							toggleWordWrap(pF->nmhdr.hwndFrom);
 
-		return false;
-	}
-
-	// USERDATA - buffer with text
-	BOOL CALLBACK cbDlgViewDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		switch (msg) {
-			case WM_INITDIALOG: {
-				SetWindowLong(hWnd, GWL_USERDATA, lParam);
-				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				setEditorFont(hEditorWnd);
-				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
-			}
-			break;
-
-			case WM_SIZE: {
-				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				RECT rc = {0};
-				GetClientRect(hWnd, &rc);
-				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
-				SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)0, (LPARAM)0);
-			}
-			break;
-
-			case WM_COMMAND: {
-				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+						pF->wParam = 0;
+						return true;
+					}
+				}
 			}
 			break;
 
@@ -1587,11 +1576,11 @@ namespace dialogs {
 
 					int mode = LOWORD(GetWindowLong(hWnd, GWL_USERDATA));
 
-					if (mode != ROW_VIEW && DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)&cbDlgEditDataValue, (LPARAM)buf))
+					if (mode != ROW_VIEW && DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf))
 						SetWindowText(hEdit, buf);
 
 					if (mode == ROW_VIEW)
-						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_VIEWDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewDataValue, (LPARAM)buf);
+						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_VIEWDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf);
 
 					SetFocus(hEdit);
 				}
@@ -2758,8 +2747,11 @@ namespace dialogs {
 			if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 				sqlite3_bind_text(stmt, 1, value8, strlen(value8), SQLITE_TRANSIENT);
 				sqlite3_bind_text(stmt, 2, oldValue8, strlen(oldValue8), SQLITE_TRANSIENT);
-				if (SQLITE_DONE == sqlite3_step(stmt))
+				if (SQLITE_DONE == sqlite3_step(stmt)) {
 					ListView_SetItemText(hListWnd, rowNo, colNo, value16);
+				} else {
+					showDbError(hParentWnd);
+				}
 			} else {
 				showDbError(hParentWnd);
 			}

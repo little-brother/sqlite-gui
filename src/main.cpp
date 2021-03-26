@@ -98,7 +98,6 @@ void updateTransactionState();
 int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
 void openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
-bool toggleWordWrap(HWND hEditorWnd);
 
 WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -200,7 +199,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.4"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.5"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1233,6 +1232,29 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if (ti.lParam == TABLE || ti.lParam == VIEW || ti.lParam == TRIGGER || ti.lParam == INDEX)
 						PostMessage(hMainWnd, WM_COMMAND, IDM_DELETE, 0);
 				}
+
+				if (pKd->wVKey == 0x43 && GetKeyState(VK_CONTROL)) {// Ctrl + C
+					TCHAR name16[256] = {0};
+					TV_ITEM tv;
+					tv.mask = TVIF_TEXT | TVIF_PARAM;
+					tv.hItem = treeItems[0];
+					tv.pszText = name16;
+					tv.cchTextMax = 256;
+
+					if(!TreeView_GetItem(hTreeWnd, &tv))
+						return 0;
+
+					if (GetAsyncKeyState(VK_SHIFT)) {
+						TCHAR* ddl = getDDL(name16, tv.lParam, false);
+						if (ddl != NULL) {
+							utils::setClipboardText(ddl);
+							delete [] ddl;
+						}
+					} else {
+						utils::setClipboardText(name16);
+					}
+				}
+
 				return 1;
 			}
 
@@ -1581,12 +1603,13 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 }
 
 bool openConnection(sqlite3** _db) {
-	if (SQLITE_OK != sqlite3_open_v2(sqlite3_db_filename(db, 0), _db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_SHAREDCACHE | SQLITE_OPEN_URI, NULL)) {
+	if (SQLITE_OK != sqlite3_open_v2(sqlite3_db_filename(db, 0), _db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI, NULL)) {
 		MessageBox(hMainWnd, TEXT("Unable to open a new connection to the database"), TEXT("Error"), MB_OK | MB_ICONSTOP);
 		return 0;
 	}
 
 	// load extensions
+	sqlite3_enable_load_extension(*_db, true);
 	if (prefs::get("autoload-extensions")) {
 		WIN32_FIND_DATA ffd;
 		TCHAR searchPath[MAX_PATH]{0};
@@ -1594,7 +1617,6 @@ bool openConnection(sqlite3** _db) {
 		HANDLE hFind = FindFirstFile(searchPath, &ffd);
 
 		if (hFind != INVALID_HANDLE_VALUE) {
-			sqlite3_enable_load_extension(*_db, true);
 			do {
 				TCHAR file16[MAX_PATH]{0};
 				_stprintf(file16, TEXT("%s/extensions/%s"), APP_PATH, ffd.cFileName);
@@ -3509,25 +3531,9 @@ bool processEditorEvents(MSGFILTER* pF) {
 		}
 
 		if (key == 0x57 && GetAsyncKeyState(VK_CONTROL)) { // Ctrl + W
-			if (isKeyDown){
-				bool isWordWrap = true;
-				for (int i = 0; i < MAX_TAB_COUNT + MAX_DIALOG_COUNT; i++) {
-					hEditors[i] = IsWindow(hEditors[i]) ? hEditors[i] : 0;
-					if (hEditors[i] == hWnd) {
-						isWordWrap = false;
-						hEditors[i] = 0;
-					}
-				}
+			if (isKeyDown)
+				toggleWordWrap(hWnd);
 
-				for (int i = 0; isWordWrap && (i < MAX_TAB_COUNT + MAX_DIALOG_COUNT); i++) {
-					if (hEditors[i] == 0) {
-						hEditors[i] = hWnd;
-						break;
-					}
-				}
-
-				SendMessage(hWnd, EM_SETTARGETDEVICE,(WPARAM)NULL, !isWordWrap);
-			}
 			pF->wParam = 0;
 			return true;
 		}
@@ -4258,4 +4264,25 @@ void openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
 	ShowWindow(hDlg, SW_SHOW);
 	if (GetAncestor(GetFocus(), GA_ROOT) != hDlg)
 		SetFocus(hDlg);
+}
+
+bool toggleWordWrap(HWND hEditorWnd) {
+	bool isWordWrap = true;
+	for (int i = 0; i < MAX_TAB_COUNT + MAX_DIALOG_COUNT; i++) {
+		hEditors[i] = IsWindow(hEditors[i]) ? hEditors[i] : 0;
+		if (hEditors[i] == hEditorWnd) {
+			isWordWrap = false;
+			hEditors[i] = 0;
+		}
+	}
+
+	for (int i = 0; isWordWrap && (i < MAX_TAB_COUNT + MAX_DIALOG_COUNT); i++) {
+		if (hEditors[i] == 0) {
+			hEditors[i] = hEditorWnd;
+			break;
+		}
+	}
+
+	SendMessage(hEditorWnd, EM_SETTARGETDEVICE,(WPARAM)NULL, !isWordWrap);
+	return isWordWrap;
 }
