@@ -22,7 +22,8 @@
 #define IDD_TOOL_DATABASE_SEARCH   37
 #define IDD_TOOL_STATISTICS        38
 
-#define IDA_ACCEL                  50
+#define IDA_ACCEL                  49
+#define IDA_ACCEL2                 50
 
 #define IDC_DLG_OK                 51
 #define IDC_DLG_CANCEL             52
@@ -121,6 +122,10 @@
 #define IDC_DLG_STATISTICS         195
 #define IDC_DLG_FILTER             196
 #define IDC_DLG_ODBC_MANAGER       197
+#define IDC_DLG_ASK_DELETE         198
+#define IDC_DLG_WORD_WRAP          199
+#define IDC_DLG_CLEAR_VALUES       200
+
 
 #define IDC_DLG_GEN_ISTRUNCATE     260
 #define IDC_DLG_GEN_ROW_COUNT      261
@@ -140,9 +145,6 @@
 
 #define IDC_TAB_EDIT               300
 
-#define IDC_HEADER_EDIT            400 // Iteratable
-#define IDC_HEADER_STATIC          450 // Iteratable
-
 #define IDC_MENU_MAIN              500
 #define IDC_MENU_EDITOR            501
 #define IDC_MENU_RESULT            502
@@ -159,22 +161,12 @@
 #define IDC_MENU_COLUMN            516
 #define IDC_MENU_DISABLED          517
 
-#define IDC_TAB_ROWS               600 // iterable
-#define IDC_TAB_MESSAGE            700 // iterable
-
-// Iterable. Should have a gap
-#define IDC_ROW_LABEL              900
-#define IDC_ROW_EDIT               1000
-#define IDC_ROW_SWITCH             1100
-
-#define IDC_DATABASE_DIAGRAM_TABLE 1300
-
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
 #define IDM_EXIT                   1403
 #define IDM_ATTACH                 1404
 #define IDM_SETTINGS               1405
-#define IDM_RECENT                 1410 // Iteratable
+
 
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
@@ -270,11 +262,28 @@
 #define IDM_LINK_VIEW              1732
 #define IDM_LINK_TRIGGER           1733
 
-#define IDI_LOGO                   3000
-#define IDB_TREEVIEW               3001
-#define IDB_TOOLBAR                3002
-#define IDB_DIAGRAM_TOOLBAR        3006
-#define IDB_TOOLBAR_DATA           3010
+#define IDM_PREV_DIALOG            1750
+#define IDM_NEXT_DIALOG            1751
+
+// Iterable. Should have a gap.
+#define IDC_HEADER_EDIT            2000
+#define IDC_HEADER_STATIC          2400
+#define IDC_TAB_ROWS               2800
+#define IDC_TAB_MESSAGE            2900
+
+#define IDC_ROW_LABEL              3000
+#define IDC_ROW_EDIT               3500
+#define IDC_ROW_SWITCH             4000
+#define IDM_RECENT                 4500
+#define IDC_DATABASE_DIAGRAM_TABLE 5000
+
+#define IDI_LOGO                   6000
+#define IDB_TREEVIEW               6001
+#define IDB_TOOLBAR                6002
+#define IDB_DIAGRAM_TOOLBAR        6006
+#define IDB_TOOLBAR_DATA           6010
+
+#define IDT_EDIT_DATA              7000 // timer
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001
@@ -295,8 +304,6 @@
 #define IDS_TOOLTIP_EXECUTE        IDM_EXECUTE
 #define IDS_TOOLTIP_INTERRUPT      IDM_INTERRUPT
 
-#define IDT_EDIT_DATA              70000
-
 #define WMU_SET_DLG_ROW_DATA       WM_USER + 1
 #define WMU_UPDATE_DATA            WM_USER + 2
 #define WMU_SOURCE_UPDATED         WM_USER + 3
@@ -316,6 +323,7 @@
 #define WMU_UNREGISTER_DIALOG      WM_USER + 17
 #define WMU_OBJECT_CREATED         WM_USER + 18
 #define WMU_APPEND_TEXT            WM_USER + 19
+#define WMU_SET_SCROLL_HEIGHT      WM_USER + 20
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

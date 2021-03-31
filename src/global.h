@@ -67,13 +67,6 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
-struct ListViewCell {
-	HWND hListWnd;
-	int iItem;
-	int iSubItem;
-};
-extern ListViewCell currCell;
-
 extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
 
 void setEditorFont(HWND hWnd);
@@ -85,6 +78,7 @@ bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
 bool toggleWordWrap(HWND hEditorWnd);
+void switchDialog(HWND hDlg, bool isNext);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
@@ -92,7 +86,7 @@ int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
 int ListView_Sort(HWND hListWnd, int colNo);
 int ListView_Reset(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
-LRESULT onListViewMenu(int cmd, bool ignoreLastColumn = false);
+LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
 TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);
 bool showDbError(HWND hWnd);
 

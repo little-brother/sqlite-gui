@@ -1418,6 +1418,7 @@ namespace tools {
 					sqlite3_finalize(stmt);
 				}
 
+				SetWindowLong(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GWL_WNDPROC, (LONG)&dialogs::cbNewScroll);
 				SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 				SetFocus(hTable);
 			}
@@ -1442,10 +1443,11 @@ namespace tools {
 				delete [] tablename16;
 				delete [] schema16;
 
+				SendMessage(hColumnsWnd, WM_SETREDRAW, FALSE, 0);
 				char* query8 = utils::utf16to8(query16);
 				sqlite3_stmt *stmt;
+				int rowNo = 0;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-					int rowNo = 0;
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
 						HWND hColumnWnd = CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD, 5, 5 + 30 * rowNo, 470, 23, hColumnsWnd, (HMENU)IDC_DLG_GEN_COLUMN, GetModuleHandle(0), 0);
 
@@ -1475,8 +1477,11 @@ namespace tools {
 				}
 				sqlite3_finalize(stmt);
 				delete [] query8;
+				SendMessage(hColumnsWnd, WM_SETREDRAW, TRUE, 0);
 
 				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+				SetProp(hColumnsWnd, TEXT("SCROLLY"), 0);
+				SendMessage(hColumnsWnd, WMU_SET_SCROLL_HEIGHT, rowNo * 30, 0);
 			}
 			break;
 

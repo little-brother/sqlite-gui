@@ -44,6 +44,7 @@ TCHAR searchString[255]{0};
 
 HFONT hDefFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 HACCEL hAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL));
+HACCEL hDlgAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL2));
 
 struct TEditorTab {
 	int id; // unique tab identificator
@@ -70,7 +71,12 @@ struct TCliTab {
 };
 TCliTab cli{0};
 
-// storage for cell who triggered context menu; IDM_RESULT_COPY_CELL, IDM_RESULT_COPY_ROW and view/edit row-dialog
+// storage for cell who triggered context menu; IDM_RESULT_COPY_CELL, IDM_RESULT_COPY_ROW
+struct ListViewCell {
+	HWND hListWnd;
+	int iItem;
+	int iSubItem;
+};
 ListViewCell currCell;
 
 bool isMoveX = false;
@@ -99,10 +105,11 @@ int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
 void openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
 
-WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
+WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldResultTab, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewMainTabRename(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbMainWindow (HWND, UINT, WPARAM, LPARAM);
@@ -199,7 +206,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.5"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.6"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -215,6 +222,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	cli.hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
 	SendMessage(cli.hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS);
 	SetWindowLong(cli.hEditorWnd, GWL_USERDATA, 0);
+	if (prefs::get("word-wrap"))
+		toggleWordWrap(cli.hEditorWnd);
 	cli.hResultWnd = CreateWindowEx(WS_EX_STATICEDGE, TEXT("RICHEDIT50W"), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_READONLY, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_CLI_RESULT, GetModuleHandle(0),  NULL);
 	SendMessage(cli.hResultWnd, EM_SETBKGNDCOLOR, 0, RGB(0, 0, 0));
 	SendMessage(cli.hResultWnd, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(10, 10));
@@ -311,8 +320,14 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	// https://docs.microsoft.com/en-us/windows/win32/dlgbox/using-dialog-boxes
 	while (GetMessage(&msg, NULL, 0, 0)) {
 		bool isDialogMessage = false;
-		for (int i = 0; i < MAX_DIALOG_COUNT && !isDialogMessage; i++)
+		HWND hDlg = 0;
+		for (int i = 0; i < MAX_DIALOG_COUNT && !isDialogMessage; i++) {
 			isDialogMessage = hDialogs[i] && IsWindow(hDialogs[i]) && IsDialogMessage(hDialogs[i], &msg);
+			hDlg = hDialogs[i];
+		}
+
+		if (isDialogMessage && TranslateAccelerator(hDlg, hDlgAccel, &msg))
+			continue;
 
 		if (!isDialogMessage && TranslateAccelerator(hMainWnd, hAccel, &msg))
 			continue;
@@ -322,6 +337,11 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			DispatchMessage(&msg);
 		}
 	}
+
+	// Preventing buffer clearing on exit
+	TCHAR* txt = utils::getClipboardText();
+	utils::setClipboardText(txt);
+	delete [] txt;
 
 	return msg.wParam;
 }
@@ -1002,7 +1022,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 
 			if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
-				onListViewMenu(cmd);
+				onListViewMenu(currCell.hListWnd, currCell.iItem, currCell.iSubItem, cmd);
 
 			if (cmd == IDM_EDITOR_CUT)
 				SendMessage(hEditorWnd, WM_CUT, 0, 0);
@@ -1401,7 +1421,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS);
+				if (prefs::get("word-wrap"))
+					toggleWordWrap(hEditorWnd);
 				hTabWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_TAB, GetModuleHandle(0), NULL);
+				cbOldResultTab = (WNDPROC)SetWindowLong(hTabWnd, GWL_WNDPROC, (LONG)cbNewResultTab);
 
 				tabs[tabNo].hEditorWnd = hEditorWnd;
 				tabs[tabNo].hTabWnd = hTabWnd;
@@ -1556,6 +1579,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 	return 0;
 }
 
+
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	// Quick reference tooltip
 	if (msg == WM_SYSKEYDOWN && wParam == VK_MENU)
@@ -1563,6 +1587,15 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 	if (msg == WM_SYSKEYUP && wParam == VK_MENU && IsWindowVisible(hTooltipWnd))
 		SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+
+	if (msg == WM_HSCROLL && LOWORD(wParam) == SB_ENDSCROLL)
+		InvalidateRect(hWnd, 0, false);
+
+	if (msg == WM_DESTROY) {
+		bool* nulls = (bool*)GetProp(hWnd, TEXT("NULLS"));
+		if (nulls)
+			delete [] nulls;
+	}
 
 	// Prevent zero-width column resizing
 	if(msg == WM_NOTIFY) {
@@ -2230,7 +2263,7 @@ bool openDb(const TCHAR* path) {
 		return false;
 
 	char* path8 = utils::utf16to8(path);
-	if (SQLITE_OK != sqlite3_open_v2(path8, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_SHAREDCACHE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, NULL)) {
+	if (SQLITE_OK != sqlite3_open_v2(path8, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, NULL)) {
 		MessageBox(hMainWnd, TEXT("Error to open database"), TEXT("Error"), MB_OK);
 		return false;
 	}
@@ -2907,7 +2940,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	// Find references for each columns and store appropriate sql to row.
 	// If there is no the reference then the inserted row is empty
 	// Used to show tooltip by Alt + Click by cell
-	// I don't want to tangle with memory managment. This listbox will be automatically detoroyed when its parent is gone.
+	// I don't want to tangle with memory managment. This listbox will be automatically destroyed when its parent is gone.
 	if (isRef) {
 		HWND hColumnsWnd = GetDlgItem(hListWnd, IDC_REFLIST);
 		ListBox_AddString(hColumnsWnd, TEXT(""));
@@ -2957,6 +2990,13 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	bool isStopByLimit = false;
 	int rowLimit = prefs::get("row-limit");
 	int rowNo = 0;
+
+	bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
+	if (nulls)
+		delete [] nulls;
+	nulls = rowLimit ? new bool[colCount * rowLimit + 1000]{0} : 0; // 1000 for new rows
+	SetProp(hListWnd, TEXT("NULLS"), (HANDLE)nulls);
+
 	while(sqlite3_step(stmt) == SQLITE_ROW) {
 		if (rowLimit > 0 && rowNo == rowLimit) {
 			isStopByLimit = true;
@@ -2984,6 +3024,9 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 			int colType = sqlite3_column_type(stmt, i - 1);
 			TCHAR* value16 = colType == SQLITE_BLOB ? utils::toBlobSize(sqlite3_column_bytes(stmt, i - 1)) :
 				utils::utf8to16(colType == SQLITE_NULL ? "" : (char *) sqlite3_column_text(stmt, i - 1));
+
+			if (nulls && colType == SQLITE_NULL)
+				nulls[i + rowNo * colCount] = true;
 
 			lvi.iSubItem = i;
 			lvi.mask = LVIF_TEXT;
@@ -3100,8 +3143,8 @@ int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo) {
 	return 0;
 }
 
-LRESULT onListViewMenu(int cmd, bool ignoreLastColumn) {
-	auto getRowLength = [](HWND hListWnd, int rowNo) {
+LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn) {
+	auto getRowLength = [hListWnd](int rowNo) {
 		TCHAR rowLength[64 + 1]{0};
 		LVITEM lvi = {0};
 		lvi.mask = LVIF_TEXT;
@@ -3114,17 +3157,16 @@ LRESULT onListViewMenu(int cmd, bool ignoreLastColumn) {
 	};
 
 	if (cmd == IDM_RESULT_CHART)
-		return DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CHART), hMainWnd, (DLGPROC)&dialogs::cbDlgChart, (LPARAM)currCell.hListWnd);
+		return DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CHART), hMainWnd, (DLGPROC)&dialogs::cbDlgChart, (LPARAM)hListWnd);
 
 	if (cmd == IDM_RESULT_COPY_CELL) {
-		int rowLength = getRowLength(currCell.hListWnd, currCell.iItem);
+		int rowLength = getRowLength(rowNo);
 		TCHAR buf[rowLength + 1];
-		ListView_GetItemText(currCell.hListWnd, currCell.iItem, currCell.iSubItem, buf, rowLength + 1);
+		ListView_GetItemText(hListWnd, rowNo, colNo, buf, rowLength + 1);
 		utils::setClipboardText(buf);
 	}
 
 	if (cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT) {
-		HWND hListWnd = currCell.hListWnd;
 		HWND hHeader =  ListView_GetHeader(hListWnd);
 		int colCount = (int)SendMessage(hHeader, HDM_GETITEMCOUNT, 0, 0L) - ignoreLastColumn;
 		int rowCount = ListView_GetSelectedCount(hListWnd);
@@ -3141,7 +3183,7 @@ LRESULT onListViewMenu(int cmd, bool ignoreLastColumn) {
 			int bufSize = 0;
 			int rowNo = -1;
 			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1)
-				bufSize += getRowLength(hListWnd, rowNo);
+				bufSize += getRowLength(rowNo);
 
 			bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
 			TCHAR res16[bufSize]{0};
@@ -3559,6 +3601,9 @@ bool processEditorEvents(MSGFILTER* pF) {
 		return res;
 	}
 
+	if (pF->msg == WM_COPY)
+		MessageBeep(0);
+
 	if (pF->msg == WM_LBUTTONDOWN && GetAsyncKeyState(VK_CONTROL))
 		return SendMessage(hMainWnd, WMU_SHOW_TABLE_INFO, 0, 0);
 
@@ -3583,13 +3628,20 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 			}
 
 			if (key == VK_RETURN) {
-				TCHAR buf[256] = {0};
+				TCHAR buf[1024]{0}, qbuf[1030]{0};
 				int pos = ListBox_GetCurSel(hAutoComplete);
 				ListBox_GetText(hAutoComplete, pos, buf);
+
+				bool isAlphaNum = true;
+				for (int i = 0; isAlphaNum && (i < (int)_tcslen(buf)); i++)
+					isAlphaNum = _istalnum(buf[i]);
+				if (!isAlphaNum)
+					_stprintf(qbuf, TEXT("\"%s\""), buf);
+
 				long data = GetWindowLong(hEditorWnd, GWL_USERDATA);
 				SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
 				SendMessage(hEditorWnd, EM_SETSEL, LOWORD(data), HIWORD(data)); //-1
-				SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)buf);
+				SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)(isAlphaNum ? buf : qbuf));
 				SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
 				ShowWindow(hAutoComplete, SW_HIDE);
 			}
@@ -3804,6 +3856,35 @@ LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 	}
 
 	return CallWindowProc(cbOldAutoComplete, hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	if (msg == WM_NOTIFY) {
+		NMHDR* pHdr = (LPNMHDR)lParam;
+		if (pHdr->code == (UINT)NM_CUSTOMDRAW) {
+			int result = CDRF_DODEFAULT;
+			HWND hListWnd = pHdr->hwndFrom;
+			bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
+			if (!nulls)
+				return result;
+
+			NMLVCUSTOMDRAW* pCustomDraw = (LPNMLVCUSTOMDRAW)lParam;
+			if (pCustomDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
+				result = CDRF_NOTIFYITEMDRAW;
+
+			if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+				result = CDRF_NOTIFYSUBITEMDRAW | CDRF_NEWFONT;
+
+			if (pCustomDraw->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM)) {
+				int rowNo = pCustomDraw->nmcd.dwItemSpec;
+				int colNo = pCustomDraw->iSubItem;
+				int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
+				pCustomDraw->clrTextBk = nulls[colNo + colCount * rowNo] ? RGB(245, 245, 255) : RGB(255, 255, 255);
+			}
+			return result;
+		}
+	}
+	return CallWindowProc(cbOldResultTab, hWnd, msg, wParam, lParam);
 }
 
 LRESULT CALLBACK cbNewMainTabRename(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4264,6 +4345,10 @@ void openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
 	ShowWindow(hDlg, SW_SHOW);
 	if (GetAncestor(GetFocus(), GA_ROOT) != hDlg)
 		SetFocus(hDlg);
+
+	RECT rc;
+	GetWindowRect(hDlg, &rc);
+	SetWindowPos(hDlg, 0, rc.left + no * 10, rc.top + no * 10, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
 bool toggleWordWrap(HWND hEditorWnd) {
@@ -4285,4 +4370,21 @@ bool toggleWordWrap(HWND hEditorWnd) {
 
 	SendMessage(hEditorWnd, EM_SETTARGETDEVICE,(WPARAM)NULL, !isWordWrap);
 	return isWordWrap;
+}
+
+void switchDialog(HWND hDlg, bool isNext) {
+	int i, j;
+	for (i = 0; i < MAX_DIALOG_COUNT && (hDialogs[i] != hDlg); i++);
+	if (isNext) {
+		for (j = i + 1; j <= MAX_DIALOG_COUNT && (hDialogs[j] == 0); j++);
+		if (j == MAX_DIALOG_COUNT)
+			for (j = 0; j <= i && (hDialogs[j] == 0); j++);
+	} else {
+		for (j = i - 1; j != -1 && (hDialogs[j] == 0); j--);
+		if (j == -1)
+			for (j = MAX_DIALOG_COUNT - 1; j >= i && (hDialogs[j] == 0); j--);
+	}
+
+	if (i != j)
+		SetForegroundWindow(hDialogs[j]);
 }

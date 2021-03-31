@@ -138,17 +138,19 @@ namespace utils {
 	}
 
 	TCHAR* getClipboardText() {
+		TCHAR* res = 0;
 		if (OpenClipboard(NULL)) {
 			HANDLE clip = GetClipboardData(CF_UNICODETEXT);
 			TCHAR* str = (LPWSTR)GlobalLock(clip);
-			TCHAR* res = new TCHAR[_tcslen(str) + 1]{0};
-			_tcscpy(res, str);
+			if (str != 0) {
+				res = new TCHAR[_tcslen(str) + 1]{0};
+				_tcscpy(res, str);
+			}
 			GlobalUnlock(clip);
 			CloseClipboard();
-			return res;
 		}
 
-		return new TCHAR[1]{0};
+		return res ? res : new TCHAR[1]{0};
 	}
 
 	int openFile(TCHAR* path, const TCHAR* filter) {

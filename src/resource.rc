@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 5, 0
+FILEVERSION 1, 4, 6, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.5\000"
+			VALUE "FileVersion", "1.4.6\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.5\000"
+			VALUE "ProductVersion", "1.4.6\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -35,11 +35,14 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_ROW DIALOGEX 50,50,300,300
+IDD_ROW DIALOGEX 50, 50, 400, 300
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Add/Edit/View row"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
+	LTEXT "", IDC_DLG_COLUMNS, 0, 0, 400, 300, SS_LEFT | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT
+
+	AUTOCHECKBOX "Clear values after row creation", IDC_DLG_CLEAR_VALUES, 5, 5, 120, 16, BS_NOTIFY | NOT WS_VISIBLE
 	PUSHBUTTON "OK", IDC_DLG_OK, 0, 0, 60, 14, WS_TABSTOP
 	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 0, 0, 60, 14, WS_TABSTOP
 END
@@ -133,7 +136,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50, 50, 200, 265
+IDD_SETTINGS DIALOGEX 50, 50, 200, 295
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -146,28 +149,31 @@ BEGIN
 	AUTOCHECKBOX	"Open last database at startup", IDC_DLG_RESTORE_DB, 5, 35, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Restore editor tabs at startup", IDC_DLG_RESTORE_EDITOR, 5, 50, 180, 16, BS_NOTIFY
 	AUTOCHECKBOX	"Editor highlighter", IDC_DLG_USE_HIGHLIGHT, 5, 65, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80, 180, 16, BS_NOTIFY
 
-	AUTOCHECKBOX	"Turn off disk synchronization for batch operations", IDC_DLG_SYNC_OFF, 5, 95, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Ask when deleting a row", IDC_DLG_ASK_DELETE, 5, 80, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Word wrap a text in an editor by default", IDC_DLG_WORD_WRAP, 5, 95, 180, 16, BS_NOTIFY
 
-	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20, 50, 14, SS_LEFT
-	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	AUTOCHECKBOX	"Unsafe renaming (pragma legacy_alter_table = 1)", IDC_DLG_USE_LEGACY, 5, 80 + 30, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"Turn off disk synchronization for batch operations", IDC_DLG_SYNC_OFF, 5, 95 + 30, 180, 16, BS_NOTIFY
+	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110 + 30, 180, 16, BS_NOTIFY
 
-	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164 - 20, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_ROW_LIMIT, 160, 162 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20 + 30, 50, 14, SS_LEFT
+	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20 + 30, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	LTEXT		   "Max rows in the terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179 - 20, 155, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 160, 177 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in result output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 164 - 20 + 30, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_ROW_LIMIT, 160, 162 - 20 + 30, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20, 150, 14, SS_LEFT
-	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 160, 177 + 15 - 20, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
+	LTEXT		   "Max rows in the terminal output. Use 0 as unlimit.", IDC_DLG_LABEL, 5, 179 - 20 + 30, 155, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_CLI_ROW_LIMIT, 160, 177 - 20 + 30, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Execute on a database connection", IDC_DLG_LABEL, 5, 190, 150, 14, SS_LEFT
-	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 200, 190, 40, 0
+	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20 + 30, 150, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 160, 177 + 15 - 20 + 30, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 70, 246, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 246, 60, 14, WS_TABSTOP
+	LTEXT		   "Execute on a database connection", IDC_DLG_LABEL, 5, 190 + 30, 150, 14, SS_LEFT
+	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 230, 190, 40, 0
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 70, 276, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 276, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -316,25 +322,25 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_TOOL_GENERATE_DATA DIALOGEX 50, 50, 250, 300
+IDD_TOOL_GENERATE_DATA DIALOGEX 50, 50, 266, 300
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Data generator"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	LTEXT "Target", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
 	COMBOBOX IDC_DLG_TABLENAME, 30, 5, 120, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST
-	LTEXT "Row count", IDC_DLG_LABEL, 165, 7, 40, 14, SS_LEFT
-	EDITTEXT IDC_DLG_GEN_ROW_COUNT, 205, 5, 40, 12, WS_BORDER | WS_TABSTOP | ES_NUMBER | ES_CENTER
+	LTEXT "Row count", IDC_DLG_LABEL, 180, 7, 40, 14, SS_LEFT
+	EDITTEXT IDC_DLG_GEN_ROW_COUNT, 220, 5, 40, 12, WS_BORDER | WS_TABSTOP | ES_NUMBER | ES_CENTER
 	AUTOCHECKBOX "Truncate data before generation", IDC_DLG_GEN_ISTRUNCATE, 5, 20, 140, 16, BS_NOTIFY
-	PUSHBUTTON "Edit dictionary", IDC_DLG_GEN_DICTIONARY, 165, 22, 65, 14
-	PUSHBUTTON "?", IDC_DLG_GEN_DICTIONARY_HELP, 230, 22, 15, 14
+	PUSHBUTTON "Edit dictionary", IDC_DLG_GEN_DICTIONARY, 180, 22, 65, 14
+	PUSHBUTTON "?", IDC_DLG_GEN_DICTIONARY_HELP, 245, 22, 15, 14
 
-	LTEXT "Column", IDC_DLG_LABEL, 5, 40, 240, 14, SS_LEFT | SS_ETCHEDHORZ
+	LTEXT "Column", IDC_DLG_LABEL, 5, 40, 255, 14, SS_LEFT | SS_ETCHEDHORZ
 
-	LTEXT "", IDC_DLG_GEN_COLUMNS, 5, 45, 240, 280, SS_LEFT | WS_TABSTOP
+	LTEXT "", IDC_DLG_GEN_COLUMNS, 5, 45, 255, 230, SS_LEFT | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT
 
 	PUSHBUTTON "Generate rows", IDC_DLG_OK, 5, 282, 100, 14, 0
-	PUSHBUTTON "Close", IDC_DLG_CANCEL, 196, 282, 50, 14, 0
+	PUSHBUTTON "Close", IDC_DLG_CANCEL, 206, 282, 50, 14, 0
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -638,6 +644,12 @@ BEGIN
 	VK_RIGHT, IDM_NEXT_EDITOR, CONTROL ALT, VIRTKEY
 END
 
+IDA_ACCEL2 ACCELERATORS
+BEGIN
+	VK_RIGHT, IDM_NEXT_DIALOG, CONTROL ALT, VIRTKEY
+	VK_LEFT, IDM_PREV_DIALOG, CONTROL ALT, VIRTKEY
+END
+
 STRINGTABLE
 BEGIN
 	IDS_CREATE_TABLE  ""
@@ -653,7 +665,7 @@ BEGIN
 		"Ctrl + Q - Close database\n" \
 		"Ctrl + N - New editor\n" \
 		"Ctrl + Alt + Escape - Close the current editor\n" \
-		"Ctrl + Alt + Right/Left - Toggle the editor's tab\n\n" \
+		"Ctrl + Alt + Right/Left - Toggle the editor's tab or switch between data windows\n\n" \
 		"Navigation tree\n" \
 		"Ctrl + C - copy the text of the selected item to the clipboard\n" \
 		"Ctrl + Shift + C - copy the DDL of the selected item to the clipboard\n\n" \
@@ -672,12 +684,12 @@ BEGIN
 		"Ctrl + Up - Previous query\n" \
 		"Ctrl + Down - Next query\n" \
 		"Ctrl + Tab - Find query beginning with input part\n\n" \
-		"Result set/Edit data dialog\n"
-		"Alt + Click - Show data if the column references to another table by foreign key e.g. execute ""select * from orders"" and click by ""8"" in ""customer_id"" column. " \
-		"You'll see details from ""customers"" table for id = 8. Edit ""preferences.refs"" data to change displayed info.\n\n" \
-		"Etc\n" \
-		"Ctrl + Enter - Add row in ""Add row"" dialog\n" \
-		"Ctrl + Enter - Move to next row in ""View row"" dialog\n\n" \
+		"Row dialog\n" \
+		"Ctrl + Enter - Add a row or move to the next row\n" \
+		"Ctrl + Tab - Open a multiline editor for a current field\n\n" \
+		"Shift + Tab - Return to a previous field\n\n" \
+		"Result set/Edit data dialog\n" \
+		"Alt + Click - Show data if the column references to another table by FK key\n\n"
 
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
@@ -699,7 +711,6 @@ BEGIN
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
 		"Cons\n" \
 		"* Only utf-8 is supported\n" \
-		"* NULL is displayed as an empty string\n" \
 		"* An empty string is set to NULL when data is edit\n" \
 		"* Data diagram isn't accurate with building references in views/triggers\n"
 
