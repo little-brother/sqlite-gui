@@ -6,11 +6,12 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit;
+	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgViewEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
 
@@ -817,6 +818,8 @@ namespace dialogs {
 							buf16[0] == TCHAR('=') ? TEXT("\" = ? ") :
 							buf16[0] == TCHAR('/') ? TEXT("\" regexp ? ") :
 							buf16[0] == TCHAR('!') ? TEXT("\" not like '%' || ? || '%' ") :
+							buf16[0] == TCHAR('>') ? TEXT("\" > ? ") :
+							buf16[0] == TCHAR('<') ? TEXT("\" < ? ") :
 							TEXT("\" like '%' || ? || '%' "));
 					}
 				}
@@ -842,7 +845,7 @@ namespace dialogs {
 						if (size > 0) {
 							TCHAR value16[size + 1]{0};
 							GetWindowText(hEdit, value16, size + 1);
-							char* value8 = utils::utf16to8(value16[0] == TEXT('=') || value16[0] == TEXT('/')  || value16[0] == TEXT('!') ? value16 + 1 : value16);
+							char* value8 = utils::utf16to8(value16[0] == TEXT('=') || value16[0] == TEXT('/') || value16[0] == TEXT('!') || value16[0] == TEXT('<') || value16[0] == TEXT('>') ? value16 + 1 : value16);
 							utils::sqlite3_bind_variant(stmt, bindNo + 1, value8);
 							delete [] value8;
 							bindNo++;
@@ -952,7 +955,7 @@ namespace dialogs {
 				cbOldEditDataEdit = (WNDPROC)SetWindowLong(hEdit, GWL_WNDPROC, (LONG)cbNewEditDataEdit);
 				SetFocus(hEdit);
 
-				if (!withText)
+				if (lParam && (lParam != VK_SPACE))
 					keybd_event(lParam, 0, 0, 0);
 			}
 			break;
@@ -1027,12 +1030,12 @@ namespace dialogs {
 						result = CDRF_NOTIFYSUBITEMDRAW | CDRF_NEWFONT;
 
 					if (pCustomDraw->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM)) {
-						bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
-						if (nulls) {
+						byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+						if (datatypes) {
 							int rowNo = pCustomDraw->nmcd.dwItemSpec;
 							int colNo = pCustomDraw->iSubItem;
 							int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
-							pCustomDraw->clrTextBk = nulls[colNo + colCount * rowNo] ? RGB(240, 240, 255) : RGB(255, 255, 255);
+							pCustomDraw->clrTextBk = GRIDCOLORS[datatypes[colNo + colCount * rowNo]];
 						}
 					}
 
@@ -1136,8 +1139,14 @@ namespace dialogs {
 						return true;
 					}
 
-					if (canUpdate && !isControl && ((kd->wVKey >= 0x30 && kd->wVKey <= 0x5A) || (kd->wVKey >= 0x60 && kd->wVKey <= 0x6F))&& isValid) { // 0, 1, ..., y, z + NumPads
+					if (canUpdate && !isControl && ((kd->wVKey == VK_SPACE) || (kd->wVKey >= 0x30 && kd->wVKey <= 0x5A) || (kd->wVKey >= 0x60 && kd->wVKey <= 0x6F))&& isValid) { // 0, 1, ..., y, z + NumPads
 						SendMessage(hWnd, WMU_EDIT_VALUE, 0, kd->wVKey);
+						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
+						return true;
+					}
+
+					if (canUpdate && kd->wVKey == VK_F2 && isValid) {
+						SendMessage(hWnd, WMU_EDIT_VALUE, 1, 0);
 						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
 						return true;
 					}
@@ -1258,22 +1267,22 @@ namespace dialogs {
 						}
 
 						if (SQLITE_DONE == sqlite3_step(stmt)) {
-							bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
-							if (nulls) {
+							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+							if (datatypes) {
 								int rowCount = ListView_GetItemCount(hListWnd);
 								int colCount2 = colCount - 1;
-								bool* nulls2 = new bool[rowCount * colCount2 + 1000]{0};
+								byte* datatypes2 = new byte[rowCount * colCount2 + 1000]{0};
 								int delCount = 0;
 								for (int rowNo = 0; rowNo < rowCount; rowNo++) {
 									if (ListView_GetItemState(hListWnd, rowNo, LVIS_SELECTED) & LVIS_SELECTED) {
 										delCount++;
 									} else {
 										for (int colNo = 0; colNo < colCount2; colNo++)
-											nulls2[colNo + colCount2 * (rowNo - delCount)] = nulls[colNo + colCount2 * rowNo];
+											datatypes2[colNo + colCount2 * (rowNo - delCount)] = datatypes[colNo + colCount2 * rowNo];
 									}
 								}
-								delete [] nulls;
-								SetProp(hListWnd, TEXT("NULLS"), (HANDLE)nulls2);
+								delete [] datatypes;
+								SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes2);
 							}
 
 							pos = -1;
@@ -1898,35 +1907,36 @@ namespace dialogs {
 						}
 
 						if (SQLITE_ROW == sqlite3_step(stmt)) {
-							bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
+							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
 
-							int iItem = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currRow;
+							int rowNo = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currRow;
 							for (int i = 0; i < sqlite3_column_count(stmt); i++) {
 								int colType = sqlite3_column_type(stmt, i);
 								TCHAR* value16 = colType == SQLITE_BLOB ? utils::toBlobSize(sqlite3_column_bytes(stmt, i)) :
 									utils::utf8to16(colType == SQLITE_NULL ? "" : (char*)sqlite3_column_text(stmt, i));
 
-								if (nulls)
-									nulls[i + 1 + iItem * colCount] = colType == SQLITE_NULL;
+								if (datatypes)
+									datatypes[i + 1 + rowNo * colCount] = colType;
 
 								LVITEM  lvi = {0};
 								if (mode == ROW_ADD && i == 0) {
 									lvi.mask = 0;
 									lvi.iSubItem = 0;
-									lvi.iItem = iItem;
+									lvi.iItem = rowNo;
 									ListView_InsertItem(hListWnd, &lvi);
 								}
 
 								lvi.mask = LVIF_TEXT;
 								lvi.iSubItem = i + 1;
-								lvi.iItem = iItem;
+								lvi.iItem = rowNo;
 								lvi.pszText = value16;
 								lvi.cchTextMax = _tcslen(value16) + 1;
 
 								ListView_SetItem(hListWnd, &lvi);
 								delete [] value16;
 							}
-							ListView_RedrawItems(hListWnd, iItem, iItem);
+
+							ListView_RedrawItems(hListWnd, rowNo, rowNo);
 						}
 						sqlite3_finalize(stmt);
 
@@ -2630,6 +2640,14 @@ namespace dialogs {
 		return true;
 	}
 
+	COLORREF GetBrushColor(HBRUSH brush) {
+		LOGBRUSH lbr;
+		if (GetObject(brush, sizeof(lbr), &lbr) != sizeof(lbr))
+			return CLR_NONE;
+
+		return lbr.lbColor;
+	}
+
 	BOOL CALLBACK cbDlgSettings (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -2688,6 +2706,19 @@ namespace dialogs {
 				for (int i = 0; i < 3; i++)
 					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
 				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
+
+				HBRUSH* brushes = new HBRUSH[5]{0};
+				brushes[0] = CreateSolidBrush(prefs::get("color-text"));
+				brushes[1] = CreateSolidBrush(prefs::get("color-null"));
+				brushes[2] = CreateSolidBrush(prefs::get("color-blob"));
+				brushes[3] = CreateSolidBrush(prefs::get("color-integer"));
+				brushes[4] = CreateSolidBrush(prefs::get("color-real"));
+				SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
+
+				HWND hEdit = GetDlgItem(hWnd, IDC_DLG_GRID_COLOR_EDIT);
+				cbOldGridColorEdit = (WNDPROC)SetWindowLong(hEdit, GWL_WNDPROC, (LONG)cbNewGridColorEdit);
+				SendMessage(hEdit, WM_SETFONT, (LPARAM)hDefFont, true);
+				SetWindowPos(hEdit, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 			}
 			break;
 
@@ -2728,11 +2759,61 @@ namespace dialogs {
 					prefs::set("startup", startup8);
 					delete [] startup8;
 
+					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+					prefs::set("color-text", GetBrushColor(brushes[0]));
+					prefs::set("color-null", GetBrushColor(brushes[1]));
+					prefs::set("color-blob", GetBrushColor(brushes[2]));
+					prefs::set("color-integer", GetBrushColor(brushes[3]));
+					prefs::set("color-real", GetBrushColor(brushes[4]));
+
 					EndDialog(hWnd, DLG_OK);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+
+				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_GRID_COLOR && LOWORD(wParam) <= IDC_DLG_GRID_COLOR + 10)) {
+					SetFocus(0); // trigger WM_KILLFOCUS if edit is visible
+					HWND hEdit = GetDlgItem(hWnd, IDC_DLG_GRID_COLOR_EDIT);
+					RECT rc{0};
+					GetWindowRect((HWND)lParam, &rc);
+					POINT p{rc.left, rc.top};
+					ScreenToClient(hWnd, &p);
+					SetWindowPos(hEdit, 0, p.x, p.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+					int no = LOWORD(wParam) - IDC_DLG_GRID_COLOR;
+					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+					TCHAR color[10];
+					COLORREF c = GetBrushColor(brushes[no]);
+					_stprintf(color, TEXT("%02x%02x%02x"), GetRValue(c), GetGValue(c), GetBValue(c));
+					SetWindowText(hEdit, color);
+					SetWindowLong(hEdit, GWL_USERDATA, no);
+
+					ShowWindow(hEdit, SW_SHOW);
+					SetFocus(hEdit);
+				}
+			}
+			break;
+
+			case WM_CTLCOLORSTATIC: {
+				int id = GetDlgCtrlID((HWND)lParam);
+				if (id >= IDC_DLG_GRID_COLOR && id < IDC_DLG_GRID_COLOR + 5) {
+					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+					HBRUSH hBrush = brushes[id - IDC_DLG_GRID_COLOR];
+
+					SetBkColor((HDC)wParam, GetBrushColor(hBrush));
+					//SetWindowLongPtr(hWnd, DWLP_MSGRESULT, (INT_PTR)hBrush);
+					return (INT_PTR)hBrush;
+				}
+			}
+			break;
+
+			case WM_CLOSE: {
+				HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+				for (int i = 0; i < 5; i++)
+					DeleteObject(brushes[i]);
+				delete [] brushes;
+				RemoveProp(hWnd, TEXT("BRUSHES"));
 			}
 			break;
 		}
@@ -2900,6 +2981,49 @@ namespace dialogs {
 		return CallWindowProc(cbOldRowEdit, hWnd, msg, wParam, lParam);
 	}
 
+	// USERDATA = MAKELPARAM(iItem, iSubItem)
+	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam));
+
+		switch(msg){
+			case WM_KILLFOCUS: {
+				ShowWindow(hWnd, SW_HIDE);
+				int no = (int)GetWindowLong(hWnd, GWL_USERDATA);
+				if (no == -1 || no > 4)
+					return true;
+
+				HWND hDlg = GetParent(hWnd);
+				HBRUSH* brushes = (HBRUSH*)GetProp(hDlg, TEXT("BRUSHES"));
+				if (!brushes)
+					return true;
+				DeleteObject(brushes[no]);
+
+				TCHAR buf[32]{0};
+				GetWindowText(hWnd, buf, 32);
+				int c = (int)_tcstol(buf, NULL, 16);
+				brushes[no] = CreateSolidBrush(RGB(GetBValue(c), GetGValue(c), GetRValue(c))); // reverse
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					ShowWindow(hWnd, SW_HIDE);
+					return true;
+				}
+
+				if (wParam == VK_ESCAPE) {
+					SetWindowLong(hWnd, GWL_USERDATA, -1);
+					ShowWindow(hWnd, SW_HIDE);
+					return true;
+				}
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldGridColorEdit, hWnd, msg, wParam, lParam);
+	}
+
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16) {
 		HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
 		TCHAR column16[256]{0};
@@ -2919,22 +3043,24 @@ namespace dialogs {
 			char* schema8 = (char*)GetProp(hParentWnd, TEXT("SCHEMA8"));
 			char* md5keys8 = (char*)GetProp(hParentWnd, TEXT("MD5KEYS8"));
 			bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
-			bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
+			byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
 
 			char query8[256 + 2 * strlen(schema8) + strlen(tablename8) + strlen(column8) + (hasRowid ? 0 : strlen(md5keys8))];
 			sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where %s = ?2", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
 
 			sqlite3_stmt *stmt;
 			if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-				if (isNull)
-					sqlite3_bind_null(stmt, 1);
-				else
-					sqlite3_bind_text(stmt, 1, value8, strlen(value8), SQLITE_TRANSIENT);
+				utils::sqlite3_bind_variant(stmt, 1, value8);
 				sqlite3_bind_text(stmt, 2, oldValue8, strlen(oldValue8), SQLITE_TRANSIENT);
 				if (SQLITE_DONE == sqlite3_step(stmt)) {
 					ListView_SetItemText(hListWnd, rowNo, colNo, value16);
-					if (nulls) {
-						nulls[colNo + (colCount - 1) * rowNo] = isNull;
+					if (datatypes) {
+						double d = 0;
+						byte type = isNull ? SQLITE_NULL :
+							!utils::isNumber(value8, &d) ? SQLITE_TEXT :
+							d == round(d) ? SQLITE_INTEGER :
+							SQLITE_FLOAT;
+						datatypes[colNo + (colCount - 1) * rowNo] = type;
 						ListView_RedrawItems(hListWnd, rowNo, rowNo);
 					}
 				} else {

@@ -256,11 +256,8 @@ namespace utils {
 		}
 
 		double d = 0;
-		if (isNum && dotCount == 1 && isNumber(value8, &d)) {
-			printf("%s -> %.30lf\n", value8, d);
+		if (isNum && dotCount == 1 && isNumber(value8, &d))
 			return sqlite3_bind_double(stmt, pos, d);
-		}
-
 
 		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
 	}

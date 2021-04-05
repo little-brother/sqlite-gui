@@ -125,6 +125,8 @@
 #define IDC_DLG_ASK_DELETE         198
 #define IDC_DLG_WORD_WRAP          199
 #define IDC_DLG_CLEAR_VALUES       200
+#define IDC_DLG_GRID_COLOR         210 // + 4 next
+#define IDC_DLG_GRID_COLOR_EDIT    220
 
 
 #define IDC_DLG_GEN_ISTRUNCATE     260
@@ -257,6 +259,7 @@
 #define IDM_ROW_REFRESH            1725
 #define IDM_ROW_DUPLICATE          1726
 #define IDM_LAST_SEPARATOR         1727
+#define IDM_TEST                   1730
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732

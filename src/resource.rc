@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 6, 0
+FILEVERSION 1, 4, 7, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.6\000"
+			VALUE "FileVersion", "1.4.7\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.6\000"
+			VALUE "ProductVersion", "1.4.7\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -136,8 +136,8 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50, 50, 200, 295
-	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+IDD_SETTINGS DIALOGEX 50, 50, 200, 295 + 20
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | WS_CLIPCHILDREN
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
@@ -169,11 +169,20 @@ BEGIN
 	LTEXT		   "Beep if the query took longer than N ms", IDC_DLG_LABEL, 5, 179 + 15 - 20 + 30, 150, 14, SS_LEFT
 	EDITTEXT		IDC_DLG_BEEP_ON_QUERY_END, 160, 177 + 15 - 20 + 30, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
-	LTEXT		   "Execute on a database connection", IDC_DLG_LABEL, 5, 190 + 30, 150, 14, SS_LEFT
-	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 230, 190, 40, 0
+	LTEXT		   "Grid colors", IDC_DLG_LABEL, 5, 190 + 30 + 2, 35, 14, SS_LEFT
+	EDITTEXT		IDC_DLG_GRID_COLOR_EDIT, 45 - 2, 190 + 30, 29, 12, ES_CENTER | NOT WS_VISIBLE | WS_CLIPSIBLINGS
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 70, 276, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 276, 60, 14, WS_TABSTOP
+	LTEXT		   "TEXT", IDC_DLG_GRID_COLOR, 45 - 2, 190 + 30, 29, 12, SS_CENTER | SS_CENTERIMAGE | SS_NOTIFY
+	LTEXT		   "NULL", IDC_DLG_GRID_COLOR + 1, 45 + 30*1 - 2, 190 + 30, 29, 12, SS_CENTER | SS_CENTERIMAGE | SS_NOTIFY | WS_CLIPSIBLINGS
+	LTEXT		   "BLOB", IDC_DLG_GRID_COLOR + 2, 45 + 30*2 - 2, 190 + 30, 29, 12, SS_CENTER | SS_CENTERIMAGE | SS_NOTIFY | WS_CLIPSIBLINGS
+	LTEXT		   "INT", IDC_DLG_GRID_COLOR + 3, 45 + 30*3 - 2, 190 + 30, 29, 12, SS_CENTER  | SS_CENTERIMAGE | SS_NOTIFY | WS_CLIPSIBLINGS
+	LTEXT		   "REAL", IDC_DLG_GRID_COLOR + 4, 45 + 30*4 - 2, 190 + 30, 29, 12, SS_CENTER | SS_CENTERIMAGE | SS_NOTIFY | WS_CLIPSIBLINGS
+
+	LTEXT		   "Execute on a database connection", IDC_DLG_LABEL, 5, 190 + 30 + 20, 150, 10, SS_LEFT
+	CONTROL         "", IDC_DLG_STARTUP, WC_EDIT, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL, 5, 230 + 20, 190, 40, 0
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 70, 276 + 20, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 135, 276 + 20, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -648,6 +657,7 @@ IDA_ACCEL2 ACCELERATORS
 BEGIN
 	VK_RIGHT, IDM_NEXT_DIALOG, CONTROL ALT, VIRTKEY
 	VK_LEFT, IDM_PREV_DIALOG, CONTROL ALT, VIRTKEY
+	VK_TAB, IDM_VALUE_EDIT, CONTROL, VIRTKEY
 END
 
 STRINGTABLE
@@ -684,12 +694,14 @@ BEGIN
 		"Ctrl + Up - Previous query\n" \
 		"Ctrl + Down - Next query\n" \
 		"Ctrl + Tab - Find query beginning with input part\n\n" \
+		"Data editor\n" \
+		"F2 - Edit cell value without clearing\n" \
+		"Space - Edit cell value with clearing\n" \
+		"Alt + Click - Show data if the column references to another table by FK key\n\n" \
 		"Row dialog\n" \
 		"Ctrl + Enter - Add a row or move to the next row\n" \
-		"Ctrl + Tab - Open a multiline editor for a current field\n\n" \
-		"Shift + Tab - Return to a previous field\n\n" \
-		"Result set/Edit data dialog\n" \
-		"Alt + Click - Show data if the column references to another table by FK key\n\n"
+		"Ctrl + Tab - Open a multiline editor for a current field\n" \
+		"Shift + Tab - Return to a previous field\n\n"
 
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
@@ -703,6 +715,7 @@ BEGIN
 		"   The dialog doesn't block the main window, so you can open multiply tables \n" \
 		"   Use =ABC as a column filter to find rows with column values equal to ""ABC""\n" \
 		"   Use !ABC to find rows without ""ABC""\n" \
+		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \

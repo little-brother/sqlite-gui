@@ -61,6 +61,8 @@ extern const TCHAR *TYPES16[6];
 extern const TCHAR *TYPES16u[6];
 extern const TCHAR *TYPES16p[6];
 
+extern COLORREF GRIDCOLORS[8];
+
 extern HFONT hDefFont;
 extern WNDPROC cbOldListView;
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

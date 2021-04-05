@@ -20,6 +20,7 @@ const TCHAR *TYPES16[6] = {TEXT("current"), TEXT("table"), TEXT("view"), TEXT("i
 const TCHAR *TYPES16u[6] = {TEXT("CURRENT"), TEXT("TABLE"), TEXT("VIEW"), TEXT("INDEX"), TEXT("TRIGGER"), TEXT("COLUMN")};
 const TCHAR *TYPES16p[6] = {TEXT(""), TEXT("Tables"), TEXT("Views"), TEXT("Indexes"), TEXT("Triggers"), TEXT("Columns")};
 const TCHAR *transactionStates[] = {TEXT(""),TEXT(" TRN")};
+COLORREF GRIDCOLORS[8]{0};
 
 // AutoComplete
 const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), TEXT("returning"), TEXT("materialized"), 0};
@@ -206,7 +207,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.6"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.7"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -316,6 +317,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST, WC_LISTBOX, NULL, WS_POPUP | WS_BORDER, 0, 0, 150, 200, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
 	cbOldAutoComplete = (WNDPROC)SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
+
+	GRIDCOLORS[SQLITE_NULL] = prefs::get("color-null");
+	GRIDCOLORS[SQLITE_BLOB] = prefs::get("color-blob");
+	GRIDCOLORS[SQLITE_FLOAT] = prefs::get("color-real");
+	GRIDCOLORS[SQLITE_INTEGER] = prefs::get("color-integer");
+	GRIDCOLORS[SQLITE_TEXT] = prefs::get("color-text");
 
 	// https://docs.microsoft.com/en-us/windows/win32/dlgbox/using-dialog-boxes
 	while (GetMessage(&msg, NULL, 0, 0)) {
@@ -637,6 +644,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						if (tabs[i].id)
 							SendMessage(tabs[i].hEditorWnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM) &cf);
 				}
+
+				GRIDCOLORS[SQLITE_TEXT] = prefs::get("color-text");
+				GRIDCOLORS[SQLITE_NULL] = prefs::get("color-null");
+				GRIDCOLORS[SQLITE_BLOB] = prefs::get("color-blob");
+				GRIDCOLORS[SQLITE_INTEGER] = prefs::get("color-integer");
+				GRIDCOLORS[SQLITE_FLOAT] = prefs::get("color-real");
 			}
 
 			if (cmd == IDM_EXECUTE || cmd == IDM_PLAN || cmd == IDM_EXECUTE_BATCH) {
@@ -1592,9 +1605,9 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		InvalidateRect(hWnd, 0, false);
 
 	if (msg == WM_DESTROY) {
-		bool* nulls = (bool*)GetProp(hWnd, TEXT("NULLS"));
-		if (nulls)
-			delete [] nulls;
+		byte* datatypes = (byte*)GetProp(hWnd, TEXT("DATATYPES"));
+		if (datatypes)
+			delete [] datatypes;
 	}
 
 	// Prevent zero-width column resizing
@@ -2991,11 +3004,11 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	int rowLimit = prefs::get("row-limit");
 	int rowNo = 0;
 
-	bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
-	if (nulls)
-		delete [] nulls;
-	nulls = rowLimit ? new bool[colCount * rowLimit + 1000]{0} : 0; // 1000 for new rows
-	SetProp(hListWnd, TEXT("NULLS"), (HANDLE)nulls);
+	byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+	if (datatypes)
+		delete [] datatypes;
+	datatypes = rowLimit ? new byte[colCount * rowLimit + 1000]{0} : 0; // 1000 for new rows
+	SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes);
 
 	while(sqlite3_step(stmt) == SQLITE_ROW) {
 		if (rowLimit > 0 && rowNo == rowLimit) {
@@ -3019,14 +3032,13 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		ListView_InsertItem(hListWnd, &lvi);
 
 		int rowLength = 0;
-
 		for (int i = 1; i <= colCount; i++) {
 			int colType = sqlite3_column_type(stmt, i - 1);
 			TCHAR* value16 = colType == SQLITE_BLOB ? utils::toBlobSize(sqlite3_column_bytes(stmt, i - 1)) :
 				utils::utf8to16(colType == SQLITE_NULL ? "" : (char *) sqlite3_column_text(stmt, i - 1));
 
-			if (nulls && colType == SQLITE_NULL)
-				nulls[i + rowNo * colCount] = true;
+			if (datatypes)
+				datatypes[i + rowNo * colCount] = colType;
 
 			lvi.iSubItem = i;
 			lvi.mask = LVIF_TEXT;
@@ -3477,7 +3489,29 @@ int ListView_Sort(HWND hListWnd, int colNo) {
 	_ultot(param, buf, 10);
 	SetWindowText(hListWnd, buf);
 
-	for (int i = 0; i < ListView_GetItemCount(hListWnd); i++) {
+	int rowCount = ListView_GetItemCount(hListWnd);
+
+	byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+	if (datatypes != NULL){
+		int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
+
+		byte* datatypes2 = new byte[rowCount * colCount + 1000]{0};
+		for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+			LVITEM lvi = {0};
+			lvi.mask = LVIF_PARAM;
+			lvi.iSubItem = 0;
+			lvi.iItem = rowNo;
+			ListView_GetItem(hListWnd, &lvi);
+
+			for (int colNo = 1; colNo <= colCount; colNo++)
+				datatypes2[colNo + rowNo * colCount] = datatypes[colNo + lvi.lParam * colCount];
+		}
+
+		delete [] datatypes;
+		SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes2);
+	}
+
+	for (int i = 0; i < rowCount; i++) {
 		LVITEM lvi = {0};
 		lvi.iItem = i;
 		lvi.mask = LVIF_PARAM;
@@ -3632,9 +3666,9 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				int pos = ListBox_GetCurSel(hAutoComplete);
 				ListBox_GetText(hAutoComplete, pos, buf);
 
-				bool isAlphaNum = true;
+				bool isAlphaNum = !_istdigit(buf[0]);
 				for (int i = 0; isAlphaNum && (i < (int)_tcslen(buf)); i++)
-					isAlphaNum = _istalnum(buf[i]);
+					isAlphaNum = _istalnum(buf[i]) || (buf[i] == TEXT('_'));
 				if (!isAlphaNum)
 					_stprintf(qbuf, TEXT("\"%s\""), buf);
 
@@ -3864,8 +3898,8 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 		if (pHdr->code == (UINT)NM_CUSTOMDRAW) {
 			int result = CDRF_DODEFAULT;
 			HWND hListWnd = pHdr->hwndFrom;
-			bool* nulls = (bool*)GetProp(hListWnd, TEXT("NULLS"));
-			if (!nulls)
+			byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+			if (!datatypes)
 				return result;
 
 			NMLVCUSTOMDRAW* pCustomDraw = (LPNMLVCUSTOMDRAW)lParam;
@@ -3879,7 +3913,7 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 				int rowNo = pCustomDraw->nmcd.dwItemSpec;
 				int colNo = pCustomDraw->iSubItem;
 				int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
-				pCustomDraw->clrTextBk = nulls[colNo + colCount * rowNo] ? RGB(245, 245, 255) : RGB(255, 255, 255);
+				pCustomDraw->clrTextBk = GRIDCOLORS[datatypes[colNo + colCount * rowNo]]; //ListView_GetColor(datatypes[colNo + colCount * rowNo]);
 			}
 			return result;
 		}
