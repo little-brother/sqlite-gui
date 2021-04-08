@@ -34,8 +34,6 @@ HMENU hMainMenu, hDbMenu, hEditorMenu, hResultMenu, hEditDataMenu, hBlobMenu;
 HWND hDialogs[MAX_DIALOG_COUNT]{0};
 HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
-char *recents[100] = {0};
-
 HTREEITEM treeItems[5]; // 0 - current
 TCHAR treeEditName[255];
 HMENU treeMenus[IDC_MENU_DISABLED]{0};
@@ -105,6 +103,7 @@ void updateTransactionState();
 int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
 void openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
+void saveQuery(const char* storage, const char* query);
 
 WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldResultTab, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -120,6 +119,37 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	GetModuleFileName(0, APP_PATH, MAX_PATH);
 	PathRemoveFileSpec(APP_PATH);
+
+	TCHAR prefPath16[MAX_PATH] = {0};
+	_stprintf(prefPath16, TEXT("%s/prefs.sqlite"), APP_PATH);
+	char* prefPath8 = utils::utf16to8(prefPath16);
+
+	bool isFirstRun = !utils::isFileExists(prefPath16);
+	if (!prefs::load(prefPath8)) {
+		MessageBox(0, TEXT("Settings loading failed"), TEXT("Error"), MB_OK);
+		return EXIT_FAILURE;
+	}
+	delete [] prefPath8;
+
+	GRIDCOLORS[SQLITE_NULL] = prefs::get("color-null");
+	GRIDCOLORS[SQLITE_BLOB] = prefs::get("color-blob");
+	GRIDCOLORS[SQLITE_FLOAT] = prefs::get("color-real");
+	GRIDCOLORS[SQLITE_INTEGER] = prefs::get("color-integer");
+	GRIDCOLORS[SQLITE_TEXT] = prefs::get("color-text");
+
+	hEditorMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_EDITOR));
+	hEditorMenu = GetSubMenu(hEditorMenu, 0);
+
+	hResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_RESULT));
+	hResultMenu = GetSubMenu(hResultMenu, 0);
+
+	hBlobMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_BLOB));
+	hBlobMenu = GetSubMenu(hBlobMenu, 0);
+
+	hEditDataMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_EDIT_DATA));
+	hEditDataMenu = GetSubMenu(hEditDataMenu, 0);
+
+	LoadLibrary(TEXT("msftedit.dll"));
 
 	if (strlen(lpCmdLine)) {
 		int nArgs = 0;
@@ -152,23 +182,10 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	if (!RegisterClassEx (&wc))
 		return EXIT_FAILURE;
 
-	LoadLibrary(TEXT("msftedit.dll"));
-
 	INITCOMMONCONTROLSEX icex;
 	icex.dwSize = sizeof(icex);
-	icex.dwICC = ICC_DATE_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES;
+	icex.dwICC = ICC_DATE_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
 	InitCommonControlsEx(&icex);
-
-	TCHAR prefPath16[MAX_PATH] = {0};
-	_stprintf(prefPath16, TEXT("%s/prefs.sqlite"), APP_PATH);
-	char* prefPath8 = utils::utf16to8(prefPath16);
-
-	bool isFirstRun = !utils::isFileExists(prefPath16);
-	if (!prefs::load(prefPath8)) {
-		MessageBox(0, TEXT("Settings loading failed"), TEXT("Error"), MB_OK);
-		return EXIT_FAILURE;
-	}
-	delete [] prefPath8;
 
 	if (prefs::get("backup-prefs")) {
 		_stprintf(prefPath16, TEXT("%s/prefs.backup"), APP_PATH);
@@ -195,7 +212,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		{5, IDM_INTERRUPT, TBSTATE_HIDDEN, TBSTYLE_BUTTON, {0}, 0L, (INT_PTR)TEXT("Interrupt")}
 	};
 
-	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST, IDC_TOOLBAR, 0, NULL, 0,
+	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST | TBSTYLE_CUSTOMERASE, IDC_TOOLBAR, 0, NULL, 0,
 		tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
 	SendMessage(hToolbarWnd, TB_SETIMAGELIST,0, (LPARAM)ImageList_LoadBitmap(hInstance, MAKEINTRESOURCE(IDB_TOOLBAR), 0, 0, RGB(255,255,255)));
 	hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, NULL, hMainWnd, IDC_STATUSBAR);
@@ -207,7 +224,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.7"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.8"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -232,18 +249,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	hDbMenu = GetSubMenu(hMainMenu, 0);
 	updateRecentList();
-
-	hEditorMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_EDITOR));
-	hEditorMenu = GetSubMenu(hEditorMenu, 0);
-
-	hResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_RESULT));
-	hResultMenu = GetSubMenu(hResultMenu, 0);
-
-	hBlobMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_BLOB));
-	hBlobMenu = GetSubMenu(hBlobMenu, 0);
-
-	hEditDataMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_EDIT_DATA));
-	hEditDataMenu = GetSubMenu(hEditDataMenu, 0);
 
 	HMENU hMenu;
 	int idcs [] = {IDC_MENU_TABLEVIEW, IDC_MENU_INDEXTRIGGER, IDC_MENU_TABLE, IDC_MENU_VIEW, IDC_MENU_INDEX, IDC_MENU_TRIGGER, IDC_MENU_COLUMN, IDC_MENU_DISABLED};
@@ -317,12 +322,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST, WC_LISTBOX, NULL, WS_POPUP | WS_BORDER, 0, 0, 150, 200, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
 	cbOldAutoComplete = (WNDPROC)SetWindowLong(hAutoComplete, GWL_WNDPROC, (LONG)cbNewAutoComplete);
-
-	GRIDCOLORS[SQLITE_NULL] = prefs::get("color-null");
-	GRIDCOLORS[SQLITE_BLOB] = prefs::get("color-blob");
-	GRIDCOLORS[SQLITE_FLOAT] = prefs::get("color-real");
-	GRIDCOLORS[SQLITE_INTEGER] = prefs::get("color-integer");
-	GRIDCOLORS[SQLITE_TEXT] = prefs::get("color-text");
 
 	// https://docs.microsoft.com/en-us/windows/win32/dlgbox/using-dialog-boxes
 	while (GetMessage(&msg, NULL, 0, 0)) {
@@ -903,11 +902,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							char* name8 = utils::utf16to8(name16);
 							char query8[1024];
 							if (isCut)
-								sprintf(query8, "delete from preferences.disabled where name = \"%s\" and type = \"%s\" and dbpath = \"%s\"", name8, TYPES8[type], sqlite3_db_filename(db, 0));
+								sprintf(query8, "delete from disabled where name = \"%s\" and type = \"%s\" and dbpath = \"%s\"", name8, TYPES8[type], sqlite3_db_filename(db, 0));
 							else
 								sprintf(query8, "drop %s \"%s\"", TYPES8[type], name8);
 
-							if (SQLITE_OK == sqlite3_exec(db, query8, 0, 0, 0)) {
+							if (SQLITE_OK == sqlite3_exec(isCut ? prefs::db : db, query8, 0, 0, 0)) {
 								HTREEITEM hItem = TreeView_GetNextItem(hTreeWnd, treeItems[0], TVGN_PREVIOUS);
 								if (!hItem)
 									hItem = TreeView_GetNextItem(hTreeWnd, treeItems[0], TVGN_NEXT);
@@ -941,7 +940,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				if (cmd == IDM_VIEW) {
 					sqlite3_stmt *stmt;
-					sqlite3_prepare_v2(db, "select sql, rowid from preferences.disabled where name = ?1 and type = ?2 and dbpath = ?3", -1, &stmt, 0);
+					sqlite3_prepare_v2(prefs::db, "select sql, rowid from disabled where name = ?1 and type = ?2 and dbpath = ?3", -1, &stmt, 0);
 					char* name8 = utils::utf16to8(name16);
 					sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
 					delete [] name8;
@@ -972,7 +971,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				if (cmd == IDM_ENABLE_ALL) {
 					sqlite3_stmt *stmt;
-					sqlite3_prepare_v2(db, "select name from preferences.disabled where type = ?1 and dbpath = ?2", -1, &stmt, 0);
+					sqlite3_prepare_v2(prefs::db, "select name from disabled where type = ?1 and dbpath = ?2", -1, &stmt, 0);
 					sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 					const char* dbpath = sqlite3_db_filename(db, 0);
 					sqlite3_bind_text(stmt, 2, dbpath, strlen(dbpath), SQLITE_TRANSIENT);
@@ -1007,7 +1006,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetFocus(hTreeWnd);
 			}
 
-			if (cmd >= IDM_RECENT && cmd <= IDM_RECENT + MAX_RECENT_COUNT) {
+			if (cmd >= IDM_RECENT && cmd <= IDM_RECENT + prefs::get("recent-count")) {
 				TCHAR name16[MAX_PATH];
 				GetMenuString(hDbMenu, cmd, name16, MAX_PATH, MF_BYCOMMAND);
 				openDb(name16);
@@ -1024,7 +1023,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if (SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)text16)) {
 						TCHAR* ttext16 = utils::trim(text16);
 						char* text8 = utils::utf16to8(ttext16);
-						prefs::setQuery("gists", text8);
+						saveQuery("gists", text8);
 						delete [] ttext16;
 						delete [] text8;
 					}
@@ -1406,6 +1405,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 
+			if (pHdr->hwndFrom == hToolbarWnd && (int)pHdr->code == NM_CUSTOMDRAW) {
+				NMTBCUSTOMDRAW *pCustomDraw = (NMTBCUSTOMDRAW*)lParam;
+				if (pCustomDraw->nmcd.dwDrawStage == CDDS_PREERASE) {
+					HDC hdc = pCustomDraw->nmcd.hdc;
+					RECT rect;
+					GetClientRect(hToolbarWnd, &rect);
+					FillRect(hdc, &rect, GetSysColorBrush(COLOR_3DFACE));
+					return CDRF_SKIPDEFAULT ;
+				}
+			}
+
 			if (pHdr->code == (DWORD)NM_RCLICK && !_tcscmp(wndClass, WC_LISTVIEW)) {
 				NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 				currCell = {ia->hdr.hwndFrom, ia->iItem, ia->iSubItem};
@@ -1649,7 +1659,7 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 }
 
 bool openConnection(sqlite3** _db) {
-	if (SQLITE_OK != sqlite3_open_v2(sqlite3_db_filename(db, 0), _db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI, NULL)) {
+	if (SQLITE_OK != sqlite3_open_v2(sqlite3_db_filename(db, 0), _db, (sqlite3_db_readonly(db, 0) ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE) | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI, NULL)) {
 		MessageBox(hMainWnd, TEXT("Unable to open a new connection to the database"), TEXT("Error"), MB_OK | MB_ICONSTOP);
 		return 0;
 	}
@@ -1676,13 +1686,13 @@ bool openConnection(sqlite3** _db) {
 
 	// attach databases
 	sqlite3_stmt* stmt;
-	if (SQLITE_OK == sqlite3_prepare_v2(db, "select 'attach database \"' || file || '\" as \"' || name || '\"' from pragma_database_list t where seq > 0 and name <> 'shared' and name <> 'preferences'", -1, &stmt, 0)) {
+	if (SQLITE_OK == sqlite3_prepare_v2(db, "select 'attach database \"' || file || '\" as \"' || name || '\"' from pragma_database_list t where seq > 0 and name <> 'shared'", -1, &stmt, 0)) {
 		while (SQLITE_ROW == sqlite3_step(stmt))
 			sqlite3_exec(*_db, (const char*)sqlite3_column_text(stmt, 0), NULL, NULL, NULL);
 	}
+	sqlite3_finalize(stmt);
 
-	if (SQLITE_OK != sqlite3_exec(*_db, "attach database 'file::memory:?cache=shared' as shared", NULL, NULL, NULL))
-		showDbError(hMainWnd);
+	sqlite3_exec(*_db, "attach database 'file::memory:?cache=shared' as shared", NULL, NULL, NULL);
 
 	if (prefs::get("use-legacy-rename"))
 		sqlite3_exec(*_db, "pragma legacy_alter_table = 1", 0, 0, 0);
@@ -1848,7 +1858,7 @@ unsigned int __stdcall processCliQuery (void* data) {
 			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
 			SetWindowText(cli.hEditorWnd, 0);
 
-			if(SQLITE_OK == sqlite3_prepare_v2(db, "insert into preferences.cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
+			if(SQLITE_OK == sqlite3_prepare_v2(prefs::db, "insert into cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
 				char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 				sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
 				delete [] dbname8;
@@ -2034,7 +2044,7 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			SetWindowLong(hResultWnd == hRowsWnd ? hMessageWnd : hRowsWnd, GWL_USERDATA, -1);
 
 			if (rc == SQLITE_OK || rc == SQLITE_DONE)
-				prefs::setQuery("history", sql8);
+				saveQuery("history", sql8);
 			delete [] sql8;
 
 			int tabNo = getTabNo(_tab.id);
@@ -2191,30 +2201,29 @@ int executeEditorQuery(bool isPlan, bool isBatch) {
 void updateRecentList() {
 	HMENU hMenu = GetSubMenu(hMainMenu, 0);
 	int size = GetMenuItemCount(hMenu);
-	int recentCount = prefs::getRecentDatabases(recents);
 	int afterRecentCount = 5; // exit, sep, setting, attach, sep
-
-	if (!recentCount)
-		return;
 
 	for (int i = 3; i < size - afterRecentCount; i++)
 		RemoveMenu(hMenu, 3, MF_BYPOSITION);
 
 	int count = 0;
-	for (int i = 0; i < recentCount && count < MAX_RECENT_COUNT; i++) {
-		TCHAR* path16 = utils::utf8to16(recents[i]);
-		if (utils::isFileExists(path16)) {
-			MENUITEMINFO mi = {0};
-			mi.cbSize = sizeof(MENUITEMINFO);
-			mi.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
-			mi.wID = IDM_RECENT + count;
-			mi.dwTypeData = path16;
-			InsertMenuItem(hDbMenu, 3 + count, true, &mi);
-			count++;
+	sqlite3_stmt* stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select path from recents order by time desc limit 100", -1, &stmt, 0)) {
+		while(SQLITE_ROW == sqlite3_step(stmt) && count < prefs::get("recent-count")) {
+			TCHAR* path16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+			if (utils::isFileExists(path16)) {
+				MENUITEMINFO mi = {0};
+				mi.cbSize = sizeof(MENUITEMINFO);
+				mi.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+				mi.wID = IDM_RECENT + count;
+				mi.dwTypeData = path16;
+				InsertMenuItem(hDbMenu, 3 + count, true, &mi);
+				count++;
+			}
+			delete [] path16;
 		}
-		delete [] recents[i];
-		delete [] path16;
 	}
+	sqlite3_finalize(stmt);
 };
 
 void suggestCLIQuery(int key) {
@@ -2226,10 +2235,10 @@ void suggestCLIQuery(int key) {
 	GetWindowText(cli.hEditorWnd, sql16, size + 1);
 	char *sql8 = utils::utf16to8(sql16);
 
-	int rc = SQLITE_OK == sqlite3_prepare_v2(db,
-		key == VK_UP ? "select time, query from preferences.cli where dbname = ?1 and time < coalesce(?2, time + 1) and query <> ?3 order by time desc limit 1" :
-		key == VK_DOWN ? "select time, query from preferences.cli where dbname = ?1 and time > coalesce(?2, time - 1) and query <> ?3 order by time asc limit 1" :
-		key == VK_TAB ? "select time, query from preferences.cli where dbname = ?1 and query like '%' || ?2 || '%'  and query <> ?3 limit 1" : "", -1, &stmt, 0);
+	int rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+		key == VK_UP ? "select time, query from cli where dbname = ?1 and time < coalesce(?2, time + 1) and query <> ?3 order by time desc limit 1" :
+		key == VK_DOWN ? "select time, query from cli where dbname = ?1 and time > coalesce(?2, time - 1) and query <> ?3 order by time asc limit 1" :
+		key == VK_TAB ? "select time, query from cli where dbname = ?1 and query like '%' || ?2 || '%'  and query <> ?3 limit 1" : "", -1, &stmt, 0);
 	sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 3, sql8, strlen(sql8), SQLITE_TRANSIENT);
 
@@ -2275,8 +2284,12 @@ bool openDb(const TCHAR* path) {
 	if (!closeDb())
 		return false;
 
+	ULONG attrs = GetFileAttributes(path);
+	bool isReadOnly = ((attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_READONLY)) || HIWORD(GetKeyState(VK_CONTROL));
+
 	char* path8 = utils::utf16to8(path);
-	if (SQLITE_OK != sqlite3_open_v2(path8, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, NULL)) {
+	if (SQLITE_OK != sqlite3_open_v2(path8, &db, (isReadOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI, NULL) ||
+		SQLITE_OK != sqlite3_exec(db, "select * from sqlite_master limit 1", 0, 0, 0)) {
 		MessageBox(hMainWnd, TEXT("Error to open database"), TEXT("Error"), MB_OK);
 		return false;
 	}
@@ -2285,11 +2298,19 @@ bool openDb(const TCHAR* path) {
 		TCHAR prev[MAX_PATH];
 		GetMenuString(hDbMenu, 3, prev, MAX_PATH, MF_BYPOSITION);
 		if (_tcscmp(prev, path) != 0) {
-			prefs::setRecentDatabase(path8);
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into recents (path, time) values (?1, ?2)", -1, &stmt, 0)) {
+				sqlite3_bind_text(stmt, 1, path8, strlen(path8),  SQLITE_TRANSIENT);
+				sqlite3_bind_int(stmt, 2, std::time(0));
+				sqlite3_step(stmt);
+			}
+			sqlite3_finalize(stmt);
 			updateRecentList();
 		}
 
-		SetWindowText(hMainWnd, path);
+		TCHAR title[_tcslen(path) + 30];
+		_stprintf(title, TEXT("%s%s"), path, isReadOnly ? TEXT(" (read only)") : TEXT(""));
+		SetWindowText(hMainWnd, title);
 	}
 
 	delete [] path8;
@@ -2332,16 +2353,6 @@ bool openDb(const TCHAR* path) {
 		showDbError(hMainWnd);
 	delete [] startup8;
 
-	char query8[1024] = {0};
-	char* appPath8 = utils::utf16to8(APP_PATH);
-	sprintf(query8, "attach database '%s/prefs.sqlite' as preferences", appPath8);
-	delete [] appPath8;
-	if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL)) {
-		showDbError(hMainWnd);
-		sqlite3_close(db);
-		return 0;
-	}
-
 	if (SQLITE_OK != sqlite3_exec(db, "attach database 'file::memory:?cache=shared' as shared", NULL, NULL, NULL))
 		showDbError(hMainWnd);
 
@@ -2382,14 +2393,15 @@ bool openDb(const TCHAR* path) {
 		enableMainMenu();
 
 	// update references
+	char query8[1024] = {0};
 	sqlite3_stmt *stmt, *stmt2;
 	bool rc = SQLITE_OK == sqlite3_prepare_v2(db,
 		"select m.tbl_name, fk.\"from\", fk.\"table\", fk.\"to\" " \
 		"from sqlite_master m, pragma_foreign_key_list(m.tbl_name) fk " \
 		"where m.type = 'table' ",
 		-1, &stmt, 0);
-	bool rc2 = SQLITE_OK == sqlite3_prepare_v2(db,
-		"insert or ignore into preferences.refs (dbname, schema, tblname, colname, query) " \
+	bool rc2 = SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+		"insert or ignore into refs (dbname, schema, tblname, colname, query) " \
 		"select ?1, ?2, ?3, ?4, ?5", -1, &stmt2, 0);
 
 	char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
@@ -2412,9 +2424,9 @@ bool openDb(const TCHAR* path) {
 
 	// restore cli
 	if(isGUI && prefs::get("restore-editor")) {
-		if (SQLITE_OK == sqlite3_prepare_v2(db,
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
 			"with t as ("\
-			"select query || char(10) || result a from preferences.cli order by time desc limit 30) " \
+			"select query || char(10) || result a from cli order by time desc limit 30) " \
 			"select group_concat(a, '') from t", -1, &stmt, 0)) {
 			sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
 			if (SQLITE_ROW == sqlite3_step(stmt)) {
@@ -2456,13 +2468,15 @@ bool closeDb() {
 	for (int i = 0; i < MAX_TAB_COUNT; i++) {
 		TEditorTab* tab = &tabs[i];
 		if (tab->id && tab->db) {
-			sqlite3_close(tab->db);
+			sqlite3_exec(tab->db, "detach database shared", 0, 0, 0);
+			sqlite3_close_v2(tab->db);
 			tab->db = 0;
 		}
 	}
 
-	sqlite3_close(db);
-	db = NULL;
+	sqlite3_exec(db, "detach database shared", 0, 0, 0);
+	sqlite3_close_v2(db);
+	db = 0;
 
 	SetWindowText(hMainWnd, TEXT("No database selected"));
 	EnableWindow(hTreeWnd, false);
@@ -2477,7 +2491,7 @@ bool closeDb() {
 int enableDbObject(const char* name8, int type) {
 	bool rc = true;
 	sqlite3_stmt *stmt;
-	sqlite3_prepare_v2(db, "select sql, rowid from preferences.disabled where name = ?1 and type = ?2 and dbpath = ?3", -1, &stmt, 0);
+	sqlite3_prepare_v2(prefs::db, "select sql, rowid from disabled where name = ?1 and type = ?2 and dbpath = ?3", -1, &stmt, 0);
 	sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 	const char* dbpath = sqlite3_db_filename(db, 0);
@@ -2485,8 +2499,8 @@ int enableDbObject(const char* name8, int type) {
 
 	if (SQLITE_ROW == sqlite3_step(stmt) && SQLITE_OK == sqlite3_exec(db, (char*)sqlite3_column_text(stmt, 0), 0, 0, 0)) {
 		char query8[128];
-		sprintf(query8, "delete from preferences.disabled where rowid = %i", sqlite3_column_int(stmt, 1));
-		sqlite3_exec(db, query8, 0, 0, 0);
+		sprintf(query8, "delete from disabled where rowid = %i", sqlite3_column_int(stmt, 1));
+		sqlite3_exec(prefs::db, query8, 0, 0, 0);
 	} else {
 		showDbError(hMainWnd);
 		rc = false;
@@ -2500,11 +2514,26 @@ int disableDbObject(const char* name8, int type) {
 	bool rc = true;
 
 	sqlite3_stmt *stmt;
-	sqlite3_prepare_v2(db, "replace into preferences.disabled (name, type, dbpath, sql) select name, type, ?3, sql from sqlite_master where type = ?2 and name = coalesce(?1, name)", -1, &stmt, 0);
+	sqlite3_prepare_v2(db, "select sql from sqlite_master where type = ?2 and name = coalesce(?1, name)", -1, &stmt, 0);
+	sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
+	rc = SQLITE_ROW == sqlite3_step(stmt);
+	char* sql = 0;
+	if (rc) {
+		sql = new char[sqlite3_column_bytes(stmt, 0) + 1]{0};
+		strcpy(sql, (const char*)sqlite3_column_text(stmt, 0));
+	}
+	sqlite3_finalize(stmt);
+
+	if (!rc)
+		return false;
+
+	sqlite3_prepare_v2(prefs::db, "replace into disabled (name, type, dbpath, sql) select ?1, ?2, ?3, ?4", -1, &stmt, 0);
 	sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 	const char* dbpath = sqlite3_db_filename(db, 0);
 	sqlite3_bind_text(stmt, 3, dbpath, strlen(dbpath), SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 4, sql, strlen(sql), SQLITE_TRANSIENT);
 
 	char query8[128];
 	sprintf(query8, "drop %s \"%s\"", TYPES8[type], name8);
@@ -2513,6 +2542,7 @@ int disableDbObject(const char* name8, int type) {
 		rc = false;
 	}
 	sqlite3_finalize(stmt);
+	delete [] sql;
 	return rc;
 }
 
@@ -2746,20 +2776,16 @@ void updateTree(int type, TCHAR* select) {
 
 	sqlite3_stmt *stmt;
 	char sql[] =
-		"select * from (select t.name, t.type, " \
+		"select t.name, t.type, " \
 		"iif(t.type in ('table', 'view'), group_concat(c.name || iif(t.type = 'table', ': ' || c.type || iif(c.pk,' [pk]',''), ''), ','), null) columns, 0 disabled " \
 		"from sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg and c.schema = 'main' " \
 		"where t.sql is not null and t.type = coalesce(?1, t.type) and t.name <> 'sqlite_sequence' " \
-		"group by t.type, t.name union select d.name, d.type, null, 1 disabled from preferences.disabled d where d.type = coalesce(?1, d.type) and d.dbpath = ?2)" \
-		"order by type, disabled, name";
+		"group by t.type, t.name order by t.type, t.name";
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (type)
 			sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 	else
 			sqlite3_bind_null(stmt, 1);
-
-	const char* dbpath = sqlite3_db_filename(db, 0);
-	sqlite3_bind_text(stmt, 2, dbpath, strlen(dbpath), SQLITE_TRANSIENT);
 
 	while (rc == SQLITE_OK && SQLITE_ROW == sqlite3_step(stmt)) {
 		TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
@@ -2795,7 +2821,7 @@ void updateTree(int type, TCHAR* select) {
 	sqlite3_finalize(stmt);
 
 	if (SQLITE_OK != sqlite3_errcode(db)) {
-		sqlite3_prepare_v2(db, "select name, type from sqlite_master where type = coalesce(?1, type) and name <> 'sqlite_sequence' order by 1", -1, &stmt, 0);
+		sqlite3_prepare_v2(db, "select name, type from sqlite_master where sql is not null and type = coalesce(?1, type) and name <> 'sqlite_sequence' order by 1", -1, &stmt, 0);
 		if (type)
 				sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 		else
@@ -2839,6 +2865,34 @@ void updateTree(int type, TCHAR* select) {
 				}
 				sqlite3_finalize(substmt);
 			}
+		}
+		sqlite3_finalize(stmt);
+	}
+
+	if (type == 0 || type == INDEX || type == TRIGGER) {
+		char sql[] = "select d.name, d.type, 1 disabled from disabled d where d.type = coalesce(?1, d.type) and d.dbpath = ?2 order by type, name";
+		int rc = sqlite3_prepare_v2(prefs::db, sql, -1, &stmt, 0);
+		if (type)
+				sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
+		else
+				sqlite3_bind_null(stmt, 1);
+
+		const char* dbpath = sqlite3_db_filename(db, 0);
+		sqlite3_bind_text(stmt, 2, dbpath, strlen(dbpath), SQLITE_TRANSIENT);
+
+		while (rc == SQLITE_OK && SQLITE_ROW == sqlite3_step(stmt)) {
+			TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
+			TCHAR* type16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 1));
+			BOOL disabled = sqlite3_column_int(stmt, 2);
+
+			if (!_tcscmp(type16, TEXT("trigger")))
+				TreeView_AddItem(name16, treeItems[TRIGGER], TRIGGER, disabled);
+
+			if (!_tcscmp(type16, TEXT("index")))
+				TreeView_AddItem(name16, treeItems[INDEX], INDEX, disabled);
+
+			delete [] type16;
+			delete [] name16;
 		}
 		sqlite3_finalize(stmt);
 	}
@@ -2959,7 +3013,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		ListBox_AddString(hColumnsWnd, TEXT(""));
 		char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 		sqlite3_stmt *stmt2;
-		if (SQLITE_OK == sqlite3_prepare_v2(db, "select r.query from preferences.refs r where dbname = ?1 and \"schema\" = ?2 and tblname = ?3 and colname = ?4", -1, &stmt2, 0)) {
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select r.query from refs r where dbname = ?1 and \"schema\" = ?2 and tblname = ?3 and colname = ?4", -1, &stmt2, 0)) {
 			for (int i = 0; i < colCount; i++) {
 				if (!sqlite3_column_origin_name(stmt, i)) {
 					ListBox_AddString(hColumnsWnd, TEXT(""));
@@ -4421,4 +4475,17 @@ void switchDialog(HWND hDlg, bool isNext) {
 
 	if (i != j)
 		SetForegroundWindow(hDialogs[j]);
+}
+
+void saveQuery(const char* storage, const char* query) {
+	char sql[256];
+	sprintf(sql, "replace into %s (query, time) values (?1, ?2)", storage);
+
+	sqlite3_stmt* stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, sql, -1, &stmt, 0)) {
+		sqlite3_bind_text(stmt, 1, query, strlen(query), SQLITE_TRANSIENT);
+		sqlite3_bind_int(stmt, 2, std::time(0));
+		sqlite3_step(stmt);
+	}
+	sqlite3_finalize(stmt);
 }

@@ -142,8 +142,6 @@
 #define IDC_DLG_GEN_OPTION_TABLE   283
 #define IDC_DLG_GEN_OPTION_COLUMN  284
 #define IDC_DLG_GEN_OPTION_MULTIPLIER  285
-#define IDC_DLG_GEN_DICTIONARY     286
-#define IDC_DLG_GEN_DICTIONARY_HELP    287
 
 #define IDC_TAB_EDIT               300
 
@@ -297,7 +295,6 @@
 #define IDS_HOTKEYS                10011
 #define IDS_TIPS                   10012
 #define IDS_EXTENSIONS             10013
-#define IDS_GEN_DICTIONARY         10014
 #define IDS_WELCOME                10015
 #define IDS_ODBC_HELP              10016
 #define IDS_TOOLTIP_OPEN           IDM_OPEN

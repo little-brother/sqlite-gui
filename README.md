@@ -17,7 +17,7 @@ Small, simple, powerfull, fast, free.
 * Database diagram
 * Database comparison
 * Search text in the whole database
-* [Quick data references](https://github.com/little-brother/sqlite-gui/wiki#quick-references) ([video](https://youtu.be/XL1_lFhzLKo))
+* [Quick data references](https://github.com/little-brother/sqlite-gui/wiki#quick-references)
 * [Terminal mode](https://raw.githubusercontent.com/little-brother/sqlite-gui/master/resources/terminal.webp)
 * [Charts](https://github.com/little-brother/sqlite-gui/wiki#charts)
 * [Query parameters](https://github.com/little-brother/sqlite-gui/wiki#query-parameters)
@@ -26,9 +26,6 @@ Small, simple, powerfull, fast, free.
 * Demo database "Bookstore" for beginners
 * Does not require installation
 
-### Cons
-* Only utf-8 databases are supported
-* An empty string is set to NULL when data is edit
 
 If you like the project, press the like-button on [AlternativeTo](https://alternativeto.net/software/sqlite-gui/about) or rate the app on [Softpedia](https://www.softpedia.com/get/Internet/Servers/Database-Utils/SQLite-GUI-LB.shtml) to support it.<br>
 If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki), create a [Discussion](https://github.com/little-brother/sqlite-gui/discussions) topic or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>.

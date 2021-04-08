@@ -452,25 +452,8 @@ namespace dialogs {
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Saved queries"));
 
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
-
-				LVCOLUMN lvc;
-				lvc.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
-				lvc.iSubItem = 0;
-				lvc.pszText = (TCHAR*)TEXT("Date");
-				lvc.cx = 110;
-				ListView_InsertColumn(hListWnd, 0, &lvc);
-
-				lvc.mask = LVCF_TEXT | LVCF_SUBITEM;
-				lvc.iSubItem = 1;
-				lvc.pszText = (TCHAR*)TEXT("Query");
-				ListView_InsertColumn(hListWnd, 1, &lvc);
-
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
-				ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | 0x10000000);
 				SendMessage(hWnd, WM_SIZE, 0, 0);
-
-				SetFocus(GetDlgItem(hWnd, IDC_DLG_QUERYFILTER));
 			}
 			break;
 
@@ -493,7 +476,7 @@ namespace dialogs {
 				lvc.mask = LVCF_WIDTH;
 				lvc.iSubItem = 1;
 				lvc.cx = rc.right - rc.left - 130;
-				ListView_SetColumn(hListWnd, 1, &lvc);
+				ListView_SetColumn(hListWnd, 2, &lvc);
 			}
 			break;
 
@@ -509,13 +492,22 @@ namespace dialogs {
 					if (kd->wVKey == VK_DELETE && pos != -1) {
 						int idx = GetWindowLong(hWnd, GWL_USERDATA);
 						TCHAR query16[MAX_TEXT_LENGTH];
-						ListView_GetItemText(hListWnd, pos, 1, query16, MAX_TEXT_LENGTH);
+						ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
 
-						char* query8 = utils::utf16to8(query16);
-						prefs::deleteQuery(idx == IDM_HISTORY ? "history" : "gists", query8);
+						char sql8[256];
+						sprintf(sql8, "delete from %s where query = ?1", idx == IDM_HISTORY ? "history" : "gists");
+
+						sqlite3_stmt* stmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, sql8, -1, &stmt, 0)) {
+							char* query8 = utils::utf16to8(query16);
+							sqlite3_bind_text(stmt, 1, query8, strlen(query8), SQLITE_TRANSIENT);
+							delete [] query8;
+							sqlite3_step(stmt);
+						}
+						sqlite3_finalize(stmt);
+
 						ListView_DeleteItem(hListWnd, pos);
 						ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
-						delete [] query8;
 					}
 				}
 			}
@@ -538,7 +530,7 @@ namespace dialogs {
 						break;
 
 					TCHAR buf[MAX_TEXT_LENGTH];
-					ListView_GetItemText(hListWnd, iPos, 1, buf, MAX_TEXT_LENGTH);
+					ListView_GetItemText(hListWnd, iPos, 2, buf, MAX_TEXT_LENGTH);
 
 					SendMessage(hMainWnd, WMU_APPEND_TEXT, (WPARAM)buf, 0);
 					EndDialog(hWnd, DLG_OK);
@@ -557,43 +549,19 @@ namespace dialogs {
 				int idx = GetWindowLong(hWnd, GWL_USERDATA);
 				char* filter8 = utils::utf16to8(filter16);
 
-				char* queries[prefs::get("max-query-count")];
-				int count = prefs::getQueries(idx == IDM_HISTORY ? "history" : "gists", filter8, queries);
+				char sql8[512];
+				sprintf(sql8, "select strftime('%%d-%%m-%%Y %%H:%%M', time, 'unixepoch') Date, query Query from %s %s order by time desc limit %i",
+					idx == IDM_HISTORY ? "history" : "gists", strlen(filter8) ? "where query like '%' || ?1 || '%'" : "", prefs::get("max-query-count"));
 
-				ListView_DeleteAllItems(hListWnd);
-				for (int i = 0; i < count; i++) {
-					TCHAR* text16 = utils::utf8to16(queries[i]);
-					TCHAR* q = _tcschr(text16, TEXT('\t'));
-					if (q != NULL) {
-						q += 1;
-						int len = _tcslen(text16);
-						int len1 = _tcslen(q);
-
-						TCHAR time[len - len1 + 1]{0};
-						_tcsncpy(time, text16, len - len1);
-						LVITEM  lvi = {0};
-						lvi.mask = LVIF_TEXT;
-						lvi.iSubItem = 0;
-						lvi.iItem = i;
-						lvi.pszText = time;
-						lvi.cchTextMax = len - len1 + 1;
-						ListView_InsertItem(hListWnd, &lvi);
-
-						lvi.mask = LVIF_TEXT;
-						lvi.iSubItem = 1;
-						lvi.iItem = i;
-						lvi.pszText = q;
-						lvi.cchTextMax = len1 + 1;
-						ListView_SetItem(hListWnd, &lvi);
-					}
-					delete [] text16;
-					delete queries[i];
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, sql8, -1, &stmt, 0)) {
+					if (strlen(filter8))
+						sqlite3_bind_text(stmt, 1, filter8, strlen(filter8), SQLITE_TRANSIENT);
+					ListView_SetData(hListWnd, stmt);
 				}
-
-				if (count > 0)
-					ListView_SetItemState (hListWnd, 0, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
-
+				sqlite3_finalize(stmt);
 				delete [] filter8;
+				SetFocus(GetDlgItem(hWnd, IDC_DLG_QUERYFILTER));
 				return true;
 			}
 			break;
@@ -659,10 +627,13 @@ namespace dialogs {
 					}
 				}
 
-				bool canInsert = true;
-				bool canUpdate = true;
-				bool canDelete = true;
-				if (!isTable) {
+				bool isReadOnly = sqlite3_db_readonly(db, 0);
+				bool canInsert = !isReadOnly;
+				bool canUpdate = !isReadOnly;
+				bool canDelete = !isReadOnly;
+
+				// View with "instead of"-triggers
+				if (!isTable && !isReadOnly) {
 					sprintf(query8, "select sum(instr(lower(sql), 'instead of insert')), sum(instr(lower(sql), 'instead of update')), " \
 						"sum(instr(lower(sql), 'instead of delete')) from \"%s\".sqlite_master where tbl_name = '%s' and type = 'trigger'",
 						schema8, tablename8);
@@ -707,7 +678,7 @@ namespace dialogs {
 					tbButtons[btnCount] = {1, IDM_ROW_DELETE, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Delete")};
 					btnCount++;
 				}
-				if (isTable && IsWindow(hMainWnd)) {
+				if (isTable && IsWindow(hMainWnd) && !isReadOnly) {
 					tbButtons[btnCount] = {3, IDM_GENERATE_DATA, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Generate data")};
 					btnCount++;
 				}
@@ -2556,7 +2527,7 @@ namespace dialogs {
 
 				sqlite3_stmt* stmt = (sqlite3_stmt*)lParam;
 				sqlite3_stmt* stmt2;
-				sqlite3_prepare_v2(db, "select value from preferences.query_params where lower(dbname) = lower(?1) and lower(name) = lower(?2)", -1, &stmt2, 0);
+				sqlite3_prepare_v2(prefs::db, "select value from query_params where lower(dbname) = lower(?1) and lower(name) = lower(?2)", -1, &stmt2, 0);
 				char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 
 				int paramCount = sqlite3_bind_parameter_count(stmt);
@@ -2597,7 +2568,7 @@ namespace dialogs {
 				if (wParam == IDC_DLG_OK) {
 					sqlite3_stmt* stmt = (sqlite3_stmt*)GetWindowLong(hWnd, GWL_USERDATA);;
 					sqlite3_stmt* stmt2;
-					sqlite3_prepare_v2(db, "replace into preferences.query_params (dbname, name, value) values (?1, ?2, ?3);", -1, &stmt2, 0);
+					sqlite3_prepare_v2(prefs::db, "replace into query_params (dbname, name, value) values (?1, ?2, ?3);", -1, &stmt2, 0);
 					char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 
 					int paramCount = sqlite3_bind_parameter_count(stmt);

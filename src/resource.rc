@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 7, 0
+FILEVERSION 1, 4, 8, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.7\000"
+			VALUE "FileVersion", "1.4.8\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.7\000"
+			VALUE "ProductVersion", "1.4.8\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -341,8 +341,6 @@ BEGIN
 	LTEXT "Row count", IDC_DLG_LABEL, 180, 7, 40, 14, SS_LEFT
 	EDITTEXT IDC_DLG_GEN_ROW_COUNT, 220, 5, 40, 12, WS_BORDER | WS_TABSTOP | ES_NUMBER | ES_CENTER
 	AUTOCHECKBOX "Truncate data before generation", IDC_DLG_GEN_ISTRUNCATE, 5, 20, 140, 16, BS_NOTIFY
-	PUSHBUTTON "Edit dictionary", IDC_DLG_GEN_DICTIONARY, 180, 22, 65, 14
-	PUSHBUTTON "?", IDC_DLG_GEN_DICTIONARY_HELP, 245, 22, 15, 14
 
 	LTEXT "Column", IDC_DLG_LABEL, 5, 40, 255, 14, SS_LEFT | SS_ETCHEDHORZ
 
@@ -704,6 +702,7 @@ BEGIN
 		"Shift + Tab - Return to a previous field\n\n"
 
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
+		"* Hold Control while opening the database to open it read-only.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
 		"* Each tab uses an own independed connection to the database and hence \n" \
 		"   has own TEMP-schema. So if you need to share in-memory data between\n"
@@ -721,9 +720,9 @@ BEGIN
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite?\n   Recompile it (check wiki) and replace sqlite3.dll. 32-bit version is required.\n\n" \
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
+		"* You can define your own types in the data generator by adding rows to \n   table ""generators"" in ""prefs.sqlite"". The type is defined by ""type"" column.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
 		"Cons\n" \
-		"* Only utf-8 is supported\n" \
 		"* An empty string is set to NULL when data is edit\n" \
 		"* Data diagram isn't accurate with building references in views/triggers\n"
 
@@ -739,7 +738,7 @@ BEGIN
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
-		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), tosize(nBytes), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
+		"Adds rownum(start), concat(str1, str2, ...), decode(expr, key1, value1, key2, value2, ..., defValue), strpart(str, delims, partno), conv(num, base_from, base_to), tosize(nBytes), crc32(str), md5(str), base64_encode(str) and base64_decode(str) functions.\n\n" \
 		"ODBC\n"\
 		"Adds odbc_read(connectionString, query, target), odbc_write(query, connectionString, target), odbc_query(connectionString, query) and odbc_dsn() functions.\n\n" \
 		"Exec\n"\
@@ -749,10 +748,6 @@ BEGIN
 		"Icu (third party)\n"\
 		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""" \
 		"\n\n                         >>>   Check Wiki to get details  <<<"
-
-	IDS_GEN_DICTIONARY "You can define your own types to generate one-of-set values by add rows to ""preferences.generators"" table. " \
-		"The type is defined by ""key"" column.\nSet a ""value""-column as null if sometimes generated value should be null.\n" \
-		"You should restart master to apply changes."
 
 	IDS_WELCOME "-- Welcome! Thanks for choosing sqlite-gui.\n" \
 		"-- bookstore.sqlite is a demo database for beginners.\n" \

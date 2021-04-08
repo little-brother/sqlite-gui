@@ -623,7 +623,7 @@ namespace tools {
 
 				HWND hSchemaWnd = GetDlgItem(hWnd, IDC_DLG_ODBC_SCHEMA);
 				sqlite3_stmt* stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_database_list where name not in ('temp', 'preferences') order by iif(name = 'main', 0, name)", -1, &stmt, 0)) {
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_database_list where name <> 'temp' order by iif(name = 'main', 0, name)", -1, &stmt, 0)) {
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
 						TCHAR* schema16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
 						ComboBox_AddString(hSchemaWnd, schema16);
@@ -903,8 +903,8 @@ namespace tools {
 			case WM_INITDIALOG: {
 				HWND hDbWnd = GetDlgItem(hWnd, IDC_DLG_DATABASE);
 				sqlite3_stmt *stmt;
-				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select path from preferences.recents order by time desc limit 40", -1, &stmt, 0);
-				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select path from recents order by time desc", -1, &stmt, 0);
+				while (rc && SQLITE_ROW == sqlite3_step(stmt) && ComboBox_GetCount(hDbWnd) < 40) {
 					TCHAR* db16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
 					if (utils::isFileExists(db16))
 						ComboBox_AddString(hDbWnd, db16);
@@ -1362,7 +1362,7 @@ namespace tools {
 				} else {
 					sqlite3_stmt *stmt, *stmt2;
 					if (SQLITE_OK == sqlite3_prepare_v2(db,
-						"with t as (select name from pragma_database_list() where name not in ('temp', 'preferences')) " \
+						"with t as (select name from pragma_database_list() where name <> 'temp') " \
 						"select name from t order by iif(name = 'main', 1, name)", -1, &stmt, 0)) {
 						while (SQLITE_ROW == sqlite3_step(stmt)) {
 							char* schema8 = (char *)sqlite3_column_text(stmt, 0);
@@ -1393,7 +1393,7 @@ namespace tools {
 						i++;
 					}
 
-					if (SQLITE_OK == sqlite3_prepare_v2(db, "select distinct type from preferences.generators order by 1", -1, &stmt, 0)) {
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select distinct type from generators order by 1", -1, &stmt, 0)) {
 						while (SQLITE_ROW == sqlite3_step(stmt)) {
 							GENERATOR_TYPE[i] = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
 							i++;
@@ -1416,6 +1416,24 @@ namespace tools {
 						}
 					}
 					sqlite3_finalize(stmt);
+
+					// Copy generators table
+					sqlite3_exec(db, "drop table temp.generators", 0, 0, 0);
+					sqlite3_exec(db, "create table temp.generators (type, value)", 0, 0, 0);
+					sqlite3_prepare_v2(prefs::db, "select type, value from generators order by 1", -1, &stmt, 0);
+
+					sqlite3_stmt *istmt;
+					sqlite3_prepare_v2(db, "insert into temp.generators (type, value) values (?1, ?2)", -1, &istmt, 0);
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						const char*	key = (const char*)sqlite3_column_text(stmt, 0);
+						const char* value = (const char*)sqlite3_column_text(stmt, 1);
+						sqlite3_bind_text(istmt, 1, key, strlen(key), SQLITE_TRANSIENT);
+						sqlite3_bind_text(istmt, 2, value, strlen(value), SQLITE_TRANSIENT);
+						sqlite3_step(istmt);
+						sqlite3_reset(istmt);
+					}
+					sqlite3_finalize(stmt);
+					sqlite3_finalize(istmt);
 				}
 
 				SetWindowLong(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GWL_WNDPROC, (LONG)&dialogs::cbNewScroll);
@@ -1566,16 +1584,6 @@ namespace tools {
 					EndDialog(hWnd, GetWindowLong(hWnd, GWL_USERDATA) ? DLG_OK : DLG_CANCEL);
 				}
 
-				if (wParam == IDC_DLG_GEN_DICTIONARY) {
-					_tcscpy(editTableData16, TEXT("preferences.generators"));
-					DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
-				}
-
-				if (wParam == IDC_DLG_GEN_DICTIONARY_HELP) {
-					TCHAR buf[MAX_TEXT_LENGTH];
-					LoadString(GetModuleHandle(NULL), IDS_GEN_DICTIONARY, buf, MAX_TEXT_LENGTH);
-					MessageBox(hWnd, buf, TEXT("Data generator help"), MB_OK);
-				}
 
 				if (wParam == IDC_DLG_OK || wParam == IDOK)	{
 					execute("drop table if exists temp.data_generator");
@@ -1671,7 +1679,7 @@ namespace tools {
 						}
 
 						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
-							_stprintf(query16, TEXT("with t as (select type, value from preferences.generators where type = \"%s\" order by random()), "\
+							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
 								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
 								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
@@ -1765,7 +1773,14 @@ namespace tools {
 		char* data8 = utils::readFile(path8);
 		bool rc = true;
 		if (data8 != 0) {
-			sqlite3_exec(db, "begin transaction;", NULL, 0, NULL);
+			char* ldata8 = new char[strlen(data8) + 1];
+			strcpy(ldata8, data8);
+			strlwr(ldata8);
+			bool hasTransaction = strstr(ldata8, "begin;") || strstr(ldata8, "begin transaction") || strstr(ldata8, "commit");
+			delete [] ldata8;
+
+			if (!hasTransaction)
+				sqlite3_exec(db, "begin transaction;", NULL, 0, NULL);
 			if (prefs::get("synchronous-off"))
 				sqlite3_exec(db, "pragma synchronous = 0", NULL, 0, NULL);
 			bool hasBOM = data8[0] == '\xEF' && data8[1] == '\xBB' && data8[2] == '\xBF';
@@ -1775,7 +1790,9 @@ namespace tools {
 
 			if (prefs::get("synchronous-off"))
 				sqlite3_exec(db, "pragma synchronous = 1", NULL, 0, NULL);
-			sqlite3_exec(db, rc ? "commit;" : "rollback;", NULL, 0, NULL);
+			if (!hasTransaction)
+				sqlite3_exec(db, rc ? "commit;" : "rollback;", NULL, 0, NULL);
+
 			delete [] data8;
 		}
 		delete [] path8;
@@ -1842,10 +1859,22 @@ namespace tools {
 			ScreenToClient(GetParent(hWnd), &pos);
 			TCHAR table16[255]{0};
 			GetWindowText(hWnd, table16, 255);
-			char* table8 = utils::utf16to8(table16);
-			RECT rc = {pos.x, pos.y, rcSize.right - rcSize.left, rcSize.bottom - rcSize.top};
+
 			prefs::setSyncMode(0);
-			prefs::setDiagramRect(dbname8, table8, rc);
+			char* table8 = utils::utf16to8(table16);
+			RECT rect{pos.x, pos.y, rcSize.right - rcSize.left, rcSize.bottom - rcSize.top};
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into diagrams (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0)) {
+				sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+				sqlite3_bind_text(stmt, 2, table8, strlen(table8), SQLITE_TRANSIENT);
+				sqlite3_bind_int(stmt, 3, rect.left);
+				sqlite3_bind_int(stmt, 4, rect.top);
+				sqlite3_bind_int(stmt, 5, rect.right);
+				sqlite3_bind_int(stmt, 6, rect.bottom);
+
+				sqlite3_step(stmt);
+			}
+			sqlite3_finalize(stmt);
 			prefs::setSyncMode(1);
 			delete [] table8;
 		}
@@ -1920,8 +1949,21 @@ namespace tools {
 
 				auto addTable = [hWnd](char* name8, int tblNo) {
 					TCHAR* tblname16 = utils::utf8to16((char *)name8);
-					RECT rect = {10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
-					prefs::getDiagramRect(dbname8, (const char*)name8, &rect);
+					RECT rect{10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
+
+					sqlite3_stmt * stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, name8, strlen(name8), SQLITE_TRANSIENT);
+						if (sqlite3_step(stmt) == SQLITE_ROW) {
+							rect.left = sqlite3_column_int(stmt, 0);
+							rect.top = sqlite3_column_int(stmt, 1);
+							rect.right = sqlite3_column_int(stmt, 2);
+							rect.bottom = sqlite3_column_int(stmt, 3);
+						}
+					}
+					sqlite3_finalize(stmt);
+
 					HWND hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
 						WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
 						rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);

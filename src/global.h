@@ -2,7 +2,6 @@
 #define __GLOBAL_H__
 
 #define _WIN32_IE	            0x0500
-#define MAX_RECENT_COUNT            10
 #define MAX_TAB_COUNT               16
 #define MAX_RESULT_COUNT            32
 #define MAX_ENTITY_COUNT          1024

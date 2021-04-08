@@ -32,6 +32,13 @@
 	select strpart('ab-cd-ef', '-', 2) --> 'cd'
 	select strpart('20.01.2021', '.', 3) --> 2021
 	
+	conv(num, from_base, to_base);
+	Converts a number from one numeric base number system to another numeric base number system. 
+	After the conversion, the function returns a string representation of the number.
+	The minimum base is 2 and the maximum base is 36.
+	Only positive numbers are supported.
+	select conv(15, 10, 2) --> 1111
+	
 	tosize(nBytes)
 	Returns a human readable size
 	select tosize(1024) --> 1.00KB
@@ -43,6 +50,7 @@ SQLITE_EXTENSION_INIT1
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <ctype.h>
 
 typedef unsigned char UINT8;
 typedef unsigned int UINT;
@@ -523,6 +531,70 @@ static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 		sqlite3_result_null(ctx);
 }
 
+
+// Based on https://www.geeksforgeeks.org/convert-base-decimal-vice-versa/
+int val(char c) {
+	return c >= '0' && c <= '9' ? (int)c - '0' : (int)c - 'A' + 10;
+}
+
+int to10(const char *str, int base) {
+	int len = strlen(str);
+	int power = 1;
+	int num = 0;
+	int i;
+
+	for (i = len - 1; i >= 0; i--) {
+		if (val(toupper(str[i])) >= base)
+			return -1;
+
+		num += val(toupper(str[i])) * power;
+		power = power * base;
+	}
+
+	return num;
+}
+
+char reVal(int num) {
+    return num >= 0 && num <= 9 ? (char)(num + '0') : (char)(num - 10 + 'A');
+}
+
+char* from10(int num10, int base_to, char* res) {
+	int index = 0;
+	while (num10 > 0) {
+		res[index++] = reVal(num10 % base_to);
+		num10 /= base_to;
+	}
+	res[index] = '\0';
+
+	int len = strlen(res);
+	for (int i = 0; i < len/2; i++) {
+		char temp = res[i];
+		res[i] = res[len - i - 1];
+		res[len - i - 1] = temp;
+	}
+
+	return res;
+}
+
+static void conv (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || sqlite3_value_type(argv[1]) == SQLITE_NULL || sqlite3_value_type(argv[2]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+		
+	int base_from = sqlite3_value_int(argv[1]);	
+	int base_to = sqlite3_value_int(argv[2]);		
+	if (base_from < 2 || base_to < 2 || base_from > 36 || base_to > 36)
+		return sqlite3_result_error(ctx, "Incorrect base", -1);
+	
+	const char* num = sqlite3_value_text(argv[0]);
+	int num10 = to10(num, base_from);
+	if (num10 < 0) 
+		return sqlite3_result_error(ctx, "Conversion error", -1);
+	
+	char res[100];
+	from10(num10, base_to, res);
+	sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
+}
+
 const char* sizes[] = {"b", "KB", "MB", "GB", "TB"};
 
 static void tosize (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
@@ -556,6 +628,7 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 		SQLITE_OK == sqlite3_create_function(db, "base64_encode", 1, SQLITE_UTF8, 0, base64_encode, 0, 0) && 
 		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8, 0, base64_decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8, 0, strpart, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8, 0, conv, 0, 0) &&		
 		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8, 0, tosize, 0, 0) ?		
 		SQLITE_OK : SQLITE_ERROR;
 }
