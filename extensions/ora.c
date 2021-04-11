@@ -26,7 +26,6 @@
 	Decodes a base64 encoded string.
 	select base64_encode('Zm9vYmFy') --> foobar
 	
-	
 	strpart(str, delimiter, partno)
 	Returns substring for a delimiter and a part number
 	select strpart('ab-cd-ef', '-', 2) --> 'cd'
@@ -621,14 +620,14 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 	SQLITE_EXTENSION_INIT2(pApi);
 	(void)pzErrMsg;  /* Unused parameter */
 	return SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "concat", -1, SQLITE_UTF8, 0, concat, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "decode", -1, SQLITE_UTF8, 0, decode, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "crc32", 1, SQLITE_UTF8, 0, crc32, 0, 0) && 
-		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8, 0, md5, 0, 0) && 
-		SQLITE_OK == sqlite3_create_function(db, "base64_encode", 1, SQLITE_UTF8, 0, base64_encode, 0, 0) && 
-		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8, 0, base64_decode, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8, 0, strpart, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8, 0, conv, 0, 0) &&		
-		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8, 0, tosize, 0, 0) ?		
+		SQLITE_OK == sqlite3_create_function(db, "concat", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, concat, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "decode", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, decode, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "crc32", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, crc32, 0, 0) && 
+		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, md5, 0, 0) && 
+		SQLITE_OK == sqlite3_create_function(db, "base64_encode", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, base64_encode, 0, 0) && 
+		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, base64_decode, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, strpart, 0, 0) &&	
+		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, conv, 0, 0) &&		
+		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, tosize, 0, 0) ?		
 		SQLITE_OK : SQLITE_ERROR;
 }

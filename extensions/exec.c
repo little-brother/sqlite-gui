@@ -16,6 +16,7 @@ SQLITE_EXTENSION_INIT1
 #include <windows.h>
 #include <stdio.h>
 #include <tchar.h>
+
 char* utf16to8(const TCHAR* in) {
 	char* out;
 	if (!in || _tcslen(in) == 0) {
@@ -151,8 +152,8 @@ struct exec_cursor {
 };
 
 static int execConnect(sqlite3 *db, void *pAux, int argc, const char *const*argv, sqlite3_vtab **ppVtab, char **pzErr){
-	int rc = sqlite3_declare_vtab(db, "CREATE TABLE x(line, cmd hidden, len hidden)");
-	if (rc==SQLITE_OK) {
+	int rc = sqlite3_declare_vtab(db, "CREATE TABLE x(line, cmd hidden, codepage hidden)");
+	if (rc == SQLITE_OK) {
 		exec_vtab *pTab = sqlite3_malloc(sizeof(*pTab));
 		*ppVtab = (sqlite3_vtab*)pTab;
 
@@ -174,8 +175,7 @@ static int execDisconnect(sqlite3_vtab *pVtab){
 }
 
 static int execOpen(sqlite3_vtab *pVtab, sqlite3_vtab_cursor **ppCursor){
-	exec_cursor *pCur;
-	pCur = sqlite3_malloc(sizeof(*pCur));
+ 	exec_cursor *pCur = sqlite3_malloc(sizeof(*pCur));
 	if (pCur == 0)
 		return SQLITE_NOMEM;
 
@@ -246,13 +246,15 @@ static int execEof(sqlite3_vtab_cursor *cur){
 
 static int execFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr, int argc, sqlite3_value **argv){
 	exec_cursor *pCur = (exec_cursor *)cur;
-
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL)
+		return SQLITE_ERROR;
+		
 	const char* cmd = sqlite3_value_text(argv[0]);
 	pCur->cmd = malloc(sizeof(char) * (strlen(cmd) + 1));
 	sprintf(pCur->cmd, cmd);
 
 	if (!pCur->data) {
-		const unsigned char* codepage = argc == 2 ? sqlite3_value_text(argv[1]) : 0;
+		const unsigned char* codepage = argc == 2 && sqlite3_value_type(argv[1]) == SQLITE_TEXT ? sqlite3_value_text(argv[1]) : 0;
 		if (codepage) {
 			pCur->codepage = (unsigned char*)calloc(strlen(codepage) + 1, sizeof(char));
 			memcpy(pCur->codepage, codepage, strlen(codepage));

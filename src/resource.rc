@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 8, 0
+FILEVERSION 1, 4, 9, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.8\000"
+			VALUE "FileVersion", "1.4.9\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.8\000"
+			VALUE "ProductVersion", "1.4.9\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -685,13 +685,16 @@ BEGIN
 		"Tab + Shift - Remove indents in Editor\n" \
 		"Ctrl + W - Toggle word wrap mode\n" \
 		"Ctrl + ? - Get the table columns desc\n" \
-		"Ctrl + Click - Edit the table data\n" \
-		"Ctrl + Tab - Toggle to a next result\n" \
-		"Ctrl + 1, Ctrl + 2, ... - Sort the result (should be in focus) by column 1, 2, ...\n\n" \
+		"Ctrl + Click - Edit the table data\n\n" \
 		"Console editor\n" \
 		"Ctrl + Up - Previous query\n" \
 		"Ctrl + Down - Next query\n" \
 		"Ctrl + Tab - Find query beginning with input part\n\n" \
+		"Query result\n" \
+		"Ctrl + Click - View a cell value\n" \
+		"Ctrl + Tab - Toggle to a next result\n" \
+		"Ctrl + 1, Ctrl + 2, ... - Sort by column 1, 2, ... \n" \
+		"Alt + Click - Show data if the column references to another table by FK key\n\n" \
 		"Data editor\n" \
 		"F2 - Edit cell value without clearing\n" \
 		"Space - Edit cell value with clearing\n" \
@@ -728,6 +731,8 @@ BEGIN
 
 	IDS_EXTENSIONS L"Json1\n" \
 		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
+		"XML\n" \
+		"Text functions for processing XML: xml_valid(xml), xml_extract(xml, xpath, sep = """"), xml_append(xml, xpath, insertion, pos = after), xml_update(xml, xpath, replacement), xml_remove(xml, xpath) and a table-valued function - xml_each(xml, xpath).\n\n" \
 		"Math\n" \
 		"This library provides common mathematical and string functions: acos, asin, atan, atn2, atan2, acosh, asinh, atanh, difference, degrees, radians, cos, sin, tan, cot, cosh, sinh, tanh, coth, exp, log, log10, power, sign, sqrt, square, ceil, floor, pi, replicate, charindex, leftstr, rightstr, ltrim, rtrim, trim, replace, reverse, proper, padl, padr, padc, strfilter, stdev, variance, mode, median, lower_quartile, upper_quartile.\n\n" \
 		"Series\n" \

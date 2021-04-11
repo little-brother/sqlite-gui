@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "global.h"
 #include "missing.h"
 #include "resource.h"
@@ -306,10 +307,7 @@ namespace tools {
 			if (_fgetts(buf, bsize + 1, f)) {
 				if (_tcslen(line) + bsize > size) {
 					size *= 2;
-					TCHAR* oLine = line;
-					line = new TCHAR[size + 1]{0};
-					_tcscpy(line, oLine);
-					delete [] oLine;
+					realloc(line, size + 1);
 				}
 				_tcscat(line, buf);
 

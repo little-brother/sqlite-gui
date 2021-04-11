@@ -177,7 +177,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	wc.lpszMenuName = 0;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;
-	wc.hbrBackground = (HBRUSH) COLOR_BACKGROUND;
+	wc.hbrBackground = (HBRUSH) COLOR_WINDOW;
 
 	if (!RegisterClassEx (&wc))
 		return EXIT_FAILURE;
@@ -187,6 +187,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	icex.dwICC = ICC_DATE_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
 	InitCommonControlsEx(&icex);
 
+	//sqlite3_enable_shared_cache(1);
 	if (prefs::get("backup-prefs")) {
 		_stprintf(prefPath16, TEXT("%s/prefs.backup"), APP_PATH);
 		DeleteFile(prefPath16);
@@ -224,7 +225,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.8"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.4.9"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1192,6 +1193,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				return ListView_ShowRef(pHdr->hwndFrom, ia->iItem, ia->iSubItem);
 			}
 
+			if ((HWND)GetParent(pHdr->hwndFrom) == hTabWnd && pHdr->code == (DWORD)NM_CLICK && HIWORD(GetKeyState(VK_CONTROL))) {
+				NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+				if (ia->iItem == -1)
+					return true;
+
+				TCHAR buf[MAX_TEXT_LENGTH]{0};
+				ListView_GetItemText(pHdr->hwndFrom, ia->iItem, ia->iSubItem, buf, MAX_TEXT_LENGTH);
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_VIEWDATA_VALUE), hMainWnd, (DLGPROC)dialogs::cbDlgViewEditDataValue, (LPARAM)buf);
+			}
+
+
 			if ((HWND)GetParent(pHdr->hwndFrom) == hTabWnd && pHdr->code == (DWORD)NM_DBLCLK) {
 				NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 				currCell = {ia->hdr.hwndFrom, ia->iItem, ia->iSubItem};
@@ -1535,7 +1547,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			TCHAR query16[MAX_TEXT_LENGTH] {0};
 			_stprintf(query16, isHint ?
 				TEXT("select group_concat(name || ': ' || type || iif(pk,' [pk]',''),'\n') from pragma_table_xinfo where schema = '%s' and arg = '%s'") :
-				TEXT("select 1 from \"%s\".sqlite_master where type in ('table', 'view') and name = \"%s\" limit 1"),
+				TEXT("select 1 from \"%s\".sqlite_master where type in ('table', 'view') and name = '%s' limit 1"),
 				schema16, tablename16);
 
 			char* query8 = utils::utf16to8(query16);
@@ -1575,6 +1587,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			delete [] word;
 			delete [] tablename16;
 			delete [] schema16;
+			return true;
 		}
 		break;
 
@@ -1922,6 +1935,10 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	if (!tab->db)
 		openConnection(&tab->db);
 
+	// reset meta-data cache
+	// If a table was deleted in an another tab then the table can still exist in this
+	sqlite3_exec(tab->db, "select 1 from sqlite_master limit 0", 0, 0, 0);
+
 	auto getTabNo = [](int id) {
 		for (int i = 0; i < MAX_TAB_COUNT; i++)
 			if (tabs[i].id == id)
@@ -1935,6 +1952,13 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	updateExecuteMenu(false);
 	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_ENABLED);
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, getTabNo(_tab.id), 1);
+
+	auto detectMetaChanges = [](char* query8) {
+		strlwr(query8);
+		return strstr(query8, "create table") || strstr(query8, "create view") ||
+			strstr(query8, "drop table") || strstr(query8, "drop view") || strstr(query8, "alter table");
+	};
+	bool isMetaChanged = false;
 
 	if (_tab.isBatch) {
 		TCITEM tci;
@@ -1965,6 +1989,7 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			SetWindowText(hResultWnd, err16);
 			delete [] err16;
 		}
+		isMetaChanged = detectMetaChanges(query8);
 		delete [] query8;
 
 		if (prefs::get("synchronous-off"))
@@ -2029,9 +2054,11 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			if (hResultWnd == 0) {
 				hResultWnd = hMessageWnd;
 				if (rc == SQLITE_OK && SQLITE_DONE == sqlite3_step(stmt)) {
+					int cnt = sqlite3_changes(_tab.db);
 					TCHAR text[64];
-					_stprintf(text, TEXT("%i rows have been changed"), sqlite3_changes(_tab.db));
+					_stprintf(text, TEXT("%i rows have been changed"), cnt);
 					SetWindowText(hResultWnd, text);
+					isMetaChanged = isMetaChanged || (cnt == 0 && detectMetaChanges(sql8));
 				} else {
 					char *err8 = (char*)sqlite3_errmsg(_tab.db);
 					TCHAR* err16 = utils::utf8to16(err8);
@@ -2102,6 +2129,8 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	tab->isBatch = 0;
 	updateTransactionState();
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, getTabNo(_tab.id), 0);
+	if (isMetaChanged)
+		updateTree();
 
 	return 1;
 }
@@ -2699,9 +2728,9 @@ void updateSizes(bool isPadding) {
 	int splitterH = prefs::get("splitter-height");
 	int tabH = GetSystemMetrics(SM_CYMENU);
 
-	SetWindowPos(hTreeWnd, 0, 0, top + 2, splitterW, h - 2, SWP_NOZORDER );
-	SetWindowPos(hMainTabWnd, 0, splitterW + 5, top + 2, rc.right - splitterW - 5, tabH, SWP_NOZORDER);
-	SetWindowPos(hEditorWnd, 0, splitterW + 5, top + 2 + tabH, rc.right - splitterW - 6, splitterH - tabH, SWP_NOZORDER);
+	SetWindowPos(hTreeWnd, 0, 0, top, splitterW, h, SWP_NOZORDER );
+	SetWindowPos(hMainTabWnd, 0, splitterW + 5, top + 4, rc.right - splitterW - 5, tabH, SWP_NOZORDER);
+	SetWindowPos(hEditorWnd, 0, splitterW + 5, top + tabH + 4, rc.right - splitterW - 6, splitterH - tabH - 2, SWP_NOZORDER);
 	SetWindowPos(hTabWnd, 0, splitterW + 5, top + splitterH + 5, rc.right - splitterW - 5, h - splitterH - 4, SWP_NOZORDER);
 	SetWindowPos(cli.hResultWnd, 0, splitterW + 5, top + splitterH + 5, rc.right - splitterW - 5, h - splitterH - 4, SWP_NOZORDER);
 
@@ -3692,8 +3721,12 @@ bool processEditorEvents(MSGFILTER* pF) {
 	if (pF->msg == WM_COPY)
 		MessageBeep(0);
 
-	if (pF->msg == WM_LBUTTONDOWN && GetAsyncKeyState(VK_CONTROL))
+	if (pF->msg == WM_LBUTTONDOWN && HIWORD(GetKeyState(VK_CONTROL))) {
+		POINT p{GET_X_LPARAM(pF->lParam), GET_Y_LPARAM(pF->lParam)};
+		int pos = SendMessage(hEditorWnd, EM_CHARFROMPOS, 0, (LPARAM)&p);
+		SendMessage(hEditorWnd, EM_SETSEL, pos, pos);
 		return SendMessage(hMainWnd, WMU_SHOW_TABLE_INFO, 0, 0);
+	}
 
 	return 0;
 }

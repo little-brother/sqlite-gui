@@ -12,7 +12,6 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-	BOOL CALLBACK cbDlgViewEditDataValue (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
 
 	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("null"), TEXT("blob"), TEXT("json"), 0};
@@ -594,7 +593,7 @@ namespace dialogs {
 
 				sqlite3_stmt *stmt;
 				bool isTable = false;
-				sprintf(query8, "select lower(type) = 'table' from %s.sqlite_master where tbl_name = \"%s\" and type in ('view', 'table')", schema8, tablename8);
+				sprintf(query8, "select lower(type) = 'table' from %s.sqlite_master where tbl_name = '%s' and type in ('view', 'table')", schema8, tablename8);
 				if ((SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) && (SQLITE_ROW == sqlite3_step(stmt)))
 					isTable = sqlite3_column_int(stmt, 0);
 				sqlite3_finalize(stmt);
