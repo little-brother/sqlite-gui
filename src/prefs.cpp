@@ -4,7 +4,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 45;
+	const int ICOUNT = 46;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -14,6 +14,7 @@ namespace prefs {
 		"csv-export-is-unix-line", "csv-export-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "odbc-strategy",
 		"row-limit",
+		"cipher-legacy",
 		"color-null", "color-blob", "color-text", "color-integer", "color-real",
 		"data-generator-row-count", "data-generator-truncate",
 		"link-fk", "link-view", "link-trigger"
@@ -28,6 +29,7 @@ namespace prefs {
 		0, 0,
 		0, 0, 1, 0,
 		10000,
+		0,
 		0x00FFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0, // reverse order BGR
 		100, 0,
 		1, 0, 0
@@ -81,8 +83,25 @@ namespace prefs {
 	}
 
 	bool load(char* path) {
-		if (SQLITE_OK != sqlite3_open(path, &db))
-			return false;
+		bool isOpen = SQLITE_OK == sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 0);
+		bool isReadWrite = isOpen && !sqlite3_db_readonly(db, 0);
+		if (!isOpen || !isReadWrite) {
+			sqlite3_close_v2(db);
+			sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 0);
+			MessageBox(0, TEXT("Can't open prefs.sqlite for writing.\nSettings will not be saved."), 0, 0);
+
+			if (isOpen) {
+				sqlite3* file;
+				sqlite3_open_v2(path, &file, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, 0);
+				sqlite3_backup *pBackup;
+				pBackup = sqlite3_backup_init(db, "main", file, "main");
+				if (pBackup) {
+					(void)sqlite3_backup_step(pBackup, -1);
+					(void)sqlite3_backup_finish(pBackup);
+				}
+				sqlite3_close_v2(file);
+			}
+		}
 
 		char sql8[] = "" \
 			"begin;\n" \
@@ -95,6 +114,8 @@ namespace prefs {
 			"create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); " \
 			"create table if not exists cli (\"time\" real, dbname text not null, query text not null, elapsed integer, result text); " \
 			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
+			"create table if not exists main.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
+			"create table if not exists temp.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
 			"create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));" \
 			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
 			"commit;";

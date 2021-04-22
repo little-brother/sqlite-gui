@@ -348,7 +348,7 @@ struct xml_cursor {
 };
 
 static int xmlConnect(sqlite3 *db, void *pAux, int argc, const char *const*argv, sqlite3_vtab **ppVtab, char **pzErr){
-	int rc = sqlite3_declare_vtab(db, "CREATE TABLE x(value, xml hidden, path hidden)");
+	int rc = sqlite3_declare_vtab(db, "CREATE TABLE x(value text, pid integer, id integer, xml hidden, xpath hidden)");
 	if (rc == SQLITE_OK) {
 		xml_vtab* pTab = (xml_vtab*)sqlite3_malloc(sizeof(*pTab));
 		*ppVtab = (sqlite3_vtab*)pTab;
@@ -431,7 +431,13 @@ static int xmlColumn(sqlite3_vtab_cursor* cur, sqlite3_context* ctx, int colNo) 
 		} else {
 			sqlite3_result_null(ctx);
 		}
-	} else if (colNo == 1) {
+	} else if (colNo == 1) { // pid
+		pugi::xpath_node e = *(pCur->it);
+		sqlite3_result_int(ctx, e.node() ? e.parent().hash_value() : e.parent().parent().hash_value());	
+	} else if (colNo == 2) { // id
+		pugi::xpath_node e = *(pCur->it);
+		sqlite3_result_int(ctx, e.node() ? e.node().hash_value() : e.parent().hash_value());	
+	} else if (colNo == 3) {
 		sqlite3_result_text(ctx, (char*)pCur->xml, -1, SQLITE_TRANSIENT);
 	} else {
 		sqlite3_result_text(ctx, pCur->path, -1, SQLITE_TRANSIENT);
@@ -479,24 +485,29 @@ static int xmlFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr, i
 		pCur->path = (char*)calloc(sizeof(char), 1);
 	}
 	
-	pCur->nodes = pCur->doc->select_nodes(strlen(pCur->path) ? pCur->path : "/");
+	try {
+		pCur->nodes = pCur->doc->select_nodes(strlen(pCur->path) ? pCur->path : "/");
+	} catch (pugi::xpath_exception& err) {
+		return SQLITE_ERROR;
+	}
 	pCur->it = pCur->nodes.begin();		
 
 	pCur->iRowid = 1;
-	pCur->isEof = 0;
+	pCur->isEof = pCur->it == pCur->nodes.end();
 	return SQLITE_OK;
 }
 
-static int xmlBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){	
+static int xmlBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){	  
 	if (!pIdxInfo->nConstraint)
 		return SQLITE_RANGE;
-
+			
 	// I don't know what is it :(
 	int i, j;
 	int idxNum = 0;
 	int unusableMask = 0;
 	int nArg = 0;
-	int aIdx[2];
+	int aIdx[2]; // xml, xpath
+	int nCol = 3; // id, pid, id
 	sqlite3_index_info::sqlite3_index_constraint* pConstraint;
 
 	aIdx[0] = aIdx[1] = -1;
@@ -504,10 +515,10 @@ static int xmlBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 	for(i = 0; i < pIdxInfo->nConstraint; i++, pConstraint++) {
 		int iCol;
 		int iMask;
-		if(pConstraint->iColumn < 1) 
+		if(pConstraint->iColumn < nCol) 
 			continue;
 		
-		iCol = pConstraint->iColumn - 1;
+		iCol = pConstraint->iColumn - nCol;
 		iMask = 1 << iCol;
 		if(pConstraint->usable==0) {
 			unusableMask |=  iMask;

@@ -21,13 +21,13 @@ namespace utils {
 	int saveFile(TCHAR* path, const TCHAR* filter);
 	bool isFileExists(const TCHAR* path);
 	char* readFile(const char* path);
-	char* getFileName(const char* path);
+	char* getFileName(const char* path, bool noExt = false);
 
 	TCHAR* toBlobSize(INT64 bSize);
 
 	bool isNumber(const TCHAR* str, double *out);
 	bool isNumber(const char* str, double *out);
 
-	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8);
+	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
 }
 #endif

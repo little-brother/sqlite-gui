@@ -220,21 +220,27 @@ namespace utils {
 		return buf;
 	}
 
-	char* getFileName(const char* path) {
+	char* getFileName(const char* path, bool noExt) {
 		TCHAR* path16 = utils::utf8to16(path);
-		TCHAR name16[255], ext16[32], name_ext16[300];
+		TCHAR name16[MAX_PATH], ext16[32], name_ext16[MAX_PATH + 32];
 		_tsplitpath(path16, NULL, NULL, name16, ext16);
-		_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
+		if (noExt)
+			_stprintf(name_ext16, TEXT("%s"), name16);
+		else
+			_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
 		char* name8 = utils::utf16to8(name_ext16);
 		delete [] path16;
 		return name8;
 	}
 
-	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8) {
+	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
 		int len = strlen(value8);
 
 		if (len == 0)
 			return sqlite3_bind_null(stmt, pos);
+
+		if (forceToText)
+			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
 
 		//if (len > 20) // 18446744073709551615
 		//	return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);

@@ -5,7 +5,7 @@
 
 	concat(str1, str2, ...)
 	Concatenates strings. Equals to str1 || str2 || ...
-	select concat(str1, str2, str3) from mytable
+	select concat(1, 'a', 2.5) --> 1a2.5
 
 	decode(expr, key1, value1, ke2, value2, ..., defValue)
 	Compares expr to each key one by one. If expr is equal to a key, then returns the corresponding value. 
@@ -14,9 +14,11 @@
 	
 	crc32(str)
 	Calculate crc32 checksum
+	select crc32('hello') --> 907060870
 	
 	md5(str)
 	Calculate md5 checksum
+	select md5('hello') --> 5d41402abc4b2a76b9719d911017c592
 	
 	base64_encode (str)
 	Encodes the given string with base64.
@@ -30,6 +32,7 @@
 	Returns substring for a delimiter and a part number
 	select strpart('ab-cd-ef', '-', 2) --> 'cd'
 	select strpart('20.01.2021', '.', 3) --> 2021
+	select strpart('20-01/20/21', '-/', -2) --> 20
 	
 	conv(num, from_base, to_base);
 	Converts a number from one numeric base number system to another numeric base number system. 
@@ -488,46 +491,81 @@ static void base64_decode (sqlite3_context *ctx, int argc, sqlite3_value **argv)
 	free(out);
 }
 
+#define BYTE2 0b11000000
+#define BYTE3 0b11100000
+#define BYTE4 0b11110000
+
+int utf8size(unsigned char c) {
+	return (BYTE4 & c) == BYTE4 ? 4 : (BYTE3 & c) == BYTE3 ? 3 : (BYTE2 & c) == BYTE2 ? 2 : 1;
+}
+
 static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
-	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || sqlite3_value_type(argv[1]) == SQLITE_NULL) 
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || 
+		sqlite3_value_type(argv[1]) == SQLITE_NULL || 
+		sqlite3_value_type(argv[2]) == SQLITE_NULL) 
 		return sqlite3_result_null(ctx);
 
 	const char* instr = sqlite3_value_text(argv[0]);
-	const char* delim = sqlite3_value_text(argv[1]);
-	int no = sqlite3_value_int(argv[2]);
+	const char* delims = sqlite3_value_text(argv[1]);
+	int partNo = sqlite3_value_int(argv[2]);
+	
+	if (partNo == 0)
+		return sqlite3_result_null(ctx);
 		
-	if (no < 0) {
-		char str[strlen(instr) + 1];
-		strcpy(str, instr);
-		
-		char *ptr = strtok(str, delim);
-		int cnt = 0;
-		while (ptr != NULL) {
-			ptr = strtok(NULL, delim);
-			cnt++;
+	int len = strlen(instr);	
+	if (partNo < 0) {
+		int i = 0, eq = 0;
+		while (i < len) {
+			int size = utf8size(instr[i]);
+			if (i + size > len)
+				break;
+
+			char c8[size + 1];
+			memcpy(c8, &instr[i], size);
+			c8[size] = 0;
+			eq += strstr(delims, c8) != 0;
+
+			i += size;
 		}
-		no = cnt + no + 1;	
+
+		partNo = eq + partNo + 1;	
+	} else {
+		partNo -= 1;
 	}
 	
-	if (no <= 0) {
-		sqlite3_result_null(ctx);
-		return;
-	}	
-		
-	char str[strlen(instr) + 1];
-	strcpy(str, instr);
-	
-	char *ptr = strtok(str, delim);
-	int curr = 0;
-	while (ptr != NULL && curr < no - 1) {
-		ptr = strtok(NULL, delim);
-		curr++;
+	int start = 0, end = 0, eq = 0;
+	int i = 0;
+	while ((i < len) && (end == 0)) {
+		int size = utf8size(instr[i]);
+		if (i + size > len)
+			break;
+
+		char c8[size + 1];
+		memcpy(c8, &instr[i], size);
+		c8[size] = 0;
+		if (strstr(delims, c8) != 0) {
+			eq += 1;
+			if (eq == partNo)
+				start = i + size;
+			if (eq == partNo + 1)
+				end = i;
+		}
+
+		i += size;
 	}
+
+	if (start > end)
+		end = len;
 	
-	if (ptr)
-		sqlite3_result_text(ctx, ptr, -1, SQLITE_TRANSIENT);
-	else 	
+	if (start != 0) {
+		char res[end - start + 1];
+		memcpy(res, &instr[start], end - start);
+		res[end - start] = 0;
+	
+		sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
+	} else {	 
 		sqlite3_result_null(ctx);
+	}
 }
 
 
@@ -575,7 +613,7 @@ char* from10(int num10, int base_to, char* res) {
 	return res;
 }
 
-static void conv (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+static void conv(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || sqlite3_value_type(argv[1]) == SQLITE_NULL || sqlite3_value_type(argv[2]) == SQLITE_NULL) 
 		return sqlite3_result_null(ctx);
 		
@@ -627,7 +665,7 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 		SQLITE_OK == sqlite3_create_function(db, "base64_encode", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, base64_encode, 0, 0) && 
 		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, base64_decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, strpart, 0, 0) &&	
-		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, conv, 0, 0) &&		
+		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, conv, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, tosize, 0, 0) ?		
 		SQLITE_OK : SQLITE_ERROR;
 }

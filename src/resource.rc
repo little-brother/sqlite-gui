@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 4, 9, 0
+FILEVERSION 1, 5, 0, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.4.9\000"
+			VALUE "FileVersion", "1.5.0\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.4.9\000"
+			VALUE "ProductVersion", "1.5.0\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -186,6 +186,56 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_ENCRYPTION DIALOGEX 50, 50, 220, 215
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Database encryption"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Password", IDC_DLG_LABEL, 5, 7, 35, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_KEY, 40, 5, 305 - 130 - 40, 12, WS_BORDER | WS_TABSTOP
+
+	AUTOCHECKBOX "Store", IDC_DLG_CIPHER_STORE_KEY, 305 - 130 + 7, 3, 30, 16, BS_NOTIFY
+
+	LTEXT "Cipher", IDC_DLG_LABEL, 5, 7 + 15, 35, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER, 40, 5 + 15, 305 - 130, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	AUTOCHECKBOX "Legacy mode (not recommended)", IDC_DLG_CIPHER_LEGACY, 5, 7 + 30, 120, 16, BS_NOTIFY
+	LTEXT "Page size", IDC_DLG_CIPHER_PAGESIZE_LABEL, 145, 11 + 30, 35, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_PAGESIZE, 180, 9 + 30, 35, 12, ES_CENTER | WS_VISIBLE | ES_NUMBER
+
+	LTEXT "Use predefined profile", IDC_DLG_CIPHER_PROFILE_LABEL, 5, 11 + 30 + 15 * 1, 160, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_PROFILE, 165, 9 + 30 + 15 * 1, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Number of iterations for key derivation", IDC_DLG_CIPHER_KDF_ITER_LABEL, 5, 11 + 30 + 15 * 1, 160, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_KDF_ITER, 165, 9 + 30 + 15 * 1, 50, 12, ES_CENTER | WS_VISIBLE | ES_NUMBER
+
+	LTEXT "Hash algoritm for key derivation function", IDC_DLG_CIPHER_KDF_ALGORITHM_LABEL, 5, 11 + 30 + 15 * 3, 160, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_KDF_ALGORITHM, 165, 9 + 30 + 15 * 3, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Use HMAC", IDC_DLG_CIPHER_HMAC_USE_LABEL, 5, 11 + 30 + 15 * 4, 160, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_HMAC_USE, 165, 9 + 30 + 15 * 4, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Hash algoritm for HMAC calculation", IDC_DLG_CIPHER_HMAC_ALGORITHM_LABEL, 5, 11 + 30 + 15 * 5, 160, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_HMAC_ALGORITHM, 165, 9 + 30 + 15 * 5, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Number of iterations for HMAC key derivation", IDC_DLG_CIPHER_FAST_KDF_ITER_LABEL, 5, 11 + 30 + 15 * 6, 160, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_FAST_KDF_ITER, 165, 9 + 30 + 15 * 6, 50, 12, ES_CENTER | WS_VISIBLE | ES_NUMBER
+
+	LTEXT "Mask byte for HMAC salt (0-255)", IDC_DLG_CIPHER_HMAC_SALT_LABEL, 5, 11 + 30 + 15 * 7, 160, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_HMAC_SALT, 165, 9 + 30 + 15 * 7, 50, 12, ES_CENTER | WS_VISIBLE | ES_NUMBER
+
+	LTEXT "Storage type for page number in HMAC", IDC_DLG_CIPHER_HMAC_PGNO_LABEL, 5, 11 + 30 + 15 * 8, 160, 14, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_HMAC_PGNO, 165, 9 + 30 + 15 * 8, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Size of plaintext header (must be multiple of 16)", IDC_DLG_CIPHER_HEADER_SIZE_LABEL, 5, 11 + 30 + 15 * 9, 160, 14, SS_LEFT
+	EDITTEXT IDC_DLG_CIPHER_HEADER_SIZE, 165, 9 + 30 + 15 * 9, 50, 12, ES_CENTER | WS_VISIBLE | ES_NUMBER
+
+	PUSHBUTTON "Help", IDC_DLG_HELP, 5, 195, 50, 14, WS_TABSTOP
+	PUSHBUTTON "OK", IDC_DLG_OK, 110, 195, 50, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 165, 195, 50, 14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_FIND DIALOGEX 300, 100, 180, 45
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Find"
@@ -313,7 +363,7 @@ IDD_TOOL_EXPORT_IMPORT_ODBC DIALOGEX 50, 50, 222, 205
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	LTEXT "Connection string", IDC_DLG_LABEL, 5, 5, 100, 14, SS_LEFT
-	COMBOBOX IDC_DLG_CONNECTION_STRING, 5, 16, 190, 120, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS
+	COMBOBOX IDC_DLG_CONNECTION_STRING, 5, 16, 190, 120, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_HASSTRINGS | CBS_AUTOHSCROLL
 	PUSHBUTTON "...", IDC_DLG_ODBC_MANAGER, 200, 16, 14, 13
 
 	LTEXT "If a target table exists", IDC_DLG_LABEL, 5, 35, 70, 14, SS_LEFT
@@ -395,6 +445,7 @@ BEGIN
 		MENUITEM SEPARATOR
 		MENUITEM "No recents", 0, GRAYED
 		MENUITEM SEPARATOR
+		MENUITEM "Set encryption", IDM_ENCRYPTION, GRAYED
 		MENUITEM "Attach database", IDM_ATTACH, GRAYED
 		MENUITEM "Settings", IDM_SETTINGS
 		MENUITEM SEPARATOR
@@ -706,6 +757,7 @@ BEGIN
 
 	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
 		"* Hold Control while opening the database to open it read-only.\n\n" \
+		"* Hold Shift while opening the database to open empty in-memory database.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
 		"* Each tab uses an own independed connection to the database and hence \n" \
 		"   has own TEMP-schema. So if you need to share in-memory data between\n"
@@ -715,13 +767,14 @@ BEGIN
 		"* Edit data dialog \n"
 		"   The dialog uses auto-transaction. So all changes are applied immediately.\n" \
 		"   The dialog doesn't block the main window, so you can open multiply tables \n" \
-		"   Use =ABC as a column filter to find rows with column values equal to ""ABC""\n" \
+		"   Use ABC as a column filter to find rows containing ""ABC""\n" \
+		"   Use =ABC to find rows with column values equal to ""ABC""\n" \
 		"   Use !ABC to find rows without ""ABC""\n" \
 		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
-		"* Do you need a newer version of SQLite?\n   Recompile it (check wiki) and replace sqlite3.dll. 32-bit version is required.\n\n" \
+		"* Do you need a newer version of SQLite?\n   Recompile it and replace sqlite3.dll. 32-bit version is required.\n   For an encryption support you should rebuild SQLite3 Multiple Cipher\n   library. Check Wiki to get more details.\n\n" \
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
 		"* You can define your own types in the data generator by adding rows to \n   table ""generators"" in ""prefs.sqlite"". The type is defined by ""type"" column.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
@@ -784,6 +837,7 @@ BEGIN
 END
 
 IDI_LOGO ICON "resources/logo.ico"
+IDI_LOGO2 ICON "resources/logo2.ico"
 IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
 IDB_TOOLBAR_DATA BITMAP "resources/toolbar_data.bmp"
 IDB_DIAGRAM_TOOLBAR BITMAP "resources/toolbar_diagram.bmp"

@@ -932,17 +932,8 @@ namespace tools {
 						return MessageBox(hWnd, TEXT("Specify a compared database"), NULL, 0);
 
 					sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
-					sqlite3_stmt *stmt;
-					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "attach database ?1 as compared", -1, &stmt, 0);
-					if (rc) {
-						char* path8 = utils::utf16to8(path16);
-						sqlite3_bind_text(stmt, 1, path8, strlen(path8), SQLITE_TRANSIENT);
-						delete [] path8;
-
-						rc = SQLITE_DONE == sqlite3_step(stmt);
-					}
-					sqlite3_finalize(stmt);
-
+					char* path8 = utils::utf16to8(path16);
+					bool rc = attachDb(&db, path8, "compared");
 					BOOL isSchema = wParam == IDC_DLG_COMPARE_SCHEMA;
 
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF), isSchema ? SW_SHOW : SW_HIDE);
@@ -957,6 +948,7 @@ namespace tools {
 					SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, TEXT(""));
 					ListView_Reset(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS));
 
+					sqlite3_stmt *stmt;
 					if (rc && isSchema) {
 						HWND hDiffWnd = GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF);
 						sqlite3_prepare_v2(db,
@@ -1734,11 +1726,9 @@ namespace tools {
 					rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
 				sqlite3_finalize(stmt);
 
-				if (!rc)
-					return showDbError(hWnd);
-
 				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' from dbstat s left join temp.row_statistics r on s.name = r.name  group by s.name;", -1, &stmt, 0))
 					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_STATISTICS), stmt);
+
 				sqlite3_finalize(stmt);
 			}
 			break;

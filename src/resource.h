@@ -11,6 +11,7 @@
 #define IDD_EDITDATA_VALUE         21
 #define IDD_VIEWDATA_VALUE         22
 #define IDD_BIND_PARAMETERS        23
+#define IDD_ENCRYPTION             24
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -128,6 +129,31 @@
 #define IDC_DLG_GRID_COLOR         210 // + 4 next
 #define IDC_DLG_GRID_COLOR_EDIT    220
 
+#define IDC_DLG_CIPHER_KEY                  227
+#define IDC_DLG_CIPHER_STORE_KEY            228
+#define IDC_DLG_CIPHER                      229
+#define IDC_DLG_CIPHER_LEGACY               230 // iterable!
+#define IDC_DLG_CIPHER_PAGESIZE_LABEL       231
+#define IDC_DLG_CIPHER_PAGESIZE             232
+#define IDC_DLG_CIPHER_PROFILE_LABEL        233
+#define IDC_DLG_CIPHER_PROFILE              234
+#define IDC_DLG_CIPHER_KDF_ITER_LABEL       235
+#define IDC_DLG_CIPHER_KDF_ITER             236
+#define IDC_DLG_CIPHER_KDF_ALGORITHM_LABEL  237
+#define IDC_DLG_CIPHER_KDF_ALGORITHM        238
+#define IDC_DLG_CIPHER_HMAC_USE_LABEL       239
+#define IDC_DLG_CIPHER_HMAC_USE             240
+#define IDC_DLG_CIPHER_HMAC_ALGORITHM_LABEL 241
+#define IDC_DLG_CIPHER_HMAC_ALGORITHM       242
+#define IDC_DLG_CIPHER_FAST_KDF_ITER_LABEL  243
+#define IDC_DLG_CIPHER_FAST_KDF_ITER        244
+#define IDC_DLG_CIPHER_HMAC_SALT_LABEL      245
+#define IDC_DLG_CIPHER_HMAC_SALT            246
+#define IDC_DLG_CIPHER_HMAC_PGNO_LABEL      247
+#define IDC_DLG_CIPHER_HMAC_PGNO            248
+#define IDC_DLG_CIPHER_HEADER_SIZE_LABEL    249
+#define IDC_DLG_CIPHER_HEADER_SIZE          250
+
 
 #define IDC_DLG_GEN_ISTRUNCATE     260
 #define IDC_DLG_GEN_ROW_COUNT      261
@@ -164,8 +190,9 @@
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
 #define IDM_EXIT                   1403
-#define IDM_ATTACH                 1404
-#define IDM_SETTINGS               1405
+#define IDM_ENCRYPTION             1404
+#define IDM_ATTACH                 1405
+#define IDM_SETTINGS               1406
 
 
 #define IDM_SAVE                   1511
@@ -279,8 +306,9 @@
 #define IDC_DATABASE_DIAGRAM_TABLE 5000
 
 #define IDI_LOGO                   6000
-#define IDB_TREEVIEW               6001
-#define IDB_TOOLBAR                6002
+#define IDI_LOGO2                  6001
+#define IDB_TREEVIEW               6002
+#define IDB_TOOLBAR                6003
 #define IDB_DIAGRAM_TOOLBAR        6006
 #define IDB_TOOLBAR_DATA           6010
 
@@ -324,6 +352,10 @@
 #define WMU_OBJECT_CREATED         WM_USER + 18
 #define WMU_APPEND_TEXT            WM_USER + 19
 #define WMU_SET_SCROLL_HEIGHT      WM_USER + 20
+#define WMU_CIPHER_CHANGED         WM_USER + 21
+#define WMU_SET_VALUE              WM_USER + 22
+#define WMU_GET_VALUE              WM_USER + 23
+#define WMU_SET_ICON               WM_USER + 24
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

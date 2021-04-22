@@ -72,6 +72,7 @@ extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
 void setEditorFont(HWND hWnd);
 void setTreeFont(HWND hWnd);
 
+bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
 void search(HWND hWnd);
 void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorEvents(MSGFILTER* pF);
