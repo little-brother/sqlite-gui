@@ -50,8 +50,9 @@
 			<Add library="user32" />
 			<Add library="kernel32" />
 			<Add library="comctl32" />
-			<Add library="C:/MinGW/lib/libcomdlg32.a" />
-			<Add library="C:/MinGW/lib/libshlwapi.a" />
+			<Add library="libgdiplus" />
+			<Add library="libcomdlg32" />
+			<Add library="libshlwapi" />
 			<Add library="lib/libsqlite3.a" />
 		</Linker>
 		<Unit filename="ToDo.txt" />

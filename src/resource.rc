@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 5, 0, 0
+FILEVERSION 1, 5, 1, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.5.0\000"
+			VALUE "FileVersion", "1.5.1\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.5.0\000"
+			VALUE "ProductVersion", "1.5.1\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -136,7 +136,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 50, 50, 200, 295 + 20
+IDD_SETTINGS DIALOGEX 50, 50, 200, 315
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | WS_CLIPCHILDREN
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -419,9 +419,9 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_CHART DIALOGEX 40, 30, 420, 260
-	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU
-	CAPTION ""
+IDD_CHART DIALOGEX 40, 30, 400, 260
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Chart"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 END
@@ -676,6 +676,28 @@ BEGIN
 	END
 END
 
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_QUERYLIST MENU
+BEGIN
+	POPUP "Query"
+	BEGIN
+		MENUITEM "Add to current editor\tEnter", IDM_QUERY_ADD_OLD
+		MENUITEM "Open in a new editor\tSpace", IDM_QUERY_ADD_NEW
+		MENUITEM SEPARATOR
+		MENUITEM "Delete\tDel", IDM_QUERY_DELETE
+	END
+END
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_CHART MENU
+BEGIN
+	POPUP "Chart"
+	BEGIN
+		MENUITEM "Copy to clipboard", IDM_EXPORT_CLIPBOARD
+		MENUITEM "Save as .png", IDM_EXPORT_PNG
+	END
+END
+
 IDA_ACCEL ACCELERATORS
 BEGIN
 	VK_ESCAPE, IDM_ESCAPE, VIRTKEY
@@ -764,6 +786,7 @@ BEGIN
 		"   tabs you should use SHARED-schema instead TEMP. Check Wiki for details.\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
 		"* In the batch mode all queries are executed in a one implicit transaction.\n\n" \
+		"* An query result can be viewed as a chart. The chart type is defined by\n   first column values: numbers or dates (YYYY-MM-DD) - plot, texts - bars.\n\n" \
 		"* Edit data dialog \n"
 		"   The dialog uses auto-transaction. So all changes are applied immediately.\n" \
 		"   The dialog doesn't block the main window, so you can open multiply tables \n" \
@@ -827,6 +850,11 @@ BEGIN
 		"So some bugs with datetime and database specific types are expected. "\
 		"To avoid this issue you could convert types to text/number before export or import.\n\n" \
 		"Check the Wiki for troubleshooting."
+
+	IDS_CLI_HELP "Terminal help\n" \
+		".help - Show help\n"	\
+		".clear - Clear terminal\n"	\
+		".last N - Load last N results"	\
 
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"

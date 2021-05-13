@@ -1,7 +1,9 @@
 #include <windows.h>
+#include <gdiplus.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
 #include <math.h>
 #include "utils.h"
 
@@ -338,5 +340,21 @@ namespace utils {
 			*out = d;
 
 		return rc;
+	}
+
+	bool isDate(const TCHAR* str, double* utc) {
+		if (_tcslen(str) < 8)
+			return false;
+
+		struct tm tm{0};
+		if (_stscanf(str, TEXT("%d%*c%d%*c%d %d%*c%d%*c%d"), &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min, &tm.tm_sec) < 3)
+			return false;
+
+		tm.tm_year -= 1900;
+		tm.tm_mon -= 1;
+		tm.tm_isdst = 0;
+		*utc = (double)mktime(&tm);
+
+		return true;
 	}
 }

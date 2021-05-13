@@ -177,6 +177,8 @@
 #define IDC_MENU_EDIT_DATA         503
 #define IDC_MENU_BLOB              504
 #define IDC_MENU_DIAGRAM           505
+#define IDC_MENU_QUERYLIST         506
+#define IDC_MENU_CHART             507
 
 #define IDC_MENU_TABLEVIEW         510
 #define IDC_MENU_INDEXTRIGGER      511
@@ -260,6 +262,11 @@
 #define IDM_DEMODB_NORTHWIND       1632
 #define IDM_DEMODB_WORLD           1633
 
+#define IDM_QUERY_COPY             1650
+#define IDM_QUERY_ADD_NEW          1651
+#define IDM_QUERY_ADD_OLD          1652
+#define IDM_QUERY_DELETE           1653
+
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
 #define IDM_EDIT                   1703
@@ -284,7 +291,8 @@
 #define IDM_ROW_REFRESH            1725
 #define IDM_ROW_DUPLICATE          1726
 #define IDM_LAST_SEPARATOR         1727
-#define IDM_TEST                   1730
+#define IDM_EXPORT_PNG             1729
+#define IDM_EXPORT_CLIPBOARD       1730
 
 #define IDM_LINK_FK                1731
 #define IDM_LINK_VIEW              1732
@@ -325,6 +333,7 @@
 #define IDS_EXTENSIONS             10013
 #define IDS_WELCOME                10015
 #define IDS_ODBC_HELP              10016
+#define IDS_CLI_HELP               10017
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -356,6 +365,7 @@
 #define WMU_SET_VALUE              WM_USER + 22
 #define WMU_GET_VALUE              WM_USER + 23
 #define WMU_SET_ICON               WM_USER + 24
+#define WMU_OPEN_NEW_TAB           WM_USER + 25
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

@@ -47,6 +47,9 @@ SQLITE_EXTENSION_INIT1
 #include <stdio.h>
 #include <cstring>
 #include "pugixml.hpp"
+extern "C" {
+	#include "uthash.h"
+}
 
 /* Auxiliaries */
 struct xml_memory_writer: pugi::xml_writer {
@@ -334,6 +337,12 @@ struct xml_vtab {
 	sqlite3_vtab base;
 };
 
+struct node_hash {
+    size_t hash_value;
+    int id;
+    UT_hash_handle hh;
+};
+
 typedef struct xml_cursor xml_cursor;
 struct xml_cursor {
 	sqlite3_vtab_cursor base;
@@ -342,10 +351,23 @@ struct xml_cursor {
 	int isEof; 
 	char* xml;	
 	char* path;
+	node_hash* hashes;
 	pugi::xml_document* doc;
 	pugi::xpath_node_set nodes;
 	pugi::xpath_node_set::const_iterator it;
 };
+
+static void hashNode(xml_cursor* pCur, pugi::xml_node* node, int* id) {
+	node_hash *nh = new node_hash();
+	int hash_value = node->hash_value();
+    nh->hash_value = hash_value;
+	nh->id = *id;
+    HASH_ADD_INT(pCur->hashes, hash_value, nh);
+	(*id)++;
+		
+	for (pugi::xml_node child: node->children())
+		hashNode(pCur, &child, id);
+}
 
 static int xmlConnect(sqlite3 *db, void *pAux, int argc, const char *const*argv, sqlite3_vtab **ppVtab, char **pzErr){
 	int rc = sqlite3_declare_vtab(db, "CREATE TABLE x(value text, pid integer, id integer, xml hidden, xpath hidden)");
@@ -381,6 +403,7 @@ static int xmlOpen(sqlite3_vtab *pVtab, sqlite3_vtab_cursor **ppCursor){
 	pCur->path = 0;
 	pCur->isEof = 1;
 	pCur->doc = 0;
+	pCur->hashes = 0;
 
 	return SQLITE_OK;
 }
@@ -394,6 +417,12 @@ static int xmlClose(sqlite3_vtab_cursor *cur){
 		
 	if (pCur->doc)
 		delete pCur->doc;	
+		
+	node_hash *nh, *tmp;
+	HASH_ITER(hh, pCur->hashes, nh, tmp) {
+		HASH_DEL(pCur->hashes, nh);
+		delete nh;
+	}		
 
 	sqlite3_free(pCur);
 	
@@ -413,6 +442,14 @@ static int xmlNext(sqlite3_vtab_cursor *cur){
 static int xmlColumn(sqlite3_vtab_cursor* cur, sqlite3_context* ctx, int colNo) {
 	xml_cursor *pCur = (xml_cursor*)cur;
 	xml_vtab *pTab = (xml_vtab*)(&pCur->base);
+	
+	auto getNodeId = [pCur](int hash_value) {
+		struct node_hash *nh;
+	
+	    HASH_FIND_INT(pCur->hashes, &hash_value, nh);
+	    return nh ? nh->id : -1;
+	};
+	
 	if (colNo == 0) {
 		char* buf = 0;
 		pugi::xpath_node e = *(pCur->it);
@@ -433,10 +470,12 @@ static int xmlColumn(sqlite3_vtab_cursor* cur, sqlite3_context* ctx, int colNo) 
 		}
 	} else if (colNo == 1) { // pid
 		pugi::xpath_node e = *(pCur->it);
-		sqlite3_result_int(ctx, e.node() ? e.parent().hash_value() : e.parent().parent().hash_value());	
+		int hash_value = e.node() ? e.parent().hash_value() : e.parent().parent().hash_value();
+		sqlite3_result_int(ctx, getNodeId(hash_value));	
 	} else if (colNo == 2) { // id
 		pugi::xpath_node e = *(pCur->it);
-		sqlite3_result_int(ctx, e.node() ? e.node().hash_value() : e.parent().hash_value());	
+		int hash_value = e.node() ? e.node().hash_value() : e.parent().hash_value();
+		sqlite3_result_int(ctx, getNodeId(hash_value));	
 	} else if (colNo == 3) {
 		sqlite3_result_text(ctx, (char*)pCur->xml, -1, SQLITE_TRANSIENT);
 	} else {
@@ -468,30 +507,35 @@ static int xmlFilter(sqlite3_vtab_cursor *cur, int idxNum, const char *idxStr, i
 	if (sqlite3_value_type(argv[0]) != SQLITE_TEXT)
 		return SQLITE_ERROR;
 		
-	const char* xml = (const char*)sqlite3_value_text(argv[0]);
-	pCur->xml = (char*)malloc(sizeof(char) * (strlen(xml) + 1));
-	sprintf(pCur->xml, xml);
-
-	pCur->doc = new pugi::xml_document();
-	pugi::xml_parse_result result = pCur->doc->load_string(pCur->xml);
-	if (!result)
-		return SQLITE_ERROR;
+	if (pCur->xml == NULL) {		
+		const char* xml = (const char*)sqlite3_value_text(argv[0]);
+		pCur->xml = (char*)malloc(sizeof(char) * (strlen(xml) + 1));
+		sprintf(pCur->xml, xml);
 	
-	if (argc == 2 && sqlite3_value_type(argv[1]) == SQLITE_TEXT) {
-		const char* path = (const char*)sqlite3_value_text(argv[1]);
-		pCur->path = (char*)calloc(sizeof(char), strlen(path) + 1);
-		sprintf(pCur->path, path);
-	} else {
-		pCur->path = (char*)calloc(sizeof(char), 1);
+		pCur->doc = new pugi::xml_document();
+		pugi::xml_parse_result result = pCur->doc->load_string(pCur->xml);
+		if (!result)
+			return SQLITE_ERROR;
+		
+		int id = 1;	
+		hashNode(pCur, pCur->doc, &id);
+		
+		if (argc == 2 && sqlite3_value_type(argv[1]) == SQLITE_TEXT) {
+			const char* path = (const char*)sqlite3_value_text(argv[1]);
+			pCur->path = (char*)calloc(sizeof(char), strlen(path) + 1);
+			sprintf(pCur->path, path);
+		} else {
+			pCur->path = (char*)calloc(sizeof(char), 1);
+		}
+		
+		try {
+			pCur->nodes = pCur->doc->select_nodes(strlen(pCur->path) ? pCur->path : "/");
+		} catch (pugi::xpath_exception& err) {
+			return SQLITE_ERROR;
+		}
 	}
-	
-	try {
-		pCur->nodes = pCur->doc->select_nodes(strlen(pCur->path) ? pCur->path : "/");
-	} catch (pugi::xpath_exception& err) {
-		return SQLITE_ERROR;
-	}
+		
 	pCur->it = pCur->nodes.begin();		
-
 	pCur->iRowid = 1;
 	pCur->isEof = pCur->it == pCur->nodes.end();
 	return SQLITE_OK;
@@ -501,16 +545,19 @@ static int xmlBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 	if (!pIdxInfo->nConstraint)
 		return SQLITE_RANGE;
 			
-	// I don't know what is it :(
 	int i, j;
 	int idxNum = 0;
 	int unusableMask = 0;
 	int nArg = 0;
-	int aIdx[2]; // xml, xpath
+	
 	int nCol = 3; // id, pid, id
+	int nHid = 2; // xml, xpath 
+	int aIdx[nHid];
+	
+	for (i = 0; i < nHid; i++)
+		aIdx[i] = -1;
+		
 	sqlite3_index_info::sqlite3_index_constraint* pConstraint;
-
-	aIdx[0] = aIdx[1] = -1;
 	pConstraint = (sqlite3_index_info::sqlite3_index_constraint*)pIdxInfo->aConstraint;
 	for(i = 0; i < pIdxInfo->nConstraint; i++, pConstraint++) {
 		int iCol;
@@ -529,7 +576,7 @@ static int xmlBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 		}
 	}
 	
-	for(i = 0; i < 2; i++) {
+	for(i = 0; i < nHid; i++) {
 		if((j = aIdx[i]) >= 0){
 			pIdxInfo->aConstraintUsage[j].argvIndex = ++nArg;
 			pIdxInfo->aConstraintUsage[j].omit = 0;

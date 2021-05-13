@@ -33,6 +33,7 @@
 	select strpart('ab-cd-ef', '-', 2) --> 'cd'
 	select strpart('20.01.2021', '.', 3) --> 2021
 	select strpart('20-01/20/21', '-/', -2) --> 20
+	select strpart('D:/Docs/Book1.xls', '.', -2) --> Book1
 	
 	conv(num, from_base, to_base);
 	Converts a number from one numeric base number system to another numeric base number system. 
@@ -532,7 +533,7 @@ static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	} else {
 		partNo -= 1;
 	}
-	
+		
 	int start = 0, end = 0, eq = 0;
 	int i = 0;
 	while ((i < len) && (end == 0)) {
@@ -557,7 +558,7 @@ static void strpart (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	if (start > end)
 		end = len;
 	
-	if (start != 0) {
+	if (end != 0) {
 		char res[end - start + 1];
 		memcpy(res, &instr[start], end - start);
 		res[end - start] = 0;

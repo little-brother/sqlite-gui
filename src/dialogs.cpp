@@ -1,3 +1,4 @@
+#include <gdiplus.h>
 #include "resource.h"
 #include "global.h"
 #include "prefs.h"
@@ -453,6 +454,8 @@ namespace dialogs {
 
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 				SendMessage(hWnd, WM_SIZE, 0, 0);
+
+				SetProp(hWnd, TEXT("MENU"), (HANDLE)LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_QUERYLIST)));
 			}
 			break;
 
@@ -479,20 +482,50 @@ namespace dialogs {
 			}
 			break;
 
+			case WM_CONTEXTMENU: {
+				POINT p = {LOWORD(lParam), HIWORD(lParam)};
+				HMENU hMenu = (HMENU)GetProp(hWnd, TEXT("MENU"));
+				TrackPopupMenu(GetSubMenu(hMenu, 0), TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+			}
+			break;
+
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				if (pHdr->code == (DWORD)NM_DBLCLK)
-					PostMessage(hWnd, WM_COMMAND, IDOK, 0);
+					SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_OLD, 0);
 
 				if (pHdr->code == LVN_KEYDOWN) {
-					HWND hListWnd = pHdr->hwndFrom;
 					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
-					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
-					if (kd->wVKey == VK_DELETE && pos != -1) {
-						int idx = GetWindowLong(hWnd, GWL_USERDATA);
-						TCHAR query16[MAX_TEXT_LENGTH];
-						ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
+					if (kd->wVKey == VK_DELETE)
+						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_DELETE, 0);
+					if (kd->wVKey == VK_RETURN)
+						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_OLD, 0);
+					if (kd->wVKey == VK_SPACE)
+						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_NEW, 0);
+					if (kd->wVKey == 0x43) // Ctrl + C
+						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_COPY, 0);
+				}
+			}
+			break;
 
+			case WM_COMMAND: {
+				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER) && (HWND)lParam == GetFocus()) {
+					KillTimer(hWnd, IDT_EDIT_DATA);
+					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
+					return true;
+				}
+
+				if (wParam == IDM_QUERY_DELETE || wParam == IDM_QUERY_ADD_NEW || wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_COPY) {
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+					if (pos == -1)
+						return false;
+
+					int idx = GetWindowLong(hWnd, GWL_USERDATA);
+					TCHAR query16[MAX_TEXT_LENGTH];
+					ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
+
+					if (wParam == IDM_QUERY_DELETE) {
 						char sql8[256];
 						sprintf(sql8, "delete from %s where query = ?1", idx == IDM_HISTORY ? "history" : "gists");
 
@@ -508,32 +541,20 @@ namespace dialogs {
 						ListView_DeleteItem(hListWnd, pos);
 						ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
 					}
-				}
-			}
-			break;
 
-			case WM_COMMAND: {
-				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER) && (HWND)lParam == GetFocus()) {
-					KillTimer(hWnd, IDT_EDIT_DATA);
-					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
-					return true;
+					if (wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_ADD_NEW) {
+						if (wParam == IDM_QUERY_ADD_NEW)
+							PostMessage(hMainWnd, WMU_OPEN_NEW_TAB, 0, 0);
+						PostMessage(hMainWnd, WMU_APPEND_TEXT, (WPARAM)query16, 0);
+						EndDialog(hWnd, DLG_OK);
+					}
+
+					if (wParam == IDM_QUERY_COPY)
+						utils::setClipboardText(query16);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
-
-				if (wParam == IDOK) {
-					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
-					int iPos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
-					if (iPos == -1)
-						break;
-
-					TCHAR buf[MAX_TEXT_LENGTH];
-					ListView_GetItemText(hListWnd, iPos, 2, buf, MAX_TEXT_LENGTH);
-
-					SendMessage(hMainWnd, WMU_APPEND_TEXT, (WPARAM)buf, 0);
-					EndDialog(hWnd, DLG_OK);
-				}
 			}
 			break;
 
@@ -549,7 +570,7 @@ namespace dialogs {
 				char* filter8 = utils::utf16to8(filter16);
 
 				char sql8[512];
-				sprintf(sql8, "select strftime('%%d-%%m-%%Y %%H:%%M', time, 'unixepoch') Date, query Query from %s %s order by time desc limit %i",
+				sprintf(sql8, "select strftime('%%Y-%%m-%%d %%H:%%M', time, 'unixepoch') Date, query Query from %s %s order by time desc limit %i",
 					idx == IDM_HISTORY ? "history" : "gists", strlen(filter8) ? "where query like '%' || ?1 || '%'" : "", prefs::get("max-query-count"));
 
 				sqlite3_stmt* stmt;
@@ -566,6 +587,8 @@ namespace dialogs {
 			break;
 
 			case WM_CLOSE: {
+				DestroyMenu((HMENU)GetProp(hWnd, TEXT("MENU")));
+				RemoveProp(hWnd, TEXT("MENU"));
 				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
@@ -593,9 +616,12 @@ namespace dialogs {
 
 				sqlite3_stmt *stmt;
 				bool isTable = false;
-				sprintf(query8, "select lower(type) = 'table' from %s.sqlite_master where tbl_name = '%s' and type in ('view', 'table')", schema8, tablename8);
-				if ((SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) && (SQLITE_ROW == sqlite3_step(stmt)))
-					isTable = sqlite3_column_int(stmt, 0);
+				sprintf(query8, "select lower(type) = 'table' from \"%s\".sqlite_master where tbl_name = ?1 and type in ('view', 'table')", schema8);
+				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+					sqlite3_bind_text(stmt, 1, tablename8, strlen(tablename8), SQLITE_TRANSIENT);
+					if (SQLITE_ROW == sqlite3_step(stmt))
+						isTable = sqlite3_column_int(stmt, 0);
+				}
 				sqlite3_finalize(stmt);
 				SetProp(hWnd, TEXT("ISTABLE"), (HANDLE)+isTable);
 
@@ -612,18 +638,22 @@ namespace dialogs {
 						"select '\"' || group_concat(name, '\",\"') || '\"', " \
 						"'md5(coalesce(\"' || group_concat(name, '\", \"~~~\") || ''***'' || coalesce(\"') || '\", \"~~~\"))', " \
 						"count(1) "
-						"from pragma_table_info('%s') where %s and schema = '%s' order by pk ", tablename8, isTable ? "pk > 0" : "1=1", schema8);
-					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0) && SQLITE_ROW == sqlite3_step(stmt)) {
-						SetProp(hWnd, TEXT("KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 0)));
-						SetProp(hWnd, TEXT("MD5KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 1)));
-						SetProp(hWnd, TEXT("KEYCOUNT"), (HANDLE)sqlite3_column_int(stmt, 2));
-						sqlite3_finalize(stmt);
+						"from pragma_table_info(?2) where %s and schema = ?1 order by pk ", isTable ? "pk > 0" : "1=1");
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, schema8, strlen(schema8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, tablename8, strlen(tablename8), SQLITE_TRANSIENT);
+						if (SQLITE_ROW == sqlite3_step(stmt)) {
+							SetProp(hWnd, TEXT("KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 0)));
+							SetProp(hWnd, TEXT("MD5KEYS8"), (HANDLE)strdup((char*)sqlite3_column_text(stmt, 1)));
+							SetProp(hWnd, TEXT("KEYCOUNT"), (HANDLE)sqlite3_column_int(stmt, 2));
+						}
 					} else {
 						sqlite3_finalize(stmt);
 						showDbError(hWnd);
 						SendMessage(hWnd, WM_CLOSE, 0, 0);
 						return 0;
 					}
+					sqlite3_finalize(stmt);
 				}
 
 				bool isReadOnly = sqlite3_db_readonly(db, 0);
@@ -1599,7 +1629,6 @@ namespace dialogs {
 				}
 				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
 
-
 				bool hasScroll = colCount > 20;
 				SetWindowLong(hColumnsWnd, GWL_WNDPROC, (LONG)&cbNewScroll);
 				SetWindowPos(hWnd, 0, 0, 0, 400 + 15 * hasScroll, MIN(colCount, 20) * 20 + 57, SWP_NOMOVE | SWP_NOZORDER);
@@ -2156,6 +2185,254 @@ namespace dialogs {
 		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 	}
 
+	void drawChart(HWND hWnd, HDC hdc, int w, int h, int scrollY) {
+		int type = (int)GetProp(hWnd, TEXT("TYPE"));
+		double* data = (double*)GetProp(hWnd, TEXT("DATA"));
+		int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
+		int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
+		int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
+		bool isDate = (bool)GetProp(hWnd, TEXT("ISDATE"));
+
+		double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
+		double minX = minmax[0];
+		double maxX = minmax[1];
+		double minY = minmax[2];
+		double maxY = minmax[3];
+
+		HWND hListWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+		HWND hHeader = ListView_GetHeader(hListWnd);
+		SelectFont(hdc, hDefFont);
+
+		if (type == CHART_NONE) {
+			RECT rc = {0, 0, w, h}, rc2 = {0, 0, w, h};
+			TCHAR text[] = TEXT("Not enough data to chart.\nVisit Wiki if you have questions.");
+			DrawText(hdc, text, _tcslen(text), &rc2, DT_CALCRECT);
+			rc.top = rc.bottom / 2 - rc2.bottom / 2;
+			DrawText(hdc, text, _tcslen(text), &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_EXPANDTABS);
+		}
+
+		if (type == CHART_BARS) {
+			HBRUSH hNullBrush = CreateSolidBrush(RGB(200, 200, 200));
+			double minV = MIN(minX, minY);
+			minV = MIN(0, minV);
+			double maxV = MAX(maxX, maxY);
+
+			int barNo = 0;
+			for (int colNo = 2; colNo < colCount; colNo++) {
+				bool isEmpty = true;
+				for (int rowNo = 0; rowNo < rowCount; rowNo++)
+					isEmpty = isEmpty && (data[colNo * rowCount + rowNo] == CHART_NULL);
+
+				if (isEmpty)
+					continue;
+
+				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+					double val = data[colNo * rowCount + rowNo];
+					bool isNull = val == CHART_NULL;
+
+					// Attribute bar
+					int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * barNo;
+					int left = CHART_BARS_LEFT + map(0, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT);
+					int right = CHART_BARS_LEFT + (!isNull ? map(val, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT) : left - CHART_BARS_LEFT + 40);
+					if (left == right)
+						right += 2;
+
+					if (left > right) {
+						int tmp = left;
+						left = right;
+						right = tmp;
+					}
+
+					SelectBrush(hdc, isNull ? hNullBrush : hBrushes[barNo % MAX_CHART_COLOR_COUNT]);
+					Rectangle(hdc, left, top - scrollY, right, top + CHART_BAR_HEIGHT - scrollY);
+
+					// Value and title on bar
+					bool isValueInside = (right - left > 30) || (!isNull && val < 0);
+					RECT rc {left + 10, top - scrollY, isValueInside ? right - 10 : right + 30, top + CHART_BAR_HEIGHT - scrollY};
+					TCHAR val16[64];
+					if (isNull)
+						_stprintf(val16, TEXT("N/A"));
+					else
+						_stprintf(val16, TEXT("%g"), data[colNo * rowCount + rowNo]);
+					SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[barNo % MAX_CHART_COLOR_COUNT] : RGB(255, 255, 255));
+					SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
+					DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
+
+					if (right - left > 60) {
+						TCHAR attr[256]{0};
+						Header_GetItemText(hHeader, colNo, attr, 255);
+						DrawText(hdc, attr, _tcslen(attr), &rc, (val > 0 ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE);
+					}
+				}
+				barNo++;
+			}
+
+			// Group title
+			for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+				int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) - scrollY;
+				RECT rc = {CHART_BORDER, top, CHART_BARS_LEFT - 10, top + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * dataColCount - CHART_BAR_SPACE};
+				TCHAR name[256]{0};
+				ListView_GetItemText(hListWnd, rowNo, 1, name, 255);
+
+				SetTextColor(hdc, RGB(0, 0, 0));
+				SetBkColor(hdc, RGB(255, 255, 255));
+				DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			}
+
+			DeleteObject(hNullBrush);
+		}
+
+		if (type == CHART_PLOT) {
+			HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+			SelectObject(hdc, hPen);
+
+			// Grid
+			// https://stackoverflow.com/a/18049477/6121703
+			auto findDelta = [](float maxvalue, int count) {
+				float step = maxvalue/count,
+					 order = powf(10, floorf(log10(step))),
+					 delta = (int)(step/order + 0.5);
+
+				static float ndex[] = {1, 1.5, 2, 2.5, 5, 10};
+				static int ndexLenght = sizeof(ndex)/sizeof(float);
+				for (int i = ndexLenght - 2; i > 0; --i)
+					if(delta > ndex[i]) return ndex[i + 1] * order;
+				return delta * order;
+			};
+
+			int x = 0;
+			if (isDate) {
+				int DAY = 60 * 60 * 24;
+				double dst = maxX - minX;
+				double d =  dst <= DAY ? DAY / 24 : dst <= 7 * DAY ? DAY : DAY * 30;
+				for (int i = 0; minX + d * i < maxX + d; i++) {
+					double x0 = minX + d * i;
+					x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					if (x > w - CHART_BORDER) {
+						x0 = maxX;
+						x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					}
+
+					MoveToEx(hdc, x, CHART_BORDER, NULL);
+					LineTo(hdc, x, h - CHART_BORDER);
+
+					TCHAR val[64];
+					time_t rawtime = x0;
+					struct tm ts = *localtime(&rawtime);
+					_tcsftime(val, 64, dst < DAY ? TEXT("%Y-%m-%d %H:%M") : TEXT("%Y-%m-%d"), &ts);
+
+					RECT rc {x - 30, 10, x + 30, CHART_BORDER + 5};
+					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_WORDBREAK | DT_CENTER);
+					RECT rc2 {x - 30, h - CHART_BORDER + 10, x + 30, h};
+					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER);
+				}
+			} else {
+				double d = findDelta(maxX - minX, CHART_GRID);
+				for (int i = 0; minX + d * i < maxX + d; i++) {
+					double x0 = minX + d * i;
+					x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					if (x > w - CHART_BORDER) {
+						x0 = maxX;
+						x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					}
+
+					MoveToEx(hdc, x, CHART_BORDER, NULL);
+					LineTo(hdc, x, h - CHART_BORDER);
+
+					TCHAR val[64];
+					_stprintf(val, TEXT("%g"), x0);
+
+					RECT rc {x - 30, 0, x + 30, CHART_BORDER - 5};
+					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_SINGLELINE | DT_CENTER);
+					RECT rc2 {x - 30, h - CHART_BORDER + 5, x + 30, h};
+					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_SINGLELINE | DT_CENTER);
+				}
+			}
+
+			int y = 0;
+			double d = findDelta(maxY - minY, CHART_GRID);
+			for (int i = 0; minY + d * i < maxY + d; i++) {
+				y = map(minY + d * i, minY, maxY, CHART_BORDER, h - CHART_BORDER);
+				if (h - y < CHART_BORDER)
+					break;
+
+				MoveToEx(hdc, CHART_BORDER, y, NULL);
+				LineTo(hdc, x, y);
+
+				TCHAR val[64];
+				_stprintf(val, TEXT("%g"), minY + d * i);
+				RECT rc {0, h - y - 10, CHART_BORDER - 5, h - y + 10};
+				DrawText(hdc, val, _tcslen(val), &rc, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+				RECT rc2 {x + 5, h - y - 10, w, h - y + 8};
+				DrawText(hdc, val, _tcslen(val), &rc2, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+			}
+
+			// Lines
+			int lineNo = 0;
+			int* points = (int*)GetProp(hWnd, TEXT("POINTS"));
+			for (int colNo = 2; colNo < colCount; colNo++) {
+				if (points[colNo] == -1) {
+					lineNo++;
+					continue;
+				}
+
+				SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+				int pointCount = 0;
+
+				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+					if (data[rowCount + rowNo] == CHART_NULL || data[colNo * rowCount + rowNo] == CHART_NULL)
+						continue;
+
+					if (!pointCount) {
+						double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+						double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+						MoveToEx(hdc, x, y, NULL);
+						pointCount++;
+						continue;
+					}
+
+					double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+					LineTo(hdc, x, y);
+
+					pointCount++;
+				}
+
+				if (pointCount > 0) {
+					points[colNo] = pointCount;
+					lineNo++;
+				}
+			}
+
+			lineNo = 0;
+			for (int colNo = 2; colNo < colCount; colNo++) {
+				if (points[colNo] != 0) {
+					TCHAR name16[256];
+					Header_GetItemText(hHeader, colNo, name16, 255);
+
+					int x = w - 100;
+					int y = CHART_BORDER + 5 + lineNo * 15;
+					SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+					SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+					Ellipse(hdc, x - 15, y + 2, x - 5, y + 12);
+
+					SetTextColor(hdc, points[colNo] > 0 ? RGB(0, 0, 0) : RGB(200, 200, 200));
+					TextOut(hdc, x, y, name16, _tcslen(name16));
+					lineNo++;
+				}
+			}
+			SetTextColor(hdc, RGB(0, 0, 0));
+
+			if (lineNo == 0) {
+				SetProp(hWnd, TEXT("TYPE"), (HANDLE)CHART_NONE);
+				PostMessage(hWnd, WM_PAINT, 0, 0);
+			}
+
+			DeleteObject(hPen);
+		}
+	}
+
+	// lParam = hListWnd
 	BOOL CALLBACK cbDlgChart (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -2177,6 +2454,8 @@ namespace dialogs {
 				double minY = CHART_MAX;
 				double maxY = -CHART_MAX;
 
+				int dates = 0;
+
 				for (int i = 0; i < size; i++) {
 					rawdata[i] = CHART_NULL;
 					data[i] = CHART_NULL;
@@ -2187,12 +2466,18 @@ namespace dialogs {
 						TCHAR buf16[256]{0};
 						double val;
 						ListView_GetItemText(hListWnd, rowNo, colNo, buf16, 255);
-						if (_tcslen(buf16) && utils::isNumber(buf16, &val)) {
-							rawdata[colNo * rowCount + rowNo] = val;
-							minX = colNo == 1 ? MIN(val, minX) : minX;
-							maxX = colNo == 1 ? MAX(val, maxX) : maxX;
-							minY = colNo > 1 ? MIN(val, minY) : minY;
-							maxY = colNo > 1 ? MAX(val, maxY) : maxY;
+						if (_tcslen(buf16) > 0) {
+							bool isNumber =	utils::isNumber(buf16, &val);
+							bool isDate = (colNo == 1) && !isNumber && utils::isDate(buf16, &val);
+							if (isNumber || isDate)	{
+								rawdata[colNo * rowCount + rowNo] = val;
+								minX = colNo == 1 ? MIN(val, minX) : minX;
+								maxX = colNo == 1 ? MAX(val, maxX) : maxX;
+								minY = colNo > 1 ? MIN(val, minY) : minY;
+								maxY = colNo > 1 ? MAX(val, maxY) : maxY;
+							}
+
+							dates += isDate;
 						}
 					}
 				}
@@ -2253,6 +2538,11 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("COLCOUNT"), (HANDLE)colCount);
 				SetProp(hWnd, TEXT("ROWCOUNT"), (HANDLE)rowCount);
 				SetProp(hWnd, TEXT("DATACOLCOUNT"), (HANDLE)dataColCount);
+				SetProp(hWnd, TEXT("ISDATE"), (HANDLE)(dates > 1));
+				SetProp(hWnd, TEXT("MENU"), (HANDLE)LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_CHART)));
+				SetProp(hWnd, TEXT("POINTS"), (HANDLE)(new int[colCount]{0}));
+
+
 				SendMessage(hWnd, WM_PAINT, 0, 0);
 			}
 			break;
@@ -2270,11 +2560,17 @@ namespace dialogs {
 				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
 				delete [] minmax;
 				RemoveProp(hWnd, TEXT("MINMAX"));
+				RemoveProp(hWnd, TEXT("ISDATE"));
+
+				DestroyMenu((HMENU)GetProp(hWnd, TEXT("MENU")));
+				RemoveProp(hWnd, TEXT("MENU"));
 
 				for (int i = 0; i < MAX_CHART_COLOR_COUNT; i++) {
 					DeleteObject(hPens[i]);
 					DeleteObject(hBrushes[i]);
 				}
+
+				RemoveProp(hWnd, TEXT("SCROLLY"));
 			}
 			break;
 
@@ -2289,22 +2585,6 @@ namespace dialogs {
 
 			case WM_PAINT : {
 				InvalidateRect(hWnd, NULL, true);
-
-				int type = (int)GetProp(hWnd, TEXT("TYPE"));
-				double* data = (double*)GetProp(hWnd, TEXT("DATA"));
-				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
-				int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
-				int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
-
-				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
-				double minX = minmax[0];
-				double maxX = minmax[1];
-				double minY = minmax[2];
-				double maxY = minmax[3];
-
-				HWND hListWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
-				HWND hHeader = ListView_GetHeader(hListWnd);
-
 				RECT rc{0};
 				GetClientRect(hWnd, &rc);
 				int w = rc.right;
@@ -2313,182 +2593,8 @@ namespace dialogs {
 				PAINTSTRUCT ps{0};
 				ps.fErase = true;
 				HDC hdc = BeginPaint(hWnd, &ps);
-				SelectFont(hdc, hDefFont);
 
-				if (type == CHART_NONE) {
-					RECT rc = {0, 0, w, h}, rc2 = {0, 0, w, h};
-					TCHAR text[] = TEXT("Not enough data to chart.\nVisit Wiki if you have questions.");
-					DrawText(hdc, text, _tcslen(text), &rc2, DT_CALCRECT);
-					rc.top = rc.bottom / 2 - rc2.bottom / 2;
-					DrawText(hdc, text, _tcslen(text), &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_EXPANDTABS);
-				}
-
-				if (type == CHART_BARS) {
-					double minV = MIN(minX, minY);
-					minV = MIN(0, minV);
-					double maxV = MAX(maxX, maxY);
-
-					HBRUSH hNullBrush = CreateSolidBrush(RGB(200, 200, 200));
-
-					int barNo = 0;
-					for (int colNo = 2; colNo < colCount; colNo++) {
-						bool isEmpty = true;
-						for (int rowNo = 0; rowNo < rowCount; rowNo++)
-							isEmpty = isEmpty && (data[colNo * rowCount + rowNo] == CHART_NULL);
-
-						if (isEmpty)
-							continue;
-
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							double val = data[colNo * rowCount + rowNo];
-							bool isNull = val == CHART_NULL;
-
-							// Attribute bar
-							int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * barNo;
-							int left = CHART_BARS_LEFT + map(0, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT);
-							int right = CHART_BARS_LEFT + (!isNull ? map(val, minV, maxV, 0, w - CHART_BORDER - CHART_BARS_LEFT) : left - CHART_BARS_LEFT + 40);
-							if (left == right)
-								right += 2;
-
-							if (left > right) {
-								int tmp = left;
-								left = right;
-								right = tmp;
-							}
-
-							SelectBrush(hdc, isNull ? hNullBrush : hBrushes[barNo % MAX_CHART_COLOR_COUNT]);
-							Rectangle(hdc, left, top, right, top + CHART_BAR_HEIGHT);
-
-							// Value and title on bar
-							bool isValueInside = (right - left > 30) || (!isNull && val < 0);
-							RECT rc {left + 10, top, isValueInside ? right - 10 : right + 30, top + CHART_BAR_HEIGHT};
-							TCHAR val16[64];
-							if (isNull)
-								_stprintf(val16, TEXT("N/A"));
-							else
-								_stprintf(val16, TEXT("%g"), data[colNo * rowCount + rowNo]);
-							SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[barNo % MAX_CHART_COLOR_COUNT] : RGB(255, 255, 255));
-							SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
-							DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
-
-							if (right - left > 60) {
-								TCHAR attr[256]{0};
-								Header_GetItemText(hHeader, colNo, attr, 255);
-								DrawText(hdc, attr, _tcslen(attr), &rc, (val > 0 ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE);
-							}
-						}
-						barNo++;
-					}
-
-					// Group title
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10);
-						RECT rc = {CHART_BORDER, top, CHART_BARS_LEFT - 10, top + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * dataColCount - CHART_BAR_SPACE};
-						TCHAR name[256]{0};
-						ListView_GetItemText(hListWnd, rowNo, 1, name, 255);
-
-						SetTextColor(hdc, RGB(0, 0, 0));
-						SetBkColor(hdc, RGB(255, 255, 255));
-						DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-					}
-
-					DeleteObject(hNullBrush);
-				}
-
-				if (type == CHART_PLOT) {
-					HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
-					SelectObject(hdc, hPen);
-
-					// Grid
-					// https://stackoverflow.com/a/18049477/6121703
-					auto findDelta = [](float maxvalue, int count) {
-						float step = maxvalue/count,
-							 order = powf(10, floorf(log10(step))),
-							 delta = (int)(step/order + 0.5);
-
-						static float ndex[] = {1, 1.5, 2, 2.5, 5, 10};
-						static int ndexLenght = sizeof(ndex)/sizeof(float);
-						for (int i = ndexLenght - 2; i > 0; --i)
-							if(delta > ndex[i]) return ndex[i + 1] * order;
-						return delta * order;
-					};
-
-					double d = findDelta(maxX - minX, CHART_GRID);
-					int x = 0, y = 0;
-					for (int i = 0; minX + d * i < maxX + d; i++) {
-						x = map(minX + d * i, minX, maxX, CHART_BORDER, w - CHART_BORDER);
-						MoveToEx(hdc, x, CHART_BORDER, NULL);
-						LineTo(hdc, x, h - CHART_BORDER);
-
-						TCHAR val[64];
-						_stprintf(val, TEXT("%g"), minX + d * i);
-						RECT rc {x - 30, 0, x + 30, CHART_BORDER - 5};
-						DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_SINGLELINE | DT_CENTER);
-						RECT rc2 {x - 30, h - CHART_BORDER + 5, x + 30, h};
-						DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_SINGLELINE | DT_CENTER);
-					}
-
-					d = findDelta(maxY - minY, CHART_GRID);
-					for (int i = 0; minY + d * i < maxY + d; i++) {
-						y = map(minY + d * i, minY, maxY, CHART_BORDER, h - CHART_BORDER);
-						MoveToEx(hdc, CHART_BORDER, y, NULL);
-						LineTo(hdc, x, y);
-
-						TCHAR val[64];
-						_stprintf(val, TEXT("%g"), minY + d * i);
-						RECT rc {0, h - y - 10, CHART_BORDER - 5, h - y + 10};
-						DrawText(hdc, val, _tcslen(val), &rc, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
-						RECT rc2 {x + 5, h - y - 10, w, h - y + 8};
-						DrawText(hdc, val, _tcslen(val), &rc2, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-					}
-
-					// Lines
-					int lineNo = 0;
-					for (int colNo = 2; colNo < colCount; colNo++) {
-						SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
-						int pointCount = 0;
-
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							if (data[rowCount + rowNo] == CHART_NULL || data[colNo * rowCount + rowNo] == CHART_NULL)
-								continue;
-
-							if (!pointCount) {
-								double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-								double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
-								MoveToEx(hdc, x, y, NULL);
-								pointCount++;
-								continue;
-							}
-
-							double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-							double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
-							LineTo(hdc, x, y);
-
-							pointCount++;
-						}
-
-						if (pointCount > 1) {
-							TCHAR name16[256];
-							Header_GetItemText(hHeader, colNo, name16, 255);
-
-							int x = w - 100;
-							int y = CHART_BORDER + 5 + lineNo * 15;
-							SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
-							Ellipse(hdc, x - 15, y + 2, x - 5, y + 12);
-
-							TextOut(hdc, x, y, name16, _tcslen(name16));
-							lineNo++;
-						}
-					}
-
-					if (lineNo == 0) {
-						SetProp(hWnd, TEXT("TYPE"), (HANDLE)CHART_NONE);
-						PostMessage(hWnd, WM_PAINT, 0, 0);
-					}
-
-					DeleteObject(hPen);
-				}
-
+				drawChart(hWnd, hdc, w, h, (int)GetProp(hWnd, TEXT("SCROLLY")));
 				EndPaint(hWnd, &ps);
 			}
 			break;
@@ -2503,6 +2609,7 @@ namespace dialogs {
 				double maxX = minmax[1];
 				double minY = minmax[2];
 				double maxY = minmax[3];
+				bool isDate = (bool)GetProp(hWnd, TEXT("ISDATE"));
 
 				RECT rc{0};
 				GetClientRect(hWnd, &rc);
@@ -2515,17 +2622,158 @@ namespace dialogs {
 				x = map(x, CHART_BORDER, w - CHART_BORDER, minX, maxX);
 				y = map(y, CHART_BORDER, h - CHART_BORDER, minY, maxY);
 
-				_stprintf(title, TEXT("X: %g, Y: %g"), x, y);
+				if (isDate) {
+					TCHAR val[64];
+					time_t rawtime = x;
+					struct tm ts = *localtime(&rawtime);
+					_tcsftime(val, 64, TEXT("%Y-%m-%d %H:%M"), &ts);
+					_stprintf(title, TEXT("X: %s, Y: %g"), val, y);
+				} else {
+					_stprintf(title, TEXT("X: %g, Y: %g"), x, y);
+				}
 				SetWindowText(hWnd, title);
 			}
 			break;
 
 			case WM_SIZE: {
+				int type = (int)GetProp(hWnd, TEXT("TYPE"));
+				if (type == CHART_BARS) {
+					int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
+					int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
+
+					SCROLLINFO si{0};
+					si.cbSize = sizeof(SCROLLINFO);
+					si.fMask = SIF_ALL;
+					si.nMin = 0;
+					si.nMax = CHART_BORDER/2 + rowCount * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10); // scrollable height
+					si.nPage = HIWORD(lParam); // window height
+					si.nPos = 0;
+					si.nTrackPos = 0;
+
+					SetScrollInfo(hWnd, SB_VERT, &si, true);
+				}
+
 				SendMessage(hWnd, WM_PAINT, 0, 0);
 			}
 			break;
 
+			case WM_VSCROLL: {
+				WORD action = LOWORD(wParam);
+				int scrollY = (int)GetProp(hWnd, TEXT("SCROLLY"));
+
+				int pos = action == SB_THUMBPOSITION ? HIWORD(wParam) :
+					action == SB_THUMBTRACK ? HIWORD(wParam) :
+					action == SB_LINEDOWN ? scrollY + 30 :
+					action == SB_LINEUP ? scrollY - 30 :
+					-1;
+
+				if (pos == -1)
+					break;
+
+				SCROLLINFO si{0};
+				si.cbSize = sizeof(SCROLLINFO);
+				si.fMask = SIF_POS;
+				si.nPos = pos;
+				si.nTrackPos = 0;
+				SetScrollInfo(hWnd, SB_VERT, &si, true);
+				GetScrollInfo(hWnd, SB_VERT, &si);
+				pos = si.nPos;
+				POINT p{0, pos - scrollY};
+				HDC hdc = GetDC(hWnd);
+				LPtoDP(hdc, &p, 1);
+				ReleaseDC(hWnd, hdc);
+				ScrollWindow(hWnd, 0, -p.y, NULL, NULL);
+				SetProp(hWnd, TEXT("SCROLLY"), (HANDLE)pos);
+
+				return 0;
+			}
+			break;
+
+			case WM_MOUSEWHEEL: {
+				int type = (int)GetProp(hWnd, TEXT("TYPE"));
+				if (type != CHART_BARS)
+					return true;
+
+				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
+				SendMessage(hWnd, WM_VSCROLL, MAKELPARAM(action, 0), 0);
+			}
+			break;
+
+			case WM_CONTEXTMENU: {
+				POINT p = {LOWORD(lParam), HIWORD(lParam)};
+				HMENU hMenu = (HMENU)GetProp(hWnd, TEXT("MENU"));
+				TrackPopupMenu(GetSubMenu(hMenu, 0), TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+			}
+			break;
+
+			case WM_LBUTTONDOWN: {
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				POINT p = {LOWORD(lParam), HIWORD(lParam)};
+				if (p.x < rc.right - 100)
+					return true;
+
+				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
+				int currLineNo = (p.y - CHART_BORDER - 5)/15 + 1;
+				int* points = (int*)GetProp(hWnd, TEXT("POINTS"));
+				int lineNo = 0;
+				for(int colNo = 2; colNo < colCount; colNo++) {
+					if (points[colNo] != 0)
+						lineNo++;
+
+					if (lineNo == currLineNo) {
+						points[colNo] = points[colNo] == -1 ? 1 : -1;
+						SendMessage(hWnd, WM_PAINT, 0, 0);
+						break;
+					}
+				}
+			}
+			break;
+
 			case WM_COMMAND: {
+				if (wParam == IDM_EXPORT_PNG || wParam == IDM_EXPORT_CLIPBOARD) {
+					RECT rc;
+					GetClientRect(hWnd, &rc);
+
+					SCROLLINFO si{0};
+					si.cbSize = sizeof(si);
+					si.fMask = SIF_RANGE;
+					GetScrollInfo(hWnd, SB_VERT, &si);
+					rc.bottom = MAX(rc.bottom, si.nMax);
+
+					HDC hDC = GetDC(hWnd);
+					HDC hCompatDC = CreateCompatibleDC(hDC);
+					HBITMAP hBitmap = CreateCompatibleBitmap(hDC, rc.right, rc.bottom);
+					SelectObject(hCompatDC, hBitmap);
+					FillRect(hCompatDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+					drawChart(hWnd, hCompatDC, rc.right, rc.bottom, 0);
+
+					TCHAR path[MAX_PATH];
+					if (wParam == IDM_EXPORT_PNG && utils::saveFile(path, TEXT("PNG files\0*.png\0All\0*.*\0"))) {
+						const CLSID pngClsid = { 0x557cf406, 0x1a04, 0x11d3, {0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
+
+						Gdiplus::GdiplusStartupInput gdiplusStartupInput{0};
+						ULONG_PTR gdiplusToken = 0;
+						Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+						Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(hBitmap, NULL);
+						bitmap->Save(path, &pngClsid, NULL);
+						delete bitmap;
+						Gdiplus::GdiplusShutdown(gdiplusToken);
+					}
+
+					if (wParam == IDM_EXPORT_CLIPBOARD) {
+						OpenClipboard(hWnd);
+						EmptyClipboard();
+						SetClipboardData(CF_BITMAP, hBitmap);
+						CloseClipboard();
+					}
+
+					DeleteDC(hCompatDC);
+					ReleaseDC(hWnd, hDC);
+					DeleteObject(hBitmap);
+				}
+
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
 			}

@@ -17,6 +17,7 @@ namespace utils {
 
 	void setClipboardText(const TCHAR* text);
 	TCHAR* getClipboardText();
+
 	int openFile(TCHAR* path, const TCHAR* filter);
 	int saveFile(TCHAR* path, const TCHAR* filter);
 	bool isFileExists(const TCHAR* path);
@@ -28,6 +29,7 @@ namespace utils {
 	bool isNumber(const TCHAR* str, double *out);
 	bool isNumber(const char* str, double *out);
 
+	bool isDate(const TCHAR* str, double* utc);
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
 }
 #endif

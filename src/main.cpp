@@ -93,6 +93,7 @@ TCHAR APP_PATH[MAX_PATH]{0};
 int executeCLIQuery(bool isPlan = false);
 int executeEditorQuery(bool isPlan = false, bool isBatch = false);
 void suggestCLIQuery(int key);
+void loadCLIResults(int cnt);
 
 bool openConnection(sqlite3** _db, const char* path8, bool isReadOnly = false);
 bool openDb(const TCHAR* path);
@@ -235,7 +236,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.5.0"));
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)TEXT(" GUI: 1.5.1"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -1630,6 +1631,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
+		case WMU_OPEN_NEW_TAB: {
+			int tabNo = SendMessage(hMainTabWnd, WMU_TAB_ADD, 0, 0);
+			SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, tabNo, 0);
+		}
+		break;
+
 		default:
 			return DefWindowProc (hWnd, msg, wParam, lParam);
 	}
@@ -1891,8 +1898,22 @@ int executeCLIQuery(bool isPlan) {
 	if (size < 10) {
 		TCHAR sql16[size + 1] = {0};
 		GetWindowText(cli.hEditorWnd, sql16, size + 1);
-		if (sql16[0] == TEXT('.') || !_tcscmp(sql16, TEXT("-h")) || !_tcscmp(sql16, TEXT("/?")) || !_tcscmp(sql16, TEXT("-?"))) {
-			MessageBox(hMainWnd, TEXT("Unlike the SQLite CLI, the terminal has no additional commands"), TEXT("Info"), MB_OK);
+
+		if (sql16[0] == TEXT('.')) {
+			if (_tcscmp(sql16, TEXT(".clear")) == 0) {
+				SetWindowText(cli.hResultWnd, NULL);
+			} else if (_tcsstr(sql16, TEXT(".last ")) != NULL) {
+				int cnt = _ttoi(sql16 + 6);
+				SetWindowText(cli.hResultWnd, NULL);
+				loadCLIResults(cnt);
+			} else {
+				TCHAR buf[MAX_TEXT_LENGTH];
+				LoadString(GetModuleHandle(NULL), IDS_CLI_HELP, buf, MAX_TEXT_LENGTH);
+				_tcscat(buf, TEXT("\n\n============================================================\n\n"));
+				SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+				SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)buf);
+			}
+
 			SetWindowText(cli.hEditorWnd, NULL);
 			SetFocus(cli.hEditorWnd);
 			return 0;
@@ -1929,7 +1950,7 @@ unsigned int __stdcall processEditorQuery (void* data) {
 
 	auto detectMetaChanges = [](char* query8) {
 		strlwr(query8);
-		return strstr(query8, "create table") || strstr(query8, "create view") ||
+		return strstr(query8, "create table") || strstr(query8, "create virtual table") || strstr(query8, "create view") ||
 			strstr(query8, "drop table") || strstr(query8, "drop view") || strstr(query8, "alter table");
 	};
 	bool isMetaChanged = false;
@@ -2295,6 +2316,35 @@ void suggestCLIQuery(int key) {
 	delete [] sql8;
 }
 
+void loadCLIResults(int cnt) {
+	sqlite3_stmt *stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+		"with t as ("\
+		"select query || char(10) || result a from cli order by time desc limit ?2) " \
+		"select group_concat(a, '') from t", -1, &stmt, 0)) {
+		char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+		sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+		sqlite3_bind_int(stmt, 2, cnt);
+		delete [] dbname8;
+		if (SQLITE_ROW == sqlite3_step(stmt)) {
+			TCHAR* text16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+			SetWindowText(cli.hResultWnd, text16);
+			delete [] text16;
+		} else {
+			showDbError(hMainWnd);
+		}
+	}
+	sqlite3_finalize(stmt);
+
+	CHARFORMAT cf = {0};
+	cf.cbSize = sizeof(cf);
+	cf.dwMask = CFM_COLOR;
+	cf.crTextColor = RGB(0, 196, 0);
+	SendMessage(cli.hResultWnd, EM_SETCHARFORMAT, SCF_DEFAULT, (LPARAM)&cf);
+
+	RedrawWindow(cli.hResultWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME);
+}
+
 bool updateReferences() {
 	char query8[1024] = {0};
 	sqlite3_stmt *stmt, *stmt2;
@@ -2552,33 +2602,8 @@ bool openDb(const TCHAR* path) {
 	}
 
 	// restore cli
-	if(prefs::get("restore-editor")) {
-		sqlite3_stmt *stmt;
-		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
-			"with t as ("\
-			"select query || char(10) || result a from cli order by time desc limit 30) " \
-			"select group_concat(a, '') from t", -1, &stmt, 0)) {
-			char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
-			sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
-			delete [] dbname8;
-			if (SQLITE_ROW == sqlite3_step(stmt)) {
-				TCHAR* text16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-				SetWindowText(cli.hResultWnd, text16);
-				delete [] text16;
-			} else {
-				showDbError(hMainWnd);
-			}
-		}
-		sqlite3_finalize(stmt);
-
-		CHARFORMAT cf = {0};
-		cf.cbSize = sizeof(cf);
-		cf.dwMask = CFM_COLOR;
-		cf.crTextColor = RGB(0, 196, 0);
-		SendMessage(cli.hResultWnd, EM_SETCHARFORMAT, SCF_DEFAULT, (LPARAM)&cf);
-
-		RedrawWindow(cli.hResultWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME);
-	}
+	if(prefs::get("restore-editor"))
+		loadCLIResults(30);
 
 	return true;
 }
@@ -2605,6 +2630,18 @@ bool closeConnections () {
 bool closeDb() {
 	if (isDbBusy())
 		return false;
+
+	int nDlgOpen = 0;
+	for (int i = 0; i < MAX_DIALOG_COUNT; i++)
+		nDlgOpen += hDialogs[i] && IsWindow(hDialogs[i]);
+
+	if (nDlgOpen > 0) {
+		MessageBox(hMainWnd, nDlgOpen == 1 ?
+			TEXT("There is open dialog. You should close it.") :
+			TEXT("There are open dialogs. You should close them."),
+			TEXT("Info"), MB_OK | MB_ICONWARNING);
+		return false;
+	}
 
 	closeConnections();
 
@@ -4036,7 +4073,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 			isExact += addString(TABLES[i], isNoCheck);
 
 		sqlite3_stmt *stmt;
-		int rc = sqlite3_prepare_v2(db, "select name from pragma_database_list() union all select name from pragma_module_list()", -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(db, "select name from pragma_database_list() union all select name from pragma_module_list where name not like 'pragma_%'", -1, &stmt, 0);
 		while ((rc == SQLITE_OK) && (SQLITE_ROW == sqlite3_step(stmt))) {
 			TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
 			isExact += addString(name16, isNoCheck);
@@ -4046,7 +4083,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 		TCHAR buf[255];
 		for (int i = 0; PRAGMAS[i]; i++) {
-			_stprintf(buf, TEXT("pragma_%s()"), PRAGMAS[i]);
+			_stprintf(buf, TEXT("pragma_%s"), PRAGMAS[i]);
 			isExact += addString(buf, isNoCheck);
 		}
 	} else if (wLen > 1) {
