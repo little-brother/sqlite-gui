@@ -8,7 +8,7 @@ typedef struct tagTVKEYDOWN {
 } NMTVKEYDOWN, *LPNMTVKEYDOWN;
 
 #define MAPVK_VSC_TO_VK 1
-#define LVS_EX_AUTOSIZECOLUMNS 0x10000000
+
 #define CFM_BACKCOLOR 0x04000000
 
 #define HDN_FILTERCHANGE                (HDN_FIRST - 12)
@@ -19,5 +19,7 @@ typedef struct tagTVKEYDOWN {
 #define HDM_SETFILTERCHANGETIMEOUT      (HDM_FIRST + 22)
 #define HDM_CLEARFILTER                 (HDM_FIRST + 24)
 #define LVN_INCREMENTALSEARCH           (LVN_FIRST - 63)
+
+#define LVS_EX_AUTOSIZECOLUMNS 0x10000000
 
 #endif

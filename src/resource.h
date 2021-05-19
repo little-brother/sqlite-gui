@@ -191,11 +191,11 @@
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
-#define IDM_EXIT                   1403
-#define IDM_ENCRYPTION             1404
-#define IDM_ATTACH                 1405
-#define IDM_SETTINGS               1406
-
+#define IDM_SAVE_AS                1403
+#define IDM_EXIT                   1404
+#define IDM_ENCRYPTION             1405
+#define IDM_ATTACH                 1406
+#define IDM_SETTINGS               1407
 
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
@@ -366,6 +366,7 @@
 #define WMU_GET_VALUE              WM_USER + 23
 #define WMU_SET_ICON               WM_USER + 24
 #define WMU_OPEN_NEW_TAB           WM_USER + 25
+#define WMU_UPDATE_CARET_INFO      WM_USER + 26
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

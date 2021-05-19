@@ -70,11 +70,12 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
 
 void setEditorFont(HWND hWnd);
+void setEditorColor(HWND hWnd, COLORREF color, bool noEffects = false);
 void setTreeFont(HWND hWnd);
 
 bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
 void search(HWND hWnd);
-void processHightlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
+void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);

@@ -1,3 +1,5 @@
+#define ULONG_PTR ULONG
+#include <windows.h>
 #include <gdiplus.h>
 #include "resource.h"
 #include "global.h"
@@ -126,7 +128,7 @@ namespace dialogs {
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -147,7 +149,7 @@ namespace dialogs {
 			break;
 
 			case WMU_HIGHLIGHT: {
-				processHightlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth);
+				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth);
 				isRequireHighligth = false;
 				isRequireParenthesisHighligth = false;
 			}
@@ -879,8 +881,8 @@ namespace dialogs {
 					SetWindowText(hWnd, buf);
 				} else {
 					showDbError(hWnd);
-					sqlite3_finalize(stmt);
 				}
+				sqlite3_finalize(stmt);
 
 				int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
@@ -1735,7 +1737,7 @@ namespace dialogs {
 				if (wParam == IDOK) {
 					int id = GetDlgCtrlID(GetFocus());
 					if (id >= IDC_ROW_EDIT && (int)wParam < IDC_ROW_EDIT + colCount)
-						return GetAsyncKeyState(VK_CONTROL) ? SendMessage(hWnd, WM_COMMAND, IDC_DLG_OK, 0) : SendMessage(hWnd, WM_NEXTDLGCTL, 0, 0);
+						return HIWORD(GetKeyState(VK_CONTROL)) ? SendMessage(hWnd, WM_COMMAND, IDC_DLG_OK, 0) : SendMessage(hWnd, WM_NEXTDLGCTL, 0, 0);
 				}
 
 				if (wParam == IDC_DLG_OK) {
@@ -2113,7 +2115,7 @@ namespace dialogs {
 				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
-				processHightlight(hEditorWnd, true, false);
+				processHighlight(hEditorWnd, true, false);
 			}
 			break;
 
@@ -2138,7 +2140,7 @@ namespace dialogs {
 					MSGFILTER* pF = (MSGFILTER*)lParam;
 					int key = pF->wParam;
 					bool isKeyDown = pF->lParam & (1U << 31);
-					if (key == 0x57 && GetAsyncKeyState(VK_CONTROL)) { // Ctrl + W
+					if (key == 0x57 && HIWORD(GetKeyState(VK_CONTROL))) { // Ctrl + W
 						if (isKeyDown)
 							toggleWordWrap(pF->nmhdr.hwndFrom);
 
@@ -3534,13 +3536,13 @@ namespace dialogs {
 		switch(msg){
 			// Prevent beep
 			case WM_CHAR: {
-				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB)
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB || (wParam == VK_LBUTTON && HIWORD(GetKeyState(VK_CONTROL)))) // ?! Ctrl + A == VK_LBUTTON
 					return 0;
 			}
 			break;
 
 			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB) {
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB || (wParam == 0x41 && HIWORD(GetKeyState(VK_CONTROL)))) { // Ctrl + A
 					HWND hDlgWnd = GetAncestor(hWnd, GA_ROOT);
 					if (wParam == VK_RETURN)
 						SendMessage(hDlgWnd, WMU_UPDATE_DATA, 0, 0);
@@ -3562,6 +3564,9 @@ namespace dialogs {
 						}
 						SetFocus(hFocusWnd);
 					}
+
+					if (wParam == 0x41)
+						SendMessage(hWnd, EM_SETSEL, 0, -1);
 
 					return 0;
 				}
