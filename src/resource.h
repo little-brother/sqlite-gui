@@ -169,7 +169,15 @@
 #define IDC_DLG_GEN_OPTION_COLUMN  284
 #define IDC_DLG_GEN_OPTION_MULTIPLIER  285
 
-#define IDC_TAB_EDIT               300
+#define IDC_DLG_CHART              295
+#define IDC_DLG_CHART_OPTIONS      296
+#define IDC_DLG_CHART_TYPE         297
+#define IDC_DLG_CHART_BASE_LABEL   298
+#define IDC_DLG_CHART_BASE         299
+#define IDC_DLG_CHART_COLUMN       300 // iterable
+
+
+#define IDC_TAB_EDIT               499
 
 #define IDC_MENU_MAIN              500
 #define IDC_MENU_EDITOR            501
@@ -247,6 +255,7 @@
 #define IDM_EDITOR_PASTE           1603
 #define IDM_EDITOR_DELETE          1604
 #define IDM_EDITOR_FIND            1605
+#define IDM_EDITOR_COMMENT         1606
 
 #define IDM_RESULT_CHART           1610
 #define IDM_RESULT_COPY_CELL       1611
@@ -367,6 +376,9 @@
 #define WMU_SET_ICON               WM_USER + 24
 #define WMU_OPEN_NEW_TAB           WM_USER + 25
 #define WMU_UPDATE_CARET_INFO      WM_USER + 26
+#define WMU_UPDATE_CHART           WM_USER + 27
+#define WMU_UPDATE_MINMAX          WM_USER + 28
+#define WMU_RESORT_DATA            WM_USER + 29
 
 #define WMU_TAB_ADD                WM_USER + 30
 #define WMU_TAB_DELETE             WM_USER + 31

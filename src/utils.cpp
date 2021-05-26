@@ -172,13 +172,13 @@ namespace utils {
 		return GetOpenFileName(&ofn);
 	}
 
-	int saveFile(TCHAR* path, const TCHAR* filter) {
-		OPENFILENAME ofn = {0};
+	int saveFile(TCHAR* path, const TCHAR* filter, const TCHAR* defExt, HWND hWnd) {
 
+		OPENFILENAME ofn = {0};
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = HWND_DESKTOP;
 		ofn.lpstrFile = path;
-		ofn.lpstrFile[0] = '\0';
+		ofn.lpstrFile[_tcslen(path) + 1] = '\0';
 		ofn.nMaxFile = MAX_PATH;
 		ofn.lpstrFilter = filter;
 		ofn.nFilterIndex = 1;
@@ -186,7 +186,33 @@ namespace utils {
 		ofn.nMaxFileTitle = 0;
 		ofn.lpstrInitialDir = NULL;
 		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
-		return GetSaveFileName(&ofn);
+
+		if (!GetSaveFileName(&ofn))
+			return false;
+
+		if (_tcslen(path) == 0)
+			return saveFile(path, filter, defExt, hWnd);
+
+
+		TCHAR ext[32]{0};
+		TCHAR path2[MAX_PATH]{0};
+
+		_tsplitpath(path, NULL, NULL, NULL, ext);
+		if (_tcslen(ext) > 0)
+			_tcscpy(path2, path);
+		else
+			_stprintf(path2, TEXT("%s%s%s"), path, _tcslen(defExt) > 0 ? TEXT(".") : TEXT(""), defExt);
+
+		bool isFileExists = utils::isFileExists(path2);
+		if (isFileExists && IDYES != MessageBox(hWnd, TEXT("Overwrite file?"), TEXT("Confirmation"), MB_YESNO))
+			return saveFile(path, filter, defExt, hWnd);
+
+		if (isFileExists)
+			DeleteFile(path2);
+
+		_tcscpy(path, path2);
+
+		return true;
 	}
 
 	bool isFileExists(const TCHAR* path) {
@@ -233,6 +259,18 @@ namespace utils {
 		char* name8 = utils::utf16to8(name_ext16);
 		delete [] path16;
 		return name8;
+	}
+
+	TCHAR* getFileName(const TCHAR* path16, bool noExt) {
+		TCHAR* name16 = new TCHAR[MAX_PATH];
+		TCHAR ext16[32], name_ext16[MAX_PATH + 32];
+		_tsplitpath(path16, NULL, NULL, name16, ext16);
+		if (noExt)
+			_stprintf(name_ext16, TEXT("%s"), name16);
+		else
+			_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
+
+		return name16;
 	}
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {

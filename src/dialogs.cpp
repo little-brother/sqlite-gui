@@ -9,12 +9,14 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit;
+	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChart, cbOldChartOptions;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewChart(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
 
 	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("null"), TEXT("blob"), TEXT("json"), 0};
@@ -92,6 +94,9 @@ namespace dialogs {
 					LoadString(GetModuleHandle(NULL), IDS_CREATE_DDL + type, buf, 1024);
 					SetWindowText(GetDlgItem(hWnd, IDC_DLG_EDITOR), buf);
 				}
+
+				if (wParam == IDM_EDITOR_COMMENT)
+					toggleComment(hEditorWnd);
 
 				if (wParam == IDM_EDITOR_CUT)
 					SendMessage(hEditorWnd, WM_CUT, 0, 0);
@@ -1356,7 +1361,7 @@ namespace dialogs {
 					TCHAR path16[MAX_PATH]{0};
 					TCHAR filter16[] = TEXT("Images (*.jpg, *.gif, *.png, *.bmp)\0*.jpg;*.jpeg;*.gif;*.png;*.bmp\0Binary(*.bin,*.dat)\0*.bin,*.dat\0All\0*.*\0");
 					bool isOK = (cmd == IDM_BLOB_IMPORT && utils::openFile(path16, filter16)) ||
-						(cmd == IDM_BLOB_EXPORT && utils::saveFile(path16, filter16)) ||
+						(cmd == IDM_BLOB_EXPORT && utils::saveFile(path16, filter16, TEXT(""), hWnd)) ||
 						(cmd == IDM_BLOB_NULL && MessageBox(hWnd, TEXT("Are you sure to reset the cell?"), TEXT("Erase confirmation"), MB_OKCANCEL) == IDOK);
 
 					if (!isOK)
@@ -1398,7 +1403,13 @@ namespace dialogs {
 					if (rc && (cmd == IDM_BLOB_NULL)) {
 						sqlite3_bind_null(stmt, 2);
 						rc = SQLITE_DONE == sqlite3_step(stmt);
-						ListView_SetItemText(hListWnd, rowNo, colNo, TEXT(""));
+						if (rc) {
+							ListView_SetItemText(hListWnd, rowNo, colNo, TEXT(""));
+
+							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+							datatypes[colNo + (colCount - 1) * rowNo] = SQLITE_NULL;
+							ListView_RedrawItems(hListWnd, rowNo, rowNo);
+						}
 					}
 
 					if (rc && (cmd == IDM_BLOB_IMPORT)) {
@@ -2160,17 +2171,21 @@ namespace dialogs {
 	}
 
 
-
-	#define CHART_NONE 0
-	#define CHART_PLOT 1
-	#define CHART_BARS 2
+	#define CHART_LINES  0
+	#define CHART_DOTS   1
+	#define CHART_BARS   2
+	#define CHART_NONE   3
 
 	#define CHART_MAX  1.79769e+308
 	#define CHART_NULL 0.00012003
 
+	#define CHART_NUMBER 1
+	#define CHART_DATE   2
+	#define CHART_TEXT   3
+
 	#define CHART_BORDER 40
 	#define CHART_GRID 5
-	#define CHART_BARS_LEFT 180
+	#define CHART_BARS_LEFT 150
 	#define CHART_BAR_HEIGHT 20
 	#define CHART_BAR_SPACE 3
 
@@ -2178,8 +2193,13 @@ namespace dialogs {
 	HPEN hPens[MAX_CHART_COLOR_COUNT];
 	HBRUSH hBrushes[MAX_CHART_COLOR_COUNT];
 
-	int qsortComparator (const double *i, const double *j) {
-		double s = *i - *j;
+	struct qsortItem {
+		int rowNo;
+		double value;
+	};
+
+	int qsortComparator (const void *i, const void *j) {
+		double s = ((qsortItem*)i)->value - ((qsortItem*)j)->value;
 		return s > 0 ? 1 : s < 0 ? -1 : 0;
 	}
 
@@ -2187,31 +2207,36 @@ namespace dialogs {
 		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 	}
 
-	void drawChart(HWND hWnd, HDC hdc, int w, int h, int scrollY) {
+	void drawChart(HWND hChartWnd, HDC hdc, int w, int h, int _scrollY) {
+		HWND hWnd = GetParent(hChartWnd);
+		HWND hOptionsWnd = GetDlgItem(hWnd, IDC_DLG_CHART_OPTIONS);
+
 		int type = (int)GetProp(hWnd, TEXT("TYPE"));
 		double* data = (double*)GetProp(hWnd, TEXT("DATA"));
 		int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
 		int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
-		int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
-		bool isDate = (bool)GetProp(hWnd, TEXT("ISDATE"));
-
 		double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
 		double minX = minmax[0];
 		double maxX = minmax[1];
 		double minY = minmax[2];
 		double maxY = minmax[3];
+		bool* isColumns = (bool*)GetProp(hWnd, TEXT("ISCOLUMNS"));
+		int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
+		int colBase = (int)GetProp(hWnd, TEXT("COLBASE"));
+		int colBaseType = colTypes[colBase];
+		bool isExport = _scrollY < 0;
+		int scrollY = _scrollY < 0 ? 0 : _scrollY;
 
 		HWND hListWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
 		HWND hHeader = ListView_GetHeader(hListWnd);
 		SelectFont(hdc, hDefFont);
 
-		if (type == CHART_NONE) {
-			RECT rc = {0, 0, w, h}, rc2 = {0, 0, w, h};
-			TCHAR text[] = TEXT("Not enough data to chart.\nVisit Wiki if you have questions.");
-			DrawText(hdc, text, _tcslen(text), &rc2, DT_CALCRECT);
-			rc.top = rc.bottom / 2 - rc2.bottom / 2;
-			DrawText(hdc, text, _tcslen(text), &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_EXPANDTABS);
-		}
+		int dataColCount = 0;
+		for (int colNo = 0; colNo < colCount; colNo++)
+			dataColCount += isColumns[colNo];
+
+		if (dataColCount == 0)
+			type = CHART_NONE;
 
 		if (type == CHART_BARS) {
 			HBRUSH hNullBrush = CreateSolidBrush(RGB(200, 200, 200));
@@ -2220,16 +2245,12 @@ namespace dialogs {
 			double maxV = MAX(maxX, maxY);
 
 			int barNo = 0;
-			for (int colNo = 2; colNo < colCount; colNo++) {
-				bool isEmpty = true;
-				for (int rowNo = 0; rowNo < rowCount; rowNo++)
-					isEmpty = isEmpty && (data[colNo * rowCount + rowNo] == CHART_NULL);
-
-				if (isEmpty)
+			for (int colNo = 1; colNo < colCount; colNo++) {
+				if (!isColumns[colNo] || colNo == colBase)
 					continue;
 
 				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-					double val = data[colNo * rowCount + rowNo];
+					double val = data[colNo + rowNo * colCount];
 					bool isNull = val == CHART_NULL;
 
 					// Attribute bar
@@ -2255,12 +2276,12 @@ namespace dialogs {
 					if (isNull)
 						_stprintf(val16, TEXT("N/A"));
 					else
-						_stprintf(val16, TEXT("%g"), data[colNo * rowCount + rowNo]);
+						_stprintf(val16, TEXT("%g"), data[colNo + rowNo * colCount]);
 					SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[barNo % MAX_CHART_COLOR_COUNT] : RGB(255, 255, 255));
 					SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
 					DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
 
-					if (right - left > 60) {
+					if ((right - left > 60) && isExport) {
 						TCHAR attr[256]{0};
 						Header_GetItemText(hHeader, colNo, attr, 255);
 						DrawText(hdc, attr, _tcslen(attr), &rc, (val > 0 ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE);
@@ -2271,20 +2292,30 @@ namespace dialogs {
 
 			// Group title
 			for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-				int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) - scrollY;
-				RECT rc = {CHART_BORDER, top, CHART_BARS_LEFT - 10, top + (CHART_BAR_HEIGHT + CHART_BAR_SPACE) * dataColCount - CHART_BAR_SPACE};
 				TCHAR name[256]{0};
-				ListView_GetItemText(hListWnd, rowNo, 1, name, 255);
+				ListView_GetItemText(hListWnd, rowNo, colBase, name, 255);
+				if (_tcslen(name) == 0)
+					_stprintf(name, TEXT("<<Empty>>"));
 
 				SetTextColor(hdc, RGB(0, 0, 0));
 				SetBkColor(hdc, RGB(255, 255, 255));
-				DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+				RECT rc {0, 0, CHART_BARS_LEFT - CHART_BORDER - 10, 0};
+				DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_MODIFYSTRING | DT_WORDBREAK | DT_NOCLIP | DT_CALCRECT);
+
+				int top = CHART_BORDER/2 + rowNo * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10) - scrollY;
+				int middle = top + ((CHART_BAR_HEIGHT + CHART_BAR_SPACE) * dataColCount - CHART_BAR_SPACE) / 2;
+				int h = rc.bottom - rc.top;
+
+				rc = {CHART_BORDER, middle - h/2, CHART_BARS_LEFT - 10, middle + h/2};
+				DrawText(hdc, name, _tcslen(name), &rc, DT_RIGHT | DT_MODIFYSTRING | DT_WORDBREAK | DT_NOCLIP);
 			}
 
 			DeleteObject(hNullBrush);
 		}
 
-		if (type == CHART_PLOT) {
+		if (type == CHART_LINES || type == CHART_DOTS) {
+			// Grid
 			HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
 			SelectObject(hdc, hPen);
 
@@ -2303,7 +2334,7 @@ namespace dialogs {
 			};
 
 			int x = 0;
-			if (isDate) {
+			if (colBaseType == CHART_DATE) {
 				int DAY = 60 * 60 * 24;
 				double dst = maxX - minX;
 				double d =  dst <= DAY ? DAY / 24 : dst <= 7 * DAY ? DAY : DAY * 30;
@@ -2328,6 +2359,7 @@ namespace dialogs {
 					RECT rc2 {x - 30, h - CHART_BORDER + 10, x + 30, h};
 					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER);
 				}
+
 			} else {
 				double d = findDelta(maxX - minX, CHART_GRID);
 				for (int i = 0; minX + d * i < maxX + d; i++) {
@@ -2354,61 +2386,86 @@ namespace dialogs {
 			int y = 0;
 			double d = findDelta(maxY - minY, CHART_GRID);
 			for (int i = 0; minY + d * i < maxY + d; i++) {
-				y = map(minY + d * i, minY, maxY, CHART_BORDER, h - CHART_BORDER);
-				if (h - y < CHART_BORDER)
-					break;
+				double y0 = minY + d * i;
+				y = map(y0, minY, maxY, CHART_BORDER, h - CHART_BORDER);
+				if (h - y < CHART_BORDER) {
+					y0 = maxY;
+					y = h - CHART_BORDER;
+				}
 
-				MoveToEx(hdc, CHART_BORDER, y, NULL);
-				LineTo(hdc, x, y);
+				MoveToEx(hdc, CHART_BORDER, h - y, NULL);
+				LineTo(hdc, x, h - y);
 
 				TCHAR val[64];
-				_stprintf(val, TEXT("%g"), minY + d * i);
+				_stprintf(val, TEXT("%g"), y0);
 				RECT rc {0, h - y - 10, CHART_BORDER - 5, h - y + 10};
 				DrawText(hdc, val, _tcslen(val), &rc, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 				RECT rc2 {x + 5, h - y - 10, w, h - y + 8};
 				DrawText(hdc, val, _tcslen(val), &rc2, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 			}
 
-			// Lines
+			DeleteObject(hPen);
+
 			int lineNo = 0;
-			int* points = (int*)GetProp(hWnd, TEXT("POINTS"));
-			for (int colNo = 2; colNo < colCount; colNo++) {
-				if (points[colNo] == -1) {
-					lineNo++;
+			for (int colNo = 1; colNo < colCount; colNo++) {
+				if (colNo == colBase)
 					continue;
-				}
+
+				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
+				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
+					continue;
 
 				SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
 				int pointCount = 0;
 
 				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-					if (data[rowCount + rowNo] == CHART_NULL || data[colNo * rowCount + rowNo] == CHART_NULL)
+					if (data[colNo + rowNo * colCount] == CHART_NULL)
 						continue;
 
-					if (!pointCount) {
-						double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-						double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+					if (data[colBase + rowNo * colCount] == CHART_NULL)
+						continue;
+
+					if (!pointCount && type == CHART_LINES) {
+						double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+						double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
 						MoveToEx(hdc, x, y, NULL);
 						pointCount++;
 						continue;
 					}
 
-					double x = map(data[rowCount + rowNo], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-					double y = h - map(data[rowCount * colNo + rowNo], minY, maxY, CHART_BORDER, h - CHART_BORDER);
-					LineTo(hdc, x, y);
+					double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+
+					if (type == CHART_LINES) {
+						LineTo(hdc, x, y);
+					}
+
+					if (type == CHART_DOTS) {
+						int r = 3;
+						SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+						SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+						Ellipse(hdc, x - r, y - r, x + r, y + r);
+					}
 
 					pointCount++;
 				}
 
-				if (pointCount > 0) {
-					points[colNo] = pointCount;
+				if (pointCount > 0)
 					lineNo++;
-				}
 			}
 
+
 			lineNo = 0;
-			for (int colNo = 2; colNo < colCount; colNo++) {
-				if (points[colNo] != 0) {
+			// Legend
+			for (int colNo = 1; colNo < colCount; colNo++) {
+				if (colNo == colBase)
+					continue;
+
+				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
+				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
+					continue;
+
+				if (isExport) {
 					TCHAR name16[256];
 					Header_GetItemText(hHeader, colNo, name16, 255);
 
@@ -2418,19 +2475,23 @@ namespace dialogs {
 					SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
 					Ellipse(hdc, x - 15, y + 2, x - 5, y + 12);
 
-					SetTextColor(hdc, points[colNo] > 0 ? RGB(0, 0, 0) : RGB(200, 200, 200));
+					SetTextColor(hdc, RGB(0, 0, 0));
 					TextOut(hdc, x, y, name16, _tcslen(name16));
-					lineNo++;
 				}
-			}
-			SetTextColor(hdc, RGB(0, 0, 0));
 
-			if (lineNo == 0) {
-				SetProp(hWnd, TEXT("TYPE"), (HANDLE)CHART_NONE);
-				PostMessage(hWnd, WM_PAINT, 0, 0);
+				lineNo++;
 			}
 
-			DeleteObject(hPen);
+			if (lineNo == 0)
+				type = CHART_NONE;
+		}
+
+		if (type == CHART_NONE) {
+			RECT rc = {0, 0, w, h}, rc2 = {0, 0, w, h};
+			TCHAR text[] = TEXT("Not enough data to chart.\nVisit Wiki if you have questions.");
+			DrawText(hdc, text, _tcslen(text), &rc2, DT_CALCRECT);
+			rc.top = rc.bottom / 2 - rc2.bottom / 2;
+			DrawText(hdc, text, _tcslen(text), &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_EXPANDTABS);
 		}
 	}
 
@@ -2445,22 +2506,40 @@ namespace dialogs {
 				}
 
 				HWND hListWnd = (HWND)lParam;
-				int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd));
+				HWND hHeader = ListView_GetHeader(hListWnd);
+				int colCount = Header_GetItemCount(hHeader);
 				int rowCount = ListView_GetItemCount(hListWnd);
 				int size = colCount * rowCount;
-				double *rawdata = new double[size];
-				double *data = new double[size];
 
-				double minX = CHART_MAX;
-				double maxX = -CHART_MAX;
-				double minY = CHART_MAX;
-				double maxY = -CHART_MAX;
-
-				int dates = 0;
-
-				for (int i = 0; i < size; i++) {
-					rawdata[i] = CHART_NULL;
+				double* data = new double[size];
+				for (int i = 0; i < size; i++)
 					data[i] = CHART_NULL;
+				for (int rowNo = 0; rowNo < rowCount; rowNo++)
+					data[rowNo * colCount] = rowNo; // First column is a rowid and is used to sort a text column
+
+				int* colTypes = new int[colCount]{0};
+				for (int colNo = 1; colNo < colCount; colNo++) {
+					int nNumber = 0;
+					int nDate = 0;
+					int nEmpty = 0;
+					int nText = 0;
+					for (int rowNo = 0; rowNo < MIN(rowCount, 10); rowNo++) {
+						TCHAR buf16[256]{0};
+						double val;
+						ListView_GetItemText(hListWnd, rowNo, colNo, buf16, 255);
+						if (_tcslen(buf16) == 0) {
+							nEmpty++;
+						} else if (utils::isNumber(buf16, &val)) {
+							nNumber++;
+						} else if (utils::isDate(buf16, &val)) {
+							nDate++;
+						} else {
+							nText++;
+						}
+					}
+
+					int nMax = MAX(MAX(nNumber, nDate), nText);
+					colTypes[colNo] = nMax == nNumber ? CHART_NUMBER : nMax == nDate ? CHART_DATE : CHART_TEXT;
 				}
 
 				for (int colNo = 1; colNo < colCount; colNo++) {
@@ -2470,99 +2549,80 @@ namespace dialogs {
 						ListView_GetItemText(hListWnd, rowNo, colNo, buf16, 255);
 						if (_tcslen(buf16) > 0) {
 							bool isNumber =	utils::isNumber(buf16, &val);
-							bool isDate = (colNo == 1) && !isNumber && utils::isDate(buf16, &val);
-							if (isNumber || isDate)	{
-								rawdata[colNo * rowCount + rowNo] = val;
-								minX = colNo == 1 ? MIN(val, minX) : minX;
-								maxX = colNo == 1 ? MAX(val, maxX) : maxX;
-								minY = colNo > 1 ? MIN(val, minY) : minY;
-								maxY = colNo > 1 ? MAX(val, maxY) : maxY;
-							}
-
-							dates += isDate;
+							bool isDate = !isNumber && utils::isDate(buf16, &val);
+							data[colNo + rowNo * colCount] = isNumber || isDate ? val : CHART_NULL;
 						}
 					}
 				}
 
-				int type = CHART_BARS;
-				for (int i = 0; i < rowCount; i++) {
-					if (rawdata[rowCount + i] != CHART_NULL)
-						type = CHART_PLOT;
-				}
+				double *minmax = new double[4]{0};
+				bool *isColumns = new bool[colCount]{0};
 
-				int dataColCount = 0;
-				if (type == CHART_BARS) {
-					for (int i = 0; i < size; i++)
-						data[i] = rawdata[i];
-
-					for (int colNo = 2; colNo < colCount; colNo++) {
-						int dataRowCount = 0;
-						for (int rowNo = 0; rowNo < rowCount; rowNo++)
-							dataRowCount += data[rowCount * colNo + rowNo] != CHART_NULL;
-						dataColCount += dataRowCount > 0;
-					}
-					if (dataColCount == 0)
-						type = CHART_NONE;
-				}
-
-				// Sort by axis-X data
-				if (type == CHART_PLOT) {
-					double axisX[rowCount];
-					for (int i = 0; i < rowCount; i++)
-						axisX[i] = rawdata[rowCount + i];
-					qsort(axisX, rowCount, sizeof(double), (int(*) (const void *, const void *)) qsortComparator);
-
-					for (int i = 0; i < rowCount; i++)
-						data[rowCount + i] = axisX[i];
-
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						if (axisX[rowNo] == CHART_NULL)
-							continue;
-
-						int idx;
-						for (idx = 0; idx < rowCount && (rawdata[rowCount + idx] != axisX[rowNo]); idx++);
-						for (int barNo = 2; barNo < colCount; barNo++)
-							data[rowCount * barNo + rowNo] = rawdata[rowCount * barNo + idx];
-					}
-				}
-
-				delete [] rawdata;
-
-				double *minmax = new double[4];
-				minmax[0] = minX;
-				minmax[1] = maxX;
-				minmax[2] = minY;
-				minmax[3] = maxY;
-
-				SetProp(hWnd, TEXT("TYPE"), (HANDLE)type);
-				SetProp(hWnd, TEXT("DATA"), (HANDLE)data);
-				SetProp(hWnd, TEXT("MINMAX"), (HANDLE)minmax);
-				SetProp(hWnd, TEXT("COLCOUNT"), (HANDLE)colCount);
+				SetProp(hWnd, TEXT("COLTYPES"), (HANDLE)colTypes);
+				SetProp(hWnd, TEXT("DATA"), (HANDLE)data); // <row><row>...<row>
+				SetProp(hWnd, TEXT("MINMAX"), (HANDLE)minmax); // minX, maxX, minY, maxY
+				SetProp(hWnd, TEXT("ISCOLUMNS"), (HANDLE)isColumns); // render or not
+				SetProp(hWnd, TEXT("COLCOUNT"), (HANDLE)colCount); // include one hidden
 				SetProp(hWnd, TEXT("ROWCOUNT"), (HANDLE)rowCount);
-				SetProp(hWnd, TEXT("DATACOLCOUNT"), (HANDLE)dataColCount);
-				SetProp(hWnd, TEXT("ISDATE"), (HANDLE)(dates > 1));
+				SetProp(hWnd, TEXT("TYPE"), (HANDLE)CHART_NONE);
+				SetProp(hWnd, TEXT("COLBASE"), (HANDLE)0);
+
 				SetProp(hWnd, TEXT("MENU"), (HANDLE)LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_CHART)));
-				SetProp(hWnd, TEXT("POINTS"), (HANDLE)(new int[colCount]{0}));
 
+				HWND hChartWnd = GetDlgItem(hWnd, IDC_DLG_CHART);
+				cbOldChart = (WNDPROC)SetWindowLong(hChartWnd, GWL_WNDPROC, (LONG)cbNewChart);
 
-				SendMessage(hWnd, WM_PAINT, 0, 0);
+				HWND hOptionsWnd = GetDlgItem(hWnd, IDC_DLG_CHART_OPTIONS);
+				HINSTANCE hInstance = GetModuleHandle(0);
+				CreateWindow(WC_STATIC, TEXT("Type"), WS_VISIBLE | WS_CHILD, 10, 13, 50, 20, hOptionsWnd, NULL, hInstance, NULL);
+
+				HWND hTypeWnd = CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, 60, 10, 122, 200, hOptionsWnd, (HMENU)IDC_DLG_CHART_TYPE, hInstance, NULL);
+				TCHAR* types[] = {TEXT("Lines"), TEXT("Dots"), TEXT("Bars")};
+				for (int i = 0; i < 3; i++) {
+					int pos = ComboBox_AddString(hTypeWnd, types[i]);
+					ComboBox_SetItemData(hTypeWnd, pos, i);
+				}
+
+				CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_ETCHEDHORZ, 10, 40, 174, 1, hOptionsWnd, NULL, hInstance, NULL);
+				CreateWindow(WC_STATIC, TEXT(""), WS_VISIBLE | WS_CHILD, 10, 53, 50, 20, hOptionsWnd, (HMENU)IDC_DLG_CHART_BASE_LABEL, hInstance, NULL);
+				CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, 60, 50, 122, 200, hOptionsWnd, (HMENU)IDC_DLG_CHART_BASE, hInstance, NULL);
+
+				for (int colNo = 1; colNo < colCount; colNo++) {
+					TCHAR buf[256];
+					Header_GetItemText(hHeader, colNo, buf, 255);
+					HWND hBtnWnd = CreateWindow(WC_BUTTON, buf, BS_AUTOCHECKBOX | WS_VISIBLE | WS_CHILD | WS_TABSTOP, 10, 60 + colNo * 25, 172, 19, hOptionsWnd, (HMENU)(IDC_DLG_CHART_COLUMN + colNo), hInstance, NULL);
+					Button_SetCheck(hBtnWnd, BST_CHECKED);
+				}
+
+				EnumChildWindows(hOptionsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+				cbOldChartOptions = (WNDPROC)SetWindowLong(hOptionsWnd, GWL_WNDPROC, (LONG)cbNewChartOptions);
+
+				ComboBox_SetCurSel(hTypeWnd, colTypes[1] == CHART_TEXT ? CHART_BARS : CHART_LINES);
+				PostMessage(hOptionsWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CHART_TYPE, CBN_SELCHANGE), (LPARAM)hTypeWnd);
 			}
 			break;
 
 			case WM_DESTROY: {
-				RemoveProp(hWnd, TEXT("TYPE"));
-				RemoveProp(hWnd, TEXT("COLCOUNT"));
-				RemoveProp(hWnd, TEXT("ROWCOUNT"));
-				RemoveProp(hWnd, TEXT("DATACOLCOUNT"));
-
 				double* data = (double*)GetProp(hWnd, TEXT("DATA"));
 				delete [] data;
 				RemoveProp(hWnd, TEXT("DATA"));
 
+				int* isColumns = (int*)GetProp(hWnd, TEXT("ISCOLUMNS"));
+				delete [] isColumns;
+				RemoveProp(hWnd, TEXT("ISCOLUMNS"));
+
+				int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
+				delete [] colTypes;
+				RemoveProp(hWnd, TEXT("COLTYPES"));
+
 				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
 				delete [] minmax;
 				RemoveProp(hWnd, TEXT("MINMAX"));
-				RemoveProp(hWnd, TEXT("ISDATE"));
+
+				RemoveProp(hWnd, TEXT("COLCOUNT"));
+				RemoveProp(hWnd, TEXT("ROWCOUNT"));
+				RemoveProp(hWnd, TEXT("COLBASE"));
+				RemoveProp(hWnd, TEXT("TYPE"));
 
 				DestroyMenu((HMENU)GetProp(hWnd, TEXT("MENU")));
 				RemoveProp(hWnd, TEXT("MENU"));
@@ -2576,208 +2636,92 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_ERASEBKGND: {
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
-
-				return true;
-			}
-			break;
-
-			case WM_PAINT : {
-				InvalidateRect(hWnd, NULL, true);
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				int w = rc.right;
-				int h = rc.bottom;
-
-				PAINTSTRUCT ps{0};
-				ps.fErase = true;
-				HDC hdc = BeginPaint(hWnd, &ps);
-
-				drawChart(hWnd, hdc, w, h, (int)GetProp(hWnd, TEXT("SCROLLY")));
-				EndPaint(hWnd, &ps);
-			}
-			break;
-
-			case WM_MOUSEMOVE: {
-				int type = (int)GetProp(hWnd, TEXT("TYPE"));
-				if (type != CHART_PLOT)
-					return true;
-
-				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
-				double minX = minmax[0];
-				double maxX = minmax[1];
-				double minY = minmax[2];
-				double maxY = minmax[3];
-				bool isDate = (bool)GetProp(hWnd, TEXT("ISDATE"));
-
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				int w = rc.right;
-				int h = rc.bottom;
-
-				TCHAR title[255]{0};
-				double x = LOWORD(lParam);
-				double y = h - HIWORD(lParam);
-				x = map(x, CHART_BORDER, w - CHART_BORDER, minX, maxX);
-				y = map(y, CHART_BORDER, h - CHART_BORDER, minY, maxY);
-
-				if (isDate) {
-					TCHAR val[64];
-					time_t rawtime = x;
-					struct tm ts = *localtime(&rawtime);
-					_tcsftime(val, 64, TEXT("%Y-%m-%d %H:%M"), &ts);
-					_stprintf(title, TEXT("X: %s, Y: %g"), val, y);
-				} else {
-					_stprintf(title, TEXT("X: %g, Y: %g"), x, y);
-				}
-				SetWindowText(hWnd, title);
-			}
-			break;
-
 			case WM_SIZE: {
-				int type = (int)GetProp(hWnd, TEXT("TYPE"));
-				if (type == CHART_BARS) {
-					int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
-					int dataColCount = (int)GetProp(hWnd, TEXT("DATACOLCOUNT"));
-
-					SCROLLINFO si{0};
-					si.cbSize = sizeof(SCROLLINFO);
-					si.fMask = SIF_ALL;
-					si.nMin = 0;
-					si.nMax = CHART_BORDER/2 + rowCount * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10); // scrollable height
-					si.nPage = HIWORD(lParam); // window height
-					si.nPos = 0;
-					si.nTrackPos = 0;
-
-					SetScrollInfo(hWnd, SB_VERT, &si, true);
-				}
-
-				SendMessage(hWnd, WM_PAINT, 0, 0);
-			}
-			break;
-
-			case WM_VSCROLL: {
-				WORD action = LOWORD(wParam);
-				int scrollY = (int)GetProp(hWnd, TEXT("SCROLLY"));
-
-				int pos = action == SB_THUMBPOSITION ? HIWORD(wParam) :
-					action == SB_THUMBTRACK ? HIWORD(wParam) :
-					action == SB_LINEDOWN ? scrollY + 30 :
-					action == SB_LINEUP ? scrollY - 30 :
-					-1;
-
-				if (pos == -1)
-					break;
-
-				SCROLLINFO si{0};
-				si.cbSize = sizeof(SCROLLINFO);
-				si.fMask = SIF_POS;
-				si.nPos = pos;
-				si.nTrackPos = 0;
-				SetScrollInfo(hWnd, SB_VERT, &si, true);
-				GetScrollInfo(hWnd, SB_VERT, &si);
-				pos = si.nPos;
-				POINT p{0, pos - scrollY};
-				HDC hdc = GetDC(hWnd);
-				LPtoDP(hdc, &p, 1);
-				ReleaseDC(hWnd, hdc);
-				ScrollWindow(hWnd, 0, -p.y, NULL, NULL);
-				SetProp(hWnd, TEXT("SCROLLY"), (HANDLE)pos);
-
-				return 0;
-			}
-			break;
-
-			case WM_MOUSEWHEEL: {
-				int type = (int)GetProp(hWnd, TEXT("TYPE"));
-				if (type != CHART_BARS)
-					return true;
-
-				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
-				SendMessage(hWnd, WM_VSCROLL, MAKELPARAM(action, 0), 0);
-			}
-			break;
-
-			case WM_CONTEXTMENU: {
-				POINT p = {LOWORD(lParam), HIWORD(lParam)};
-				HMENU hMenu = (HMENU)GetProp(hWnd, TEXT("MENU"));
-				TrackPopupMenu(GetSubMenu(hMenu, 0), TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
-			}
-			break;
-
-			case WM_LBUTTONDOWN: {
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				POINT p = {LOWORD(lParam), HIWORD(lParam)};
-				if (p.x < rc.right - 100)
-					return true;
-
-				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
-				int currLineNo = (p.y - CHART_BORDER - 5)/15 + 1;
-				int* points = (int*)GetProp(hWnd, TEXT("POINTS"));
-				int lineNo = 0;
-				for(int colNo = 2; colNo < colCount; colNo++) {
-					if (points[colNo] != 0)
-						lineNo++;
-
-					if (lineNo == currLineNo) {
-						points[colNo] = points[colNo] == -1 ? 1 : -1;
-						SendMessage(hWnd, WM_PAINT, 0, 0);
-						break;
-					}
-				}
+				HWND hChartWnd = GetDlgItem(hWnd, IDC_DLG_CHART);
+				HWND hOptionsWnd = GetDlgItem(hWnd, IDC_DLG_CHART_OPTIONS);
+				int w = 190;
+				SetWindowPos(hChartWnd, 0, 0, 0, LOWORD(lParam) - w, HIWORD(lParam), SWP_NOMOVE | SWP_NOZORDER);
+				SetWindowPos(hOptionsWnd, 0, LOWORD(lParam) - w, 0, w, HIWORD(lParam), SWP_NOZORDER);
 			}
 			break;
 
 			case WM_COMMAND: {
-				if (wParam == IDM_EXPORT_PNG || wParam == IDM_EXPORT_CLIPBOARD) {
-					RECT rc;
-					GetClientRect(hWnd, &rc);
-
-					SCROLLINFO si{0};
-					si.cbSize = sizeof(si);
-					si.fMask = SIF_RANGE;
-					GetScrollInfo(hWnd, SB_VERT, &si);
-					rc.bottom = MAX(rc.bottom, si.nMax);
-
-					HDC hDC = GetDC(hWnd);
-					HDC hCompatDC = CreateCompatibleDC(hDC);
-					HBITMAP hBitmap = CreateCompatibleBitmap(hDC, rc.right, rc.bottom);
-					SelectObject(hCompatDC, hBitmap);
-					FillRect(hCompatDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
-					drawChart(hWnd, hCompatDC, rc.right, rc.bottom, 0);
-
-					TCHAR path[MAX_PATH];
-					if (wParam == IDM_EXPORT_PNG && utils::saveFile(path, TEXT("PNG files\0*.png\0All\0*.*\0"))) {
-						const CLSID pngClsid = { 0x557cf406, 0x1a04, 0x11d3, {0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
-
-						Gdiplus::GdiplusStartupInput gdiplusStartupInput{0};
-						ULONG_PTR gdiplusToken = 0;
-						Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-
-						Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(hBitmap, NULL);
-						bitmap->Save(path, &pngClsid, NULL);
-						delete bitmap;
-						Gdiplus::GdiplusShutdown(gdiplusToken);
-					}
-
-					if (wParam == IDM_EXPORT_CLIPBOARD) {
-						OpenClipboard(hWnd);
-						EmptyClipboard();
-						SetClipboardData(CF_BITMAP, hBitmap);
-						CloseClipboard();
-					}
-
-					DeleteDC(hCompatDC);
-					ReleaseDC(hWnd, hDC);
-					DeleteObject(hBitmap);
-				}
-
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_RESORT_DATA: {
+				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
+				int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
+				int size = colCount * rowCount;
+
+				double* data = new double[size];
+				for (int i = 0; i < size; i++)
+					data[i] = CHART_NULL;
+
+				double* srcData = (double*)GetProp(hWnd, TEXT("DATA"));
+				int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
+				int colBase = (int)GetProp(hWnd, TEXT("COLBASE"));
+				if (colTypes[colBase] == CHART_TEXT)
+					colBase = 0;
+
+				qsortItem axisX[rowCount];
+				for (int rowNo = 0; rowNo < rowCount; rowNo++)
+					axisX[rowNo] = {(int)srcData[rowNo * colCount + 0], srcData[rowNo * colCount + colBase]};
+
+				qsort(axisX, rowCount, sizeof(qsortItem), qsortComparator);
+
+				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+					int rowIdx = 0;
+					for (; (rowIdx < rowCount) && (srcData[rowIdx * colCount + 0] != axisX[rowNo].rowNo); rowIdx++);
+					for (int barNo = 0; barNo < colCount; barNo++)
+						data[barNo + rowNo * colCount] = srcData[barNo + rowIdx * colCount];
+				}
+
+				delete [] srcData;
+				SetProp(hWnd, TEXT("DATA"), data);
+			}
+			break;
+
+			case WMU_UPDATE_MINMAX: {
+				int colCount = (int)GetProp(hWnd, TEXT("COLCOUNT"));
+				int rowCount = (int)GetProp(hWnd, TEXT("ROWCOUNT"));
+
+				bool* isColumns = (bool*)GetProp(hWnd, TEXT("ISCOLUMNS"));
+				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
+				double* data = (double*)GetProp(hWnd, TEXT("DATA"));
+
+
+				int colBase = (int)GetProp(hWnd, TEXT("COLBASE"));
+				double minX = CHART_MAX;
+				double maxX = -CHART_MAX;
+				double minY = CHART_MAX;
+				double maxY = -CHART_MAX;
+
+				int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
+				for (int colNo = 0; colNo < colCount; colNo++) {
+					if (colTypes[colNo] == CHART_TEXT)
+							continue;
+
+					if ((colNo != colBase) && !isColumns[colNo])
+						continue;
+
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						double val = data[rowNo * colCount + colNo];
+						if (val != CHART_NULL) {
+							minX = colNo == colBase ? MIN(val, minX) : minX;
+							maxX = colNo == colBase ? MAX(val, maxX) : maxX;
+							minY = colNo != colBase ? MIN(val, minY) : minY;
+							maxY = colNo != colBase ? MAX(val, maxY) : maxY;
+						}
+					}
+				}
+
+				minmax[0] = minX;
+				minmax[1] = maxX;
+				minmax[2] = minY;
+				minmax[3] = maxY;
 			}
 			break;
 
@@ -3309,7 +3253,13 @@ namespace dialogs {
 						if (rcBackup == IDYES) {
 							rc = SQLITE_ABORT;
 							TCHAR path16[MAX_PATH];
-							if (utils::saveFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"))) {
+							char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+							TCHAR* dbname16 = utils::utf8to16(dbname8);
+							_stprintf(path16, dbname16);
+							delete [] dbname8;
+							delete [] dbname16;
+
+							if (utils::saveFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), TEXT("sqlite"), hWnd)) {
 								char* path8 = utils::utf16to8(path16);
 								char query8[strlen(path8) + 256];
 								sprintf(query8, "vacuum main into '%s'", path8);
@@ -3536,13 +3486,13 @@ namespace dialogs {
 		switch(msg){
 			// Prevent beep
 			case WM_CHAR: {
-				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB || (wParam == VK_LBUTTON && HIWORD(GetKeyState(VK_CONTROL)))) // ?! Ctrl + A == VK_LBUTTON
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB)
 					return 0;
 			}
 			break;
 
 			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB || (wParam == 0x41 && HIWORD(GetKeyState(VK_CONTROL)))) { // Ctrl + A
+				if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB) {
 					HWND hDlgWnd = GetAncestor(hWnd, GA_ROOT);
 					if (wParam == VK_RETURN)
 						SendMessage(hDlgWnd, WMU_UPDATE_DATA, 0, 0);
@@ -3565,14 +3515,14 @@ namespace dialogs {
 						SetFocus(hFocusWnd);
 					}
 
-					if (wParam == 0x41)
-						SendMessage(hWnd, EM_SETSEL, 0, -1);
-
 					return 0;
 				}
 			}
 			break;
 		}
+
+		if (processEditKeys(hWnd, msg, wParam, lParam))
+			return 0;
 
 		return CallWindowProc(cbOldHeaderEdit, hWnd, msg, wParam, lParam);
 	}
@@ -3581,10 +3531,10 @@ namespace dialogs {
 		if (msg == WM_GETDLGCODE)
 			return DLGC_WANTTAB | DLGC_WANTCHARS | DLGC_WANTARROWS;
 
-		if (msg == WM_CHAR && (wParam == VK_TAB))
+		if (msg == WM_CHAR && wParam == VK_TAB)
 			return true;
 
-		if (msg == WM_KEYDOWN && (wParam == VK_TAB)) {
+		if (msg == WM_KEYDOWN && wParam == VK_TAB) {
 			HWND hDlg = GetAncestor(hWnd, GA_ROOT);
 			HWND hParentWnd = GetParent(hWnd);
 			if (HIWORD(GetKeyState(VK_CONTROL))) {
@@ -3597,10 +3547,13 @@ namespace dialogs {
 				id = id <= IDC_ROW_EDIT ? IDC_ROW_EDIT + colCount - 1 : id;
 				SetFocus(GetDlgItem(hParentWnd, id));
 				return 0;
-			}else {
+			} else {
 				SendMessage(hDlg, WM_NEXTDLGCTL, 0, 0);
 			}
 		}
+
+		if (processEditKeys(hWnd, msg, wParam, lParam))
+			return 0;
 
 		return CallWindowProc(cbOldRowEdit, hWnd, msg, wParam, lParam);
 	}
@@ -3787,7 +3740,325 @@ namespace dialogs {
 			break;
 		}
 
-
 		return CallWindowProc(DefWindowProc, hWnd, msg, wParam, lParam);
+	}
+
+	LRESULT CALLBACK cbNewChart(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_DESTROY: {
+				RemoveProp(hWnd, TEXT("SCROLLY"));
+			}
+			break;
+
+			case WM_ERASEBKGND: {
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+				return true;
+			}
+			break;
+
+			case WM_PAINT : {
+				InvalidateRect(hWnd, NULL, true);
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				int w = rc.right;
+				int h = rc.bottom;
+
+				PAINTSTRUCT ps{0};
+				ps.fErase = true;
+				HDC hdc = BeginPaint(hWnd, &ps);
+
+				drawChart(hWnd, hdc, w, h, (int)GetProp(hWnd, TEXT("SCROLLY")));
+				EndPaint(hWnd, &ps);
+			}
+			break;
+
+			case WM_CONTEXTMENU: {
+				POINT p = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+				HMENU hMenu = (HMENU)GetProp(GetParent(hWnd), TEXT("MENU"));
+				TrackPopupMenu(GetSubMenu(hMenu, 0), TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDM_EXPORT_PNG || wParam == IDM_EXPORT_CLIPBOARD) {
+					RECT rc;
+					GetClientRect(hWnd, &rc);
+
+					SCROLLINFO si{0};
+					si.cbSize = sizeof(si);
+					si.fMask = SIF_RANGE;
+					GetScrollInfo(hWnd, SB_VERT, &si);
+					rc.bottom = MAX(rc.bottom, si.nMax);
+
+					HDC hDC = GetDC(hWnd);
+					HDC hCompatDC = CreateCompatibleDC(hDC);
+					HBITMAP hBitmap = CreateCompatibleBitmap(hDC, rc.right, rc.bottom);
+					SelectObject(hCompatDC, hBitmap);
+					FillRect(hCompatDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+					drawChart(hWnd, hCompatDC, rc.right, rc.bottom, -1);
+
+					TCHAR path[MAX_PATH];
+					_stprintf(path, TEXT("chart.png"));
+					if (wParam == IDM_EXPORT_PNG && utils::saveFile(path, TEXT("PNG files\0*.png\0All\0*.*\0"), TEXT("png"), hWnd)) {
+						const CLSID pngClsid = { 0x557cf406, 0x1a04, 0x11d3, {0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
+
+						Gdiplus::GdiplusStartupInput gdiplusStartupInput{0};
+						ULONG_PTR gdiplusToken = 0;
+						Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+						Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(hBitmap, NULL);
+						bitmap->Save(path, &pngClsid, NULL);
+						delete bitmap;
+						Gdiplus::GdiplusShutdown(gdiplusToken);
+					}
+
+					if (wParam == IDM_EXPORT_CLIPBOARD) {
+						OpenClipboard(hWnd);
+						EmptyClipboard();
+						SetClipboardData(CF_BITMAP, hBitmap);
+						CloseClipboard();
+					}
+
+					DeleteDC(hCompatDC);
+					ReleaseDC(hWnd, hDC);
+					DeleteObject(hBitmap);
+				}
+			}
+
+			case WM_LBUTTONDOWN: {
+				SetFocus(hWnd);
+			}
+			break;
+
+			case WM_MOUSEMOVE: {
+				HWND hParentWnd = GetParent(hWnd);
+
+				int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
+				if (type == CHART_LINES || type == CHART_DOTS) {
+					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
+					int colBase = (int)GetProp(hParentWnd, TEXT("COLBASE"));
+
+					double* minmax = (double*)GetProp(hParentWnd, TEXT("MINMAX"));
+					double minX = minmax[0];
+					double maxX = minmax[1];
+					double minY = minmax[2];
+					double maxY = minmax[3];
+					bool isDate = colTypes[colBase] == CHART_DATE;
+
+					RECT rc{0};
+					GetClientRect(hWnd, &rc);
+					int w = rc.right;
+					int h = rc.bottom;
+
+					TCHAR title[255]{0};
+					double x = LOWORD(lParam);
+					double y = h - HIWORD(lParam);
+					x = map(x, CHART_BORDER, w - CHART_BORDER, minX, maxX);
+					y = map(y, CHART_BORDER, h - CHART_BORDER, minY, maxY);
+
+					if (isDate) {
+						TCHAR val[64];
+						time_t rawtime = x;
+						struct tm ts = *localtime(&rawtime);
+						_tcsftime(val, 64, TEXT("%Y-%m-%d %H:%M"), &ts);
+						_stprintf(title, TEXT("X: %s, Y: %g"), val, y);
+					} else {
+						_stprintf(title, TEXT("X: %g, Y: %g"), x, y);
+					}
+					SetWindowText(hParentWnd, title);
+				}
+			}
+			break;
+
+			case WM_VSCROLL: {
+				WORD action = LOWORD(wParam);
+				int scrollY = (int)GetProp(hWnd, TEXT("SCROLLY"));
+
+				int pos = action == SB_THUMBPOSITION ? HIWORD(wParam) :
+					action == SB_THUMBTRACK ? HIWORD(wParam) :
+					action == SB_LINEDOWN ? scrollY + 30 :
+					action == SB_LINEUP ? scrollY - 30 :
+					-1;
+
+				if (pos == -1)
+					break;
+
+				SCROLLINFO si{0};
+				si.cbSize = sizeof(SCROLLINFO);
+				si.fMask = SIF_POS;
+				si.nPos = pos;
+				si.nTrackPos = 0;
+				SetScrollInfo(hWnd, SB_VERT, &si, true);
+				GetScrollInfo(hWnd, SB_VERT, &si);
+				pos = si.nPos;
+				POINT p{0, pos - scrollY};
+				HDC hdc = GetDC(hWnd);
+				LPtoDP(hdc, &p, 1);
+				ReleaseDC(hWnd, hdc);
+				ScrollWindow(hWnd, 0, -p.y, NULL, NULL);
+				SetProp(hWnd, TEXT("SCROLLY"), (HANDLE)pos);
+
+				return 0;
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hParentWnd = GetParent(hWnd);
+
+				int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
+				if (type == CHART_BARS) {
+					bool* isColumns = (bool*)GetProp(hParentWnd, TEXT("ISCOLUMNS"));
+					int colCount = (int)GetProp(hParentWnd, TEXT("COLCOUNT"));
+					int rowCount = (int)GetProp(hParentWnd, TEXT("ROWCOUNT"));
+					int dataColCount = 0;
+					for (int colNo = 0; colNo < colCount; colNo++)
+						dataColCount += isColumns[colNo];
+
+					SCROLLINFO si{0};
+					si.cbSize = sizeof(SCROLLINFO);
+					si.fMask = SIF_ALL;
+					si.nMin = 0;
+					si.nMax = CHART_BORDER/2 + rowCount * dataColCount * (CHART_BAR_HEIGHT + CHART_BAR_SPACE + 10); // scrollable height
+					si.nPage = HIWORD(lParam); // window height
+					si.nPos = 0;
+					si.nTrackPos = 0;
+					SetScrollInfo(hWnd, SB_VERT, &si, true);
+					SetProp(hWnd, TEXT("SCROLLY"), 0);
+				}
+
+				InvalidateRect(hWnd, 0, true);
+			}
+			break;
+
+			case WM_MOUSEWHEEL: {
+				HWND hParentWnd = GetParent(hWnd);
+
+				int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
+				if (type != CHART_BARS)
+					return true;
+
+				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
+				SendMessage(hWnd, WM_VSCROLL, MAKELPARAM(action, 0), 0);
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldChart, hWnd, msg, wParam, lParam);
+	}
+
+	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_MOUSEMOVE: {
+				SetWindowText(GetParent(hWnd), TEXT(""));
+			}
+			break;
+
+			case WM_CTLCOLORSTATIC : {
+				HWND hParentWnd = GetParent(hWnd);
+				int colCount = (int)GetProp(hParentWnd, TEXT("COLCOUNT"));
+
+				int colorNo = -1;
+				for (int colNo = 1; colNo < colCount; colNo++) {
+					HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
+					bool isChecked = Button_GetCheck(hColumnWnd) == BST_CHECKED;
+					colorNo += IsWindowEnabled(hColumnWnd) && isChecked;
+					if (hColumnWnd == (HWND)lParam && isChecked) {
+						HDC hDC = (HDC)wParam;
+						SetTextColor(hDC, RGB(255,255, 255));
+						SetBkColor(hDC, COLORS[colorNo]);
+
+						return (LRESULT)hBrushes[colorNo];
+					}
+				}
+
+				return false;
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hParentWnd = GetParent(hWnd);
+				HWND hChartWnd = GetDlgItem(hParentWnd, IDC_DLG_CHART);
+				int colCount = (int)GetProp(hParentWnd, TEXT("COLCOUNT"));
+
+				if (LOWORD(wParam) == IDC_DLG_CHART_TYPE && HIWORD(wParam) == CBN_SELCHANGE) {
+					HWND hTypeWnd = GetDlgItem(hWnd, IDC_DLG_CHART_TYPE);
+					HWND hBaseLabel = GetDlgItem(hWnd, IDC_DLG_CHART_BASE_LABEL);
+					HWND hBaseWnd = GetDlgItem(hWnd, IDC_DLG_CHART_BASE);
+
+					int type = ComboBox_GetItemData(hTypeWnd, ComboBox_GetCurSel(hTypeWnd));
+					SetProp(hParentWnd, TEXT("TYPE"), (HANDLE)type);
+
+					SetWindowText(hBaseLabel, type == CHART_BARS ? TEXT("Group by") : TEXT("Axis-X"));
+					ComboBox_ResetContent(hBaseWnd);
+
+					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
+
+					bool isFirstColumn = true;
+					for (int colNo = 0; colNo < colCount; colNo++) {
+						HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
+						if (((type == CHART_LINES || type == CHART_DOTS) && (colTypes[colNo] == CHART_NUMBER || colTypes[colNo] == CHART_DATE)) ||
+							(type == CHART_BARS && colTypes[colNo] == CHART_TEXT)) {
+							TCHAR buf[256];
+							GetWindowText(hColumnWnd, buf, 255);
+							int pos = ComboBox_AddString(hBaseWnd, buf);
+							ComboBox_SetItemData(hBaseWnd, pos, colNo);
+
+							if (isFirstColumn) {
+								isFirstColumn = false;
+								SetWindowLong(hBaseWnd, GWL_USERDATA, colNo);
+							}
+						}
+
+						EnableWindow(hColumnWnd, colTypes[colNo] == CHART_NUMBER);
+					}
+					ComboBox_SetCurSel(hBaseWnd, 0);
+					PostMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CHART_BASE, CBN_SELCHANGE), (LPARAM)hBaseWnd);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_CHART_BASE && HIWORD(wParam) == CBN_SELCHANGE) {
+					HWND hParentWnd = GetParent(hWnd);
+					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
+					bool* isColumns = (bool*)GetProp(hParentWnd, TEXT("ISCOLUMNS"));
+
+					HWND hBaseWnd = GetDlgItem(hWnd, IDC_DLG_CHART_BASE);
+					int colBase = ComboBox_GetItemData(hBaseWnd, ComboBox_GetCurSel(hBaseWnd));
+					SetWindowLong(hBaseWnd, GWL_USERDATA, colBase);
+					SetProp(hParentWnd, TEXT("COLBASE"), (HANDLE)colBase);
+
+					int no = 1;
+					for (int colNo = 1; colNo < colCount; colNo++) {
+						bool isVisible = (colTypes[colNo] == CHART_NUMBER) && (colNo != colBase);
+						HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
+						if (isVisible) {
+							SetWindowPos(hColumnWnd, 0, 10, 60 + no * 25, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+							no++;
+						}
+						EnableWindow(hColumnWnd, isVisible);
+						ShowWindow(hColumnWnd, isVisible ? SW_SHOW : SW_HIDE);
+						isColumns[colNo] = isVisible && Button_GetCheck(hColumnWnd) == BST_CHECKED;
+					}
+
+					SendMessage(hParentWnd, WMU_RESORT_DATA, 0, 0);
+					SendMessage(hParentWnd, WMU_UPDATE_MINMAX, 0, 0);
+					SendMessage(hChartWnd, WM_PAINT, 0, 0);
+				}
+
+				if (LOWORD(wParam) > IDC_DLG_CHART_COLUMN && (LOWORD(wParam) < IDC_DLG_CHART_COLUMN + colCount) && HIWORD(wParam) == BN_CLICKED) {
+					bool* isColumns = (bool*)GetProp(hParentWnd, TEXT("ISCOLUMNS"));
+					isColumns[wParam - IDC_DLG_CHART_COLUMN] = Button_GetCheck((HWND)lParam) == BST_CHECKED;
+
+					SendMessage(hParentWnd, WMU_UPDATE_MINMAX, 0, 0);
+					SendMessage(hChartWnd, WM_PAINT, 0, 0);
+					InvalidateRect(hWnd, NULL, true);
+				}
+
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldChartOptions, hWnd, msg, wParam, lParam);
 	}
 }

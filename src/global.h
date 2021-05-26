@@ -78,8 +78,11 @@ void search(HWND hWnd);
 void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
+bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
 bool toggleWordWrap(HWND hEditorWnd);
+bool toggleTextCase (HWND hEditorWnd);
+bool toggleComment (HWND hEditorWnd);
 void switchDialog(HWND hDlg, bool isNext);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);

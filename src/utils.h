@@ -19,10 +19,11 @@ namespace utils {
 	TCHAR* getClipboardText();
 
 	int openFile(TCHAR* path, const TCHAR* filter);
-	int saveFile(TCHAR* path, const TCHAR* filter);
+	int saveFile(TCHAR* path, const TCHAR* filter, const TCHAR* defExt, HWND hWnd = 0);
 	bool isFileExists(const TCHAR* path);
 	char* readFile(const char* path);
 	char* getFileName(const char* path, bool noExt = false);
+	TCHAR* getFileName(const TCHAR* path16, bool noExt = false);
 
 	TCHAR* toBlobSize(INT64 bSize);
 

@@ -13,16 +13,12 @@
 				<Option compiler="gcc" />
 				<Compiler>
 					<Add option="-std=c++11" />
-					<Add option="-m32" />
 					<Add option="-g" />
 					<Add option="-U__STRICT_ANSI__" />
 					<Add option="-DUNICODE" />
 					<Add option="-D_UNICODE" />
 					<Add directory="include" />
 				</Compiler>
-				<Linker>
-					<Add option="-m32" />
-				</Linker>
 			</Target>
 			<Target title="Release">
 				<Option output="bin/Release/sqlite-gui" prefix_auto="1" extension_auto="1" />
@@ -32,7 +28,6 @@
 				<Compiler>
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
-					<Add option="-m32" />
 					<Add option="-U__STRICT_ANSI__" />
 					<Add option="-DUNICODE" />
 					<Add option="-D_UNICODE" />
@@ -40,20 +35,16 @@
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
-					<Add option="-m32" />
+					<Add option="-static" />
 				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
 			<Add option="-std=c++11" />
-			<Add option="-m32" />
 		</Compiler>
 		<Linker>
-			<Add option="-static-libstdc++" />
-			<Add option="-static-libgcc" />
 			<Add option="-static" />
-			<Add option="-m32" />
 			<Add library="gdi32" />
 			<Add library="user32" />
 			<Add library="kernel32" />

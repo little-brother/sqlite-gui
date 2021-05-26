@@ -52,8 +52,12 @@ namespace tools {
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
-					TCHAR path16[MAX_PATH] = {0};
-					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0")))
+					TCHAR table16[256] = {0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
+
+					TCHAR path16[MAX_PATH];
+					_stprintf(path16, table16);
+					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), TEXT("csv"), hWnd))
 						return true;
 
 					// Use binary mode
@@ -63,9 +67,6 @@ namespace tools {
 						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 						return true;
 					}
-
-					TCHAR table16[256] = {0};
-					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
 
 					bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
 					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
@@ -169,7 +170,8 @@ namespace tools {
 					}
 
 					TCHAR path16[MAX_PATH];
-					if (!utils::saveFile(path16, TEXT("SQL files\0*.sql\0All\0*.*\0")))
+					_stprintf(path16, TEXT("script.sql"));
+					if (!utils::saveFile(path16, TEXT("SQL files\0*.sql\0All\0*.*\0"), TEXT("sql"), hWnd))
 						return true;
 
 					FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));

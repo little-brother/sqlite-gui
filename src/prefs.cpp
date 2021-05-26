@@ -56,7 +56,7 @@ namespace prefs {
 
 	char* get(const char* name, const char* def) {
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare_v2(db, "select value from 'prefs' where name = ?;", -1, &stmt, 0))
+		if (SQLITE_OK != sqlite3_prepare_v2(db, "select value from prefs where name = ?1", -1, &stmt, 0))
 			return NULL;
 
 		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
@@ -68,15 +68,19 @@ namespace prefs {
 		return value;
 	}
 
-	bool set(const char* name, const char* value) {
+	bool set(const char* name, const char* value, bool strict) {
+		bool res = false;
+
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare_v2(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
-			return false;
+		if (SQLITE_OK == sqlite3_prepare_v2(db,
+				strict ?
+					"update prefs set value = ?2 where name = ?1" :
+					"replace into prefs (name, value) values (?1, ?2)", -1, &stmt, 0)) {
+			sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 2, value, strlen(value),  SQLITE_TRANSIENT);
 
-		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
-		sqlite3_bind_text(stmt, 2, value, strlen(value),  SQLITE_TRANSIENT);
-
-		bool res = SQLITE_OK == sqlite3_step(stmt);
+			res = SQLITE_DONE == sqlite3_step(stmt) && sqlite3_changes(db) == 1;
+		}
 		sqlite3_finalize(stmt);
 
 		return res;

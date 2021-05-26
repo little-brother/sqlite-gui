@@ -18,7 +18,7 @@ namespace prefs {
 	bool set(const char* name, int value);
 
 	char* get(const char* name, const char* def);
-	bool set(const char* name, const char* value);
+	bool set(const char* name, const char* value, bool strict = false);
 }
 
 #endif
