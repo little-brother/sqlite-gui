@@ -9,7 +9,7 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChart, cbOldChartOptions;
+	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -491,26 +491,41 @@ namespace dialogs {
 
 			case WM_CONTEXTMENU: {
 				POINT p = {LOWORD(lParam), HIWORD(lParam)};
-				HMENU hMenu = (HMENU)GetProp(hWnd, TEXT("MENU"));
-				TrackPopupMenu(GetSubMenu(hMenu, 0), TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HMENU hMenu = GetSubMenu((HMENU)GetProp(hWnd, TEXT("MENU")), 0);
+				int isOne = ListView_GetSelectedCount(hListWnd) == 1;
+				EnableMenuItem(hMenu, IDM_QUERY_ADD_OLD, MF_BYCOMMAND | (isOne ? MF_ENABLED : MF_GRAYED));
+				EnableMenuItem(hMenu, IDM_QUERY_ADD_NEW, MF_BYCOMMAND | (isOne ? MF_ENABLED : MF_GRAYED));
+				TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
 			}
 			break;
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->idFrom != IDC_DLG_QUERYLIST)
+					return 0;
+
 				if (pHdr->code == (DWORD)NM_DBLCLK)
 					SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_OLD, 0);
 
 				if (pHdr->code == LVN_KEYDOWN) {
 					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
+					int isOne = ListView_GetSelectedCount(pHdr->hwndFrom) == 1;
+
 					if (kd->wVKey == VK_DELETE)
 						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_DELETE, 0);
-					if (kd->wVKey == VK_RETURN)
+
+					if (isOne && kd->wVKey == VK_RETURN)
 						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_OLD, 0);
-					if (kd->wVKey == VK_SPACE)
+
+					if (isOne && kd->wVKey == VK_SPACE)
 						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_ADD_NEW, 0);
-					if (kd->wVKey == 0x43) // Ctrl + C
+
+					if (isOne && kd->wVKey == 0x43) // Ctrl + C
 						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_COPY, 0);
+
+					if (kd->wVKey == 0x41 && GetKeyState(VK_CONTROL)) // Ctrl + A
+						ListView_SetItemState(pHdr->hwndFrom, -1, LVIS_SELECTED, LVIS_SELECTED);
 				}
 			}
 			break;
@@ -522,19 +537,17 @@ namespace dialogs {
 					return true;
 				}
 
-				if (wParam == IDM_QUERY_DELETE || wParam == IDM_QUERY_ADD_NEW || wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_COPY) {
+				if (wParam == IDM_QUERY_DELETE) {
 					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
-					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
-					if (pos == -1)
-						return false;
 
-					int idx = GetWindowLong(hWnd, GWL_USERDATA);
+					char sql8[256];
+					sprintf(sql8, "delete from %s where query = ?1", GetWindowLong(hWnd, GWL_USERDATA) == IDM_HISTORY ? "history" : "gists");
+
 					TCHAR query16[MAX_TEXT_LENGTH];
-					ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
-
-					if (wParam == IDM_QUERY_DELETE) {
-						char sql8[256];
-						sprintf(sql8, "delete from %s where query = ?1", idx == IDM_HISTORY ? "history" : "gists");
+					int pos = -1;
+					sqlite3_exec(prefs::db, "begin;", 0, 0, 0);
+					while((pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED)) != -1) {
+						ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
 
 						sqlite3_stmt* stmt;
 						if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, sql8, -1, &stmt, 0)) {
@@ -546,8 +559,18 @@ namespace dialogs {
 						sqlite3_finalize(stmt);
 
 						ListView_DeleteItem(hListWnd, pos);
-						ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
 					}
+					sqlite3_exec(prefs::db, "commit;", 0, 0, 0);
+				}
+
+				if (wParam == IDM_QUERY_ADD_NEW || wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_COPY) {
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+					if (pos == -1)
+						return false;
+
+					TCHAR query16[MAX_TEXT_LENGTH];
+					ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
 
 					if (wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_ADD_NEW) {
 						if (wParam == IDM_QUERY_ADD_NEW)
@@ -2171,10 +2194,12 @@ namespace dialogs {
 	}
 
 
-	#define CHART_LINES  0
-	#define CHART_DOTS   1
-	#define CHART_BARS   2
-	#define CHART_NONE   3
+	#define CHART_LINES     0
+	#define CHART_DOTS      1
+	#define CHART_AREAS     2
+	#define CHART_HISTOGRAM 3
+	#define CHART_BARS      4
+	#define CHART_NONE      5
 
 	#define CHART_MAX  1.79769e+308
 	#define CHART_NULL 0.00012003
@@ -2226,6 +2251,12 @@ namespace dialogs {
 		int colBaseType = colTypes[colBase];
 		bool isExport = _scrollY < 0;
 		int scrollY = _scrollY < 0 ? 0 : _scrollY;
+
+		if (type == CHART_AREAS)
+			minY = MIN(0, minY);
+
+		if (type == CHART_HISTOGRAM)
+			minY = 0;
 
 		HWND hListWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
 		HWND hHeader = ListView_GetHeader(hListWnd);
@@ -2314,12 +2345,11 @@ namespace dialogs {
 			DeleteObject(hNullBrush);
 		}
 
-		if (type == CHART_LINES || type == CHART_DOTS) {
-			// Grid
+		// Grid
+		if (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) {
 			HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
 			SelectObject(hdc, hPen);
 
-			// Grid
 			// https://stackoverflow.com/a/18049477/6121703
 			auto findDelta = [](float maxvalue, int count) {
 				float step = maxvalue/count,
@@ -2359,7 +2389,6 @@ namespace dialogs {
 					RECT rc2 {x - 30, h - CHART_BORDER + 10, x + 30, h};
 					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER);
 				}
-
 			} else {
 				double d = findDelta(maxX - minX, CHART_GRID);
 				for (int i = 0; minX + d * i < maxX + d; i++) {
@@ -2405,8 +2434,10 @@ namespace dialogs {
 			}
 
 			DeleteObject(hPen);
+		}
 
-			int lineNo = 0;
+		int lineNo = 0;
+		if (type == CHART_LINES || type == CHART_DOTS) {
 			for (int colNo = 1; colNo < colCount; colNo++) {
 				if (colNo == colBase)
 					continue;
@@ -2425,19 +2456,17 @@ namespace dialogs {
 					if (data[colBase + rowNo * colCount] == CHART_NULL)
 						continue;
 
-					if (!pointCount && type == CHART_LINES) {
-						double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-						double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
-						MoveToEx(hdc, x, y, NULL);
-						pointCount++;
-						continue;
-					}
-
 					double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
 					double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
 
 					if (type == CHART_LINES) {
+						if (!pointCount) {
+							MoveToEx(hdc, x, y, NULL);
+							pointCount++;
+							continue;
+						}
 						LineTo(hdc, x, y);
+						pointCount++;
 					}
 
 					if (type == CHART_DOTS) {
@@ -2445,18 +2474,39 @@ namespace dialogs {
 						SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
 						SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
 						Ellipse(hdc, x - r, y - r, x + r, y + r);
+						pointCount++;
 					}
-
-					pointCount++;
 				}
 
 				if (pointCount > 0)
 					lineNo++;
 			}
+		}
 
+		if (type == CHART_AREAS || type == CHART_HISTOGRAM) {
+            HDC hTmpDC = CreateCompatibleDC(hdc);
+            VOID *pvResBits, *pvTmpBits;
+            HBRUSH hWhiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+            HPEN hGridPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
 
-			lineNo = 0;
-			// Legend
+			BITMAPINFO bmi{0};
+			bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+			bmi.bmiHeader.biWidth = w;
+			bmi.bmiHeader.biHeight = h;
+			bmi.bmiHeader.biPlanes = 1;
+			bmi.bmiHeader.biBitCount = 32;         // four 8-bit components
+			bmi.bmiHeader.biCompression = BI_RGB;
+			bmi.bmiHeader.biSizeImage = bmi.bmiHeader.biWidth * bmi.bmiHeader.biHeight * 4;
+
+			HBITMAP hResBmp = CreateDIBSection(hTmpDC, &bmi, DIB_RGB_COLORS, &pvResBits, NULL, 0x0);
+			SelectObject(hTmpDC, hResBmp);
+			RECT r{0, 0, w, h};
+			//BitBlt(hTmpDC, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
+			FillRect(hTmpDC, &r, hWhiteBrush);
+
+			HBITMAP hTmpBmp = CreateDIBSection(hTmpDC, &bmi, DIB_RGB_COLORS, &pvTmpBits, NULL, 0x0);
+			SelectObject(hTmpDC, hTmpBmp);
+
 			for (int colNo = 1; colNo < colCount; colNo++) {
 				if (colNo == colBase)
 					continue;
@@ -2465,22 +2515,102 @@ namespace dialogs {
 				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
 					continue;
 
-				if (isExport) {
-					TCHAR name16[256];
-					Header_GetItemText(hHeader, colNo, name16, 255);
+				FillRect(hTmpDC, &r, hWhiteBrush);
+				SelectObject(hTmpDC, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+				SelectObject(hTmpDC, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
 
-					int x = w - 100;
-					int y = CHART_BORDER + 5 + lineNo * 15;
-					SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
-					SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
-					Ellipse(hdc, x - 15, y + 2, x - 5, y + 12);
+				int pointCount = 0;
+				double prevX = CHART_NULL;
+				double prevY = CHART_NULL;
+				double y0 = h - map(minY, minY, maxY, CHART_BORDER, h - CHART_BORDER);
 
-					SetTextColor(hdc, RGB(0, 0, 0));
-					TextOut(hdc, x, y, name16, _tcslen(name16));
+				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+					if (data[colNo + rowNo * colCount] == CHART_NULL)
+						continue;
+
+					if (data[colBase + rowNo * colCount] == CHART_NULL)
+						continue;
+
+					double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+
+					if (prevX != CHART_NULL) {
+						if (type == CHART_AREAS) {
+							POINT p[4] = {{(int)prevX, (int)y0}, {(int)prevX, (int)prevY}, {(int)x, (int)y}, {(int)x, (int)y0}};
+							Polygon(hTmpDC, p, 4);
+						}
+
+						if (type == CHART_HISTOGRAM) {
+							Rectangle(hTmpDC, prevX + 1, prevY + 2, x, y0);
+
+							SelectObject(hTmpDC, hGridPen);
+							MoveToEx(hTmpDC, x, y0, 0);
+							LineTo(hTmpDC, x, y0);
+						}
+					}
+
+					prevX = x;
+					prevY = y;
+					pointCount++;
 				}
+
+				if (pointCount > 0) {
+					COLORREF color = COLORS[lineNo % MAX_CHART_COLOR_COUNT];
+					DWORD c = ((BYTE)(GetBValue(color)) | ((BYTE)(GetGValue(color)) << 8) | ((BYTE)(GetRValue(color)) << 16));
+
+					for (int y = 0; y < h; y++) {
+						for (int x = 0; x < w; x++) {
+							if (((UINT32 *)pvTmpBits)[x + y * w] == 0x00FFFFFF)
+								continue;
+
+							((UINT32 *)pvResBits)[x + y * w] =
+								(((UINT32 *)pvResBits)[x + y * w] != 0x00FFFFFF ?
+								utils::blend(((UINT32 *)pvResBits)[x + y * w], c, 64) : c) | 0xFF000000;
+						}
+					}
+					lineNo++;
+				}
+			}
+
+			SelectObject(hTmpDC, hResBmp);
+			TransparentBlt(hdc, 0, 0, w, h, hTmpDC, 0, 0, w, h, RGB(255, 255, 255));
+			//BitBlt(hdc, 0, 0, w, h, hTmpDC, 0, 0, SRCCOPY);
+
+			DeleteObject(hTmpBmp);
+			DeleteObject(hResBmp);
+			DeleteDC(hTmpDC);
+
+			DeleteObject(hWhiteBrush);
+			DeleteObject(hGridPen);
+		}
+
+		// Legend
+		if (isExport && (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM)) {
+			HPEN hPen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+			lineNo = 0;
+			for (int colNo = 1; colNo < colCount; colNo++) {
+				if (colNo == colBase)
+					continue;
+
+				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
+				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
+					continue;
+
+				TCHAR name16[256];
+				Header_GetItemText(hHeader, colNo, name16, 255);
+
+				int x = w - 100;
+				int y = CHART_BORDER + 5 + lineNo * 15;
+				SelectObject(hdc, hPen);
+				SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+				Ellipse(hdc, x - 16, y + 1, x - 4, y + 13);
+
+				SetTextColor(hdc, RGB(0, 0, 0));
+				TextOut(hdc, x, y, name16, _tcslen(name16));
 
 				lineNo++;
 			}
+			DeleteObject(hPen);
 
 			if (lineNo == 0)
 				type = CHART_NONE;
@@ -2570,15 +2700,15 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("MENU"), (HANDLE)LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_CHART)));
 
 				HWND hChartWnd = GetDlgItem(hWnd, IDC_DLG_CHART);
-				cbOldChart = (WNDPROC)SetWindowLong(hChartWnd, GWL_WNDPROC, (LONG)cbNewChart);
+				SetWindowLong(hChartWnd, GWL_WNDPROC, (LONG)cbNewChart);
 
 				HWND hOptionsWnd = GetDlgItem(hWnd, IDC_DLG_CHART_OPTIONS);
 				HINSTANCE hInstance = GetModuleHandle(0);
 				CreateWindow(WC_STATIC, TEXT("Type"), WS_VISIBLE | WS_CHILD, 10, 13, 50, 20, hOptionsWnd, NULL, hInstance, NULL);
 
 				HWND hTypeWnd = CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, 60, 10, 122, 200, hOptionsWnd, (HMENU)IDC_DLG_CHART_TYPE, hInstance, NULL);
-				TCHAR* types[] = {TEXT("Lines"), TEXT("Dots"), TEXT("Bars")};
-				for (int i = 0; i < 3; i++) {
+				TCHAR* types[] = {TEXT("Lines"), TEXT("Dots"), TEXT("Areas"), TEXT("Histogram"), TEXT("Bars")};
+				for (int i = 0; i < 5; i++) {
 					int pos = ComboBox_AddString(hTypeWnd, types[i]);
 					ComboBox_SetItemData(hTypeWnd, pos, i);
 				}
@@ -2869,6 +2999,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP), prefs::get("word-wrap") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[255];
@@ -2923,6 +3054,7 @@ namespace dialogs {
 					prefs::set("ask-delete", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ASK_DELETE)));
 					prefs::set("word-wrap", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
+					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
 					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
@@ -3772,6 +3904,8 @@ namespace dialogs {
 
 				drawChart(hWnd, hdc, w, h, (int)GetProp(hWnd, TEXT("SCROLLY")));
 				EndPaint(hWnd, &ps);
+
+				return true;
 			}
 			break;
 
@@ -3830,6 +3964,7 @@ namespace dialogs {
 
 			case WM_LBUTTONDOWN: {
 				SetFocus(hWnd);
+				return true;
 			}
 			break;
 
@@ -3837,7 +3972,7 @@ namespace dialogs {
 				HWND hParentWnd = GetParent(hWnd);
 
 				int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
-				if (type == CHART_LINES || type == CHART_DOTS) {
+				if (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) {
 					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
 					int colBase = (int)GetProp(hParentWnd, TEXT("COLBASE"));
 
@@ -3900,6 +4035,7 @@ namespace dialogs {
 				ReleaseDC(hWnd, hdc);
 				ScrollWindow(hWnd, 0, -p.y, NULL, NULL);
 				SetProp(hWnd, TEXT("SCROLLY"), (HANDLE)pos);
+				SetFocus(hWnd);
 
 				return 0;
 			}
@@ -3930,6 +4066,8 @@ namespace dialogs {
 				}
 
 				InvalidateRect(hWnd, 0, true);
+
+				return true;
 			}
 			break;
 
@@ -3946,7 +4084,7 @@ namespace dialogs {
 			break;
 		}
 
-		return CallWindowProc(cbOldChart, hWnd, msg, wParam, lParam);
+		return CallWindowProc(DefWindowProc, hWnd, msg, wParam, lParam);
 	}
 
 	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -3999,7 +4137,8 @@ namespace dialogs {
 					bool isFirstColumn = true;
 					for (int colNo = 0; colNo < colCount; colNo++) {
 						HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
-						if (((type == CHART_LINES || type == CHART_DOTS) && (colTypes[colNo] == CHART_NUMBER || colTypes[colNo] == CHART_DATE)) ||
+						if (((type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) &&
+							(colTypes[colNo] == CHART_NUMBER || colTypes[colNo] == CHART_DATE)) ||
 							(type == CHART_BARS && colTypes[colNo] == CHART_TEXT)) {
 							TCHAR buf[256];
 							GetWindowText(hColumnWnd, buf, 255);
@@ -4016,6 +4155,17 @@ namespace dialogs {
 					}
 					ComboBox_SetCurSel(hBaseWnd, 0);
 					PostMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CHART_BASE, CBN_SELCHANGE), (LPARAM)hBaseWnd);
+
+					if (type == CHART_BARS) {
+						RECT rc{0};
+						GetClientRect(hChartWnd, &rc);
+						PostMessage(hChartWnd, WM_SIZE, 0, MAKELPARAM(rc.right, rc.bottom));
+					} else {
+						SCROLLINFO si{0};
+						si.cbSize = sizeof(SCROLLINFO);
+						si.fMask = SIF_ALL;
+						SetScrollInfo(hChartWnd, SB_VERT, &si, true);
+					}
 				}
 
 				if (LOWORD(wParam) == IDC_DLG_CHART_BASE && HIWORD(wParam) == CBN_SELCHANGE) {

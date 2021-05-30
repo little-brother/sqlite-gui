@@ -52,6 +52,7 @@
 			<Add library="libgdiplus" />
 			<Add library="libcomdlg32" />
 			<Add library="libshlwapi" />
+			<Add library="libmsimg32" />
 			<Add library="lib/libsqlite3.a" />
 		</Linker>
 		<Unit filename="ToDo.txt" />

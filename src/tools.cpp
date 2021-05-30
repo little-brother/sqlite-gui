@@ -1004,7 +1004,7 @@ namespace tools {
 							"from temp.compare_tables where cnt1 <> cnt2 or coalesce(diff, 0) > 0", -1, &stmt, 0);
 						int rowCount = ListView_SetData(hDiffWnd, stmt);
 						if (!rowCount)
-							MessageBox(hWnd, TEXT("No differences found"), TEXT("Info"), 0);
+							MessageBox(hWnd, TEXT("No differences were found in tables with the same structure"), TEXT("Info"), 0);
 						sqlite3_finalize(stmt);
 					}
 

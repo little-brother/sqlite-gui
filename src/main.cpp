@@ -244,7 +244,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, SB_SQLITE_VERSION, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)TEXT(" GUI: 1.5.3"));
+	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)TEXT(" GUI: 1.5.4"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -900,7 +900,15 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_RENAME)
 				(void)TreeView_EditLabel(hTreeWnd, treeItems[0]);
 
-			if (cmd == IDM_ADD || cmd == IDM_DELETE || cmd == IDM_REFRESH || cmd == IDM_VIEW || cmd == IDM_EDIT ||
+			if (cmd == IDM_REFRESH) {
+				TV_ITEM tv{0};
+				tv.mask = TVIF_PARAM | TVIF_TEXT;
+				tv.hItem = treeItems[0];
+				TreeView_GetItem(hTreeWnd, &tv);
+				updateTree(abs(tv.lParam));
+			}
+
+			if (cmd == IDM_ADD || cmd == IDM_DELETE || cmd == IDM_VIEW || cmd == IDM_EDIT ||
 				cmd == IDM_ENABLE || cmd == IDM_DISABLE || cmd == IDM_ENABLE_ALL || cmd == IDM_DISABLE_ALL) {
 				TCHAR name16[256] = {0};
 				TV_ITEM tv;
@@ -1061,7 +1069,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 
 				if (rc)
-					updateTree(type, cmd != IDM_REFRESH ? name16 : NULL);
+					updateTree(type, name16);
 				SetFocus(hTreeWnd);
 			}
 
@@ -1558,8 +1566,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (pHdr->code == NM_TAB_DELETE && pHdr->hwndFrom == hMainTabWnd) {
 				int tabNo = wParam;
-				DestroyWindow(tabs[tabNo].hEditorWnd);
-				DestroyWindow(tabs[tabNo].hTabWnd);
+				TEditorTab* tab = &tabs[tabNo];
+				DestroyWindow(tab->hEditorWnd);
+				DestroyWindow(tab->hTabWnd);
+				DestroyWindow(tab->hQueryListWnd);
+				sqlite3_close(tab->db);
 
 				for (int i = tabNo; i < MAX_TAB_COUNT - 1; i++)
 					tabs[i] = tabs[i + 1];
@@ -1686,6 +1697,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	// https://devblogs.microsoft.com/oldnewthing/20070626-00/?p=26263
+	if (msg == WM_GETDLGCODE && lParam && ((MSG*)lParam)->message == WM_KEYDOWN && (wParam == VK_RETURN))
+	   return DLGC_WANTMESSAGE;
+
 	// Quick reference tooltip
 	if (msg == WM_SYSKEYDOWN && wParam == VK_MENU)
 		return 1;
@@ -2059,7 +2074,9 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	auto detectMetaChanges = [](char* query8) {
 		strlwr(query8);
 		return strstr(query8, "create table") || strstr(query8, "create virtual table") || strstr(query8, "create view") ||
-			strstr(query8, "drop table") || strstr(query8, "drop view") || strstr(query8, "alter table");
+			strstr(query8, "create index") || strstr(query8, "create trigger") ||
+			strstr(query8, "drop table") || strstr(query8, "drop view") || strstr(query8, "alter table") ||
+			strstr(query8, "drop index") || strstr(query8, "drop trigger");
 	};
 	bool isMetaChanged = false;
 
@@ -2779,6 +2796,16 @@ bool closeDb() {
 
 	closeConnections();
 
+	if (db && prefs::get("retain-passphrase") == 0) {
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "delete from temp.encryption where dbpath = ?1", -1, &stmt, 0)) {
+			const char* dbpath = sqlite3_db_filename(db, 0);
+			sqlite3_bind_text(stmt, 1, dbpath, strlen(dbpath), SQLITE_TRANSIENT);
+			sqlite3_step(stmt);
+		}
+		sqlite3_finalize(stmt);
+	}
+
 	sqlite3_exec(db, "detach database shared", 0, 0, 0);
 	if(SQLITE_OK != sqlite3_close(db))
 		showDbError(hMainWnd);
@@ -3091,6 +3118,8 @@ void updateTree(int type, TCHAR* select) {
 		selType = type && abs(tv.lParam) == type ? type : abs(tv.lParam);
 	}
 
+	int yPos = GetScrollPos(hTreeWnd, SB_VERT);
+
 	bool isExpanded = false;
 	if (type) {
 		TV_ITEM tv{0};
@@ -3289,6 +3318,8 @@ void updateTree(int type, TCHAR* select) {
 	_tcscpy(TABLES[tblNo + 1], TEXT("sqlite_sequence"));
 	TABLES[tblNo + 2] = new TCHAR[256]{0};
 	_tcscpy(TABLES[tblNo + 2], TEXT("dbstat"));
+
+	SetScrollPos(hTreeWnd, SB_VERT, yPos, true);
 
 	InvalidateRect(hTreeWnd, 0, TRUE);
 }

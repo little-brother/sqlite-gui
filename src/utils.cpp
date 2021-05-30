@@ -395,4 +395,23 @@ namespace utils {
 
 		return true;
 	}
+
+	COLORREF blend(COLORREF c1, COLORREF c2, BYTE alpha) {
+		BYTE av = alpha;
+		BYTE rem = 255 - av;
+
+		BYTE r1 = GetRValue(c1);
+		BYTE g1 = GetGValue(c1);
+		BYTE b1 = GetBValue(c1);
+
+		BYTE r2 = GetRValue(c2);
+		BYTE g2 = GetGValue(c2);
+		BYTE b2 = GetBValue(c2);
+
+		BYTE r = (r1*rem + r2*av) / 255;
+		BYTE g = (g1*rem + g2*av) / 255;
+		BYTE b = (b1*rem + b2*av) / 255;
+
+		return RGB(r, g, b);
+	}
 }

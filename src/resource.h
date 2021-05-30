@@ -64,7 +64,8 @@
 #define IDC_DLG_USE_HIGHLIGHT      128
 #define IDC_DLG_USE_LEGACY         129
 #define IDC_DLG_ROW_LIMIT          130
-#define IDC_DLG_EXIT_BY_ESCAPE     131
+#define IDC_DLG_RETAIN_PASSPHRASE  131
+#define IDC_DLG_EXIT_BY_ESCAPE     132
 #define IDC_DLG_INDENT             133
 #define IDC_DLG_TOOLBAR            134
 #define IDC_DLG_STARTUP            135

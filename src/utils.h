@@ -29,8 +29,10 @@ namespace utils {
 
 	bool isNumber(const TCHAR* str, double *out);
 	bool isNumber(const char* str, double *out);
-
 	bool isDate(const TCHAR* str, double* utc);
+
+	COLORREF blend(COLORREF c1, COLORREF c2, BYTE alpha);
+
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
 }
 #endif
