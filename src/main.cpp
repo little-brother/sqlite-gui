@@ -36,7 +36,7 @@ TCHAR* FUNCTIONS[MAX_ENTITY_COUNT] = {0};
 TCHAR* TABLES[MAX_ENTITY_COUNT] = {0};
 
 sqlite3 *db;
-HWND hMainWnd = 0, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hMainTabWnd, hTooltipWnd = 0, hDialog, hSortingResultWnd, hAutoComplete; // hTab.lParam is current ListView HWND
+HWND hMainWnd = 0, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hMainTabWnd, hTooltipWnd = 0, hDialog, hSortingResultWnd, hAutoComplete, hDragWnd = 0; // hTabWnd.lParam is current ListView HWND
 HMENU hMainMenu, hDbMenu, hEditorMenu, hResultMenu, hEditDataMenu, hBlobMenu;
 HWND hDialogs[MAX_DIALOG_COUNT]{0};
 HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
@@ -244,7 +244,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, SB_SQLITE_VERSION, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)TEXT(" GUI: 1.5.4"));
+	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)TEXT(" GUI: 1.5.5"));
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -458,14 +458,62 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				updateSizes(true);
 				ReleaseCapture();
 			}
+
+			if (hDragWnd) {
+				ReleaseCapture();
+				ShowCursor(true);
+
+				int x = GET_X_LPARAM(lParam);
+				int y = GET_Y_LPARAM(lParam);
+
+				POINT p{x, y};
+				if (ChildWindowFromPointEx(hMainWnd, p, CWP_SKIPDISABLED | CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT) == hEditorWnd) {
+					TCHAR buf[255], qbuf[257];
+					GetWindowText(hDragWnd, buf, 255);
+
+					if (!HIWORD(GetKeyState(VK_CONTROL)) || GetWindowLong(hDragWnd, GWL_USERDATA) == COLUMN) {
+						bool isAlphaNum = !_istdigit(buf[0]);
+						for (int i = 0; isAlphaNum && (i < (int)_tcslen(buf)); i++)
+							isAlphaNum = _istalnum(buf[i]) || (buf[i] == TEXT('_'));
+						if (!isAlphaNum)
+							_stprintf(qbuf, TEXT("\"%s\""), buf);
+
+						SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)(isAlphaNum ? buf : qbuf));
+					} else {
+						TCHAR res[MAX_TEXT_LENGTH];
+						_stprintf(res, buf);
+						if (DLG_OK == DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_DROP), hWnd, (DLGPROC)&dialogs::cbDlgDrop, (LPARAM)res))
+							SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)res);
+					}
+				}
+
+				DestroyWindow(hDragWnd);
+				hDragWnd = 0;
+			}
+
 			isMoveX = FALSE;
 			isMoveY = FALSE;
 		}
 		break;
 
 		case WM_MOUSEMOVE: {
-			DWORD x = GET_X_LPARAM(lParam);
-			DWORD y = GET_Y_LPARAM(lParam);
+			LONG x = GET_X_LPARAM(lParam);
+			LONG y = GET_Y_LPARAM(lParam);
+
+			if (hDragWnd) {
+				SetWindowPos(hDragWnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+				POINT p{x, y};
+				if (ChildWindowFromPointEx(hMainWnd, p, CWP_SKIPDISABLED | CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT) == hEditorWnd) {
+					ClientToScreen(hMainWnd, &p);
+					ScreenToClient(hEditorWnd, &p);
+					int pos = SendMessage(hEditorWnd, EM_CHARFROMPOS, 0, (LPARAM)&p);
+					SendMessage(hEditorWnd, EM_SETSEL, pos, pos);
+					SetFocus(hEditorWnd);
+				}
+				InvalidateRect(hDragWnd, NULL, true);
+				return true;
+			}
 
 			isMoveX = isMoveX && (wParam == MK_LBUTTON);
 			isMoveY = isMoveY && (wParam == MK_LBUTTON);
@@ -641,7 +689,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (HIWORD(GetKeyState(VK_SHIFT)))
 					return openDb(TEXT("file::memory:?cache=shared"));
 
-				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0")))
+				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd))
 					return openDb(path16);
 			}
 
@@ -677,7 +725,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					return false;
 
 				TCHAR path16[MAX_PATH]{0};
-				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"))) {
+				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd)) {
 					char* path8 = utils::utf16to8(path16);
 					attachDb(&db, path8);
 					delete [] path8;
@@ -825,6 +873,14 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				HWND hActiveWnd = GetActiveWindow();
 				if (hActiveWnd != hMainWnd)
 					return SendMessage(hActiveWnd, WM_CLOSE, 0, 0);
+
+				if (hDragWnd) {
+					DestroyWindow(hDragWnd);
+					hDragWnd = 0;
+					ReleaseCapture();
+					ShowCursor(true);
+					return true;
+				}
 
 				if (!SendMessage(hToolbarWnd, TB_ISBUTTONHIDDEN, IDM_INTERRUPT, 0))
 					return SendMessage(hWnd, WM_COMMAND, IDM_INTERRUPT, 0);
@@ -1164,7 +1220,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_IMPORT_SQL) {
 				TCHAR path16[MAX_PATH];
-				if(utils::openFile(path16, TEXT("*.sql\0*.sql\0All\0*.*\0")) && tools::importSqlFile(path16)) {
+				if(utils::openFile(path16, TEXT("*.sql\0*.sql\0All\0*.*\0"), hWnd) && tools::importSqlFile(path16)) {
 					updateTree();
 					MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 				}
@@ -1172,7 +1228,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_IMPORT_CSV) {
 				TCHAR path16[MAX_PATH];
-				if(utils::openFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"))) {
+				if(utils::openFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), hWnd)) {
 					int rc = DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_IMPORT_CSV), hMainWnd, (DLGPROC)&tools::cbDlgImportCSV, (LPARAM)path16);
 					if (rc != -1) {
 						TCHAR msg16[255];
@@ -1358,7 +1414,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if(!TreeView_GetItem(hTreeWnd, &tv))
 						return 0;
 
-					if (GetAsyncKeyState(VK_SHIFT)) {
+					if (tv.lParam == COLUMN)
+						_tcstok(name16, TEXT(":"));
+
+					if (tv.lParam == TABLE && HIWORD(GetKeyState(VK_SHIFT))) {
 						TCHAR* ddl = getDDL(name16, tv.lParam, false);
 						if (ddl != NULL) {
 							utils::setClipboardText(ddl);
@@ -1374,6 +1433,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == TVN_SELCHANGED)
 				treeItems[0] = TreeView_GetSelection(hTreeWnd);
+
+			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == TVN_ITEMEXPANDING)
+				TreeView_SelectItem(hTreeWnd, ((LPNMTREEVIEW)lParam)->itemNew.hItem);
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == TVN_BEGINLABELEDIT) {
 				const NMTVDISPINFO * pMi = (LPNMTVDISPINFO)lParam;
@@ -1454,6 +1516,38 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					showDbError(hMainWnd);
 				delete [] query8;
 				return rc;
+			}
+
+			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == (UINT)TVN_BEGINDRAG) {
+				NMTREEVIEW* lpnmtv = (LPNMTREEVIEW)lParam;
+
+				TCHAR buf[255];
+				TV_ITEM tv{0};
+				tv.mask = TVIF_TEXT | TVIF_PARAM;
+				tv.pszText = buf;
+				tv.cchTextMax = 255;
+				tv.hItem = lpnmtv->itemNew.hItem;
+				TreeView_GetItem(hTreeWnd, &tv);
+
+				int len = _tcslen(buf);
+				_tcstok(buf, TEXT(":"));
+
+				if (tv.lParam < 0)
+					return true;
+
+				RECT rc{0};
+				*(HTREEITEM*)&rc = tv.hItem;
+				SendMessage(hTreeWnd, TVM_GETITEMRECT, true, (LPARAM)&rc);
+
+				TreeView_Select(hTreeWnd, tv.hItem, TVGN_CARET);
+				SetCapture(hMainWnd);
+				ShowCursor(false);
+
+				hDragWnd = CreateWindowEx(WS_EX_TOPMOST, WC_STATIC, buf, WS_CHILD | SS_LEFT | WS_VISIBLE,
+					rc.left, rc.top, (rc.right - rc.left) * _tcslen(buf) / len, rc.bottom - rc.top, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);;
+				SetWindowLong(hDragWnd, GWL_USERDATA, tv.lParam);
+				setTreeFont(hDragWnd);
+				InvalidateRect(hDragWnd, NULL, true);
 			}
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == (UINT)NM_CUSTOMDRAW) {
@@ -2816,6 +2910,11 @@ bool closeDb() {
 	TreeView_DeleteAllItems(hTreeWnd);
 	SendMessage(hMainWnd, WMU_SET_ICON, 0, 0);
 
+	for (int i = 0; (i < MAX_ENTITY_COUNT) && (TABLES[i] != 0); i++) {
+		delete [] TABLES[i];
+		TABLES[i] = 0;
+	}
+
 	disableMainMenu();
 	updateExecuteMenu(false);
 
@@ -3320,7 +3419,6 @@ void updateTree(int type, TCHAR* select) {
 	_tcscpy(TABLES[tblNo + 2], TEXT("dbstat"));
 
 	SetScrollPos(hTreeWnd, SB_VERT, yPos, true);
-
 	InvalidateRect(hTreeWnd, 0, TRUE);
 }
 

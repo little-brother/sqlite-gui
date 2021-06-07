@@ -4,15 +4,15 @@
 #include "resource.h"
 
 1 VERSIONINFO
-FILEVERSION 1, 5, 4, 0
+FILEVERSION 1, 5, 5, 0
 FILEOS VOS_DOS_WINDOWS32
 FILETYPE VFT_APP {
 	BLOCK "StringFileInfo" {
 		BLOCK "040904E4" {
 			VALUE "FileDescription", "sqlite-gui\000"
-			VALUE "FileVersion", "1.5.4\000"
+			VALUE "FileVersion", "1.5.5\000"
 			VALUE "ProductName", "sqlite-gui\000"
-			VALUE "ProductVersion", "1.5.4\000"
+			VALUE "ProductVersion", "1.5.5\000"
 			VALUE "LegalCopyright", "Copyright \251 Little Brother 2020-2021\000"
 			VALUE "OriginalFilename", "sqlite-gui.exe\000"
 		}
@@ -108,7 +108,7 @@ END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_EDITDATA_VALUE DIALOGEX 10, 10, 500, 400
-	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU
+	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Edit value"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
@@ -436,6 +436,19 @@ IDD_BIND_PARAMETERS DIALOGEX 40, 30, 200, 260
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	PUSHBUTTON "OK", IDC_DLG_OK, 0, 0, 60, 14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_DROP DIALOGEX 40, 30, 160, 210
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Generate statement"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Type", IDC_DLG_LABEL, 5, 7, 20, 14, SS_LEFT
+	COMBOBOX IDC_DLG_TYPE, 25, 5, 130, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT "", IDC_DLG_COLUMNS, 5, 25, 150, 160, SS_LEFT | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 95, 190, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -790,6 +803,7 @@ BEGIN
 		"* Hold Control while opening the database to open it read-only.\n\n" \
 		"* Hold Shift while opening the database to open empty in-memory database.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
+		"* Hold Ctrl on dropping a tree item to an editor to append a statement.\n\n" \
 		"* Each tab uses an own independed connection to the database and hence \n" \
 		"   has own TEMP-schema. So if you need to share in-memory data between\n"
 		"   tabs you should use SHARED-schema instead TEMP. Check Wiki for details.\n\n" \

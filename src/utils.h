@@ -18,7 +18,7 @@ namespace utils {
 	void setClipboardText(const TCHAR* text);
 	TCHAR* getClipboardText();
 
-	int openFile(TCHAR* path, const TCHAR* filter);
+	int openFile(TCHAR* path, const TCHAR* filter, HWND hWnd = 0);
 	int saveFile(TCHAR* path, const TCHAR* filter, const TCHAR* defExt, HWND hWnd = 0);
 	bool isFileExists(const TCHAR* path);
 	char* readFile(const char* path);

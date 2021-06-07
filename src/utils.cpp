@@ -155,11 +155,11 @@ namespace utils {
 		return res ? res : new TCHAR[1]{0};
 	}
 
-	int openFile(TCHAR* path, const TCHAR* filter) {
+	int openFile(TCHAR* path, const TCHAR* filter, HWND hWnd) {
 		OPENFILENAME ofn = {0};
 
 		ofn.lStructSize = sizeof(ofn);
-		ofn.hwndOwner = HWND_DESKTOP;
+		ofn.hwndOwner = hWnd;
 		ofn.lpstrFile = path;
 		ofn.lpstrFile[0] = '\0';
 		ofn.nMaxFile = MAX_PATH;
@@ -176,7 +176,7 @@ namespace utils {
 
 		OPENFILENAME ofn = {0};
 		ofn.lStructSize = sizeof(ofn);
-		ofn.hwndOwner = HWND_DESKTOP;
+		ofn.hwndOwner = hWnd;
 		ofn.lpstrFile = path;
 		ofn.lpstrFile[_tcslen(path) + 1] = '\0';
 		ofn.nMaxFile = MAX_PATH;

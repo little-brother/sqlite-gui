@@ -925,7 +925,7 @@ namespace tools {
 
 			case WM_COMMAND: {
 				TCHAR path16[MAX_PATH]{0};
-				if (wParam == IDC_DLG_DATABASE_SELECTOR && utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db)\0*.sqlite;*.sqlite3;*.db\0All\0*.*\0")))
+				if (wParam == IDC_DLG_DATABASE_SELECTOR && utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db)\0*.sqlite;*.sqlite3;*.db\0All\0*.*\0"), hWnd))
 					SetDlgItemText(hWnd, IDC_DLG_DATABASE, path16);
 
 				if (wParam == IDC_DLG_COMPARE_SCHEMA || wParam == IDC_DLG_COMPARE_DATA) {

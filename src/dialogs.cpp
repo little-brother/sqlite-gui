@@ -354,6 +354,10 @@ namespace dialogs {
 					HWND hListWnd = pHdr->hwndFrom;
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 
+					HWND hPrevCell = FindWindowEx(hListWnd, 0, WC_COMBOBOX, 0);
+					if (hPrevCell)
+						DestroyWindow(hPrevCell);
+
 					if (ia->iItem == -1)
 						return true;
 
@@ -372,11 +376,11 @@ namespace dialogs {
 
 					HWND hCell = 0;
 					if (ia->iSubItem == 2) {
-						hCell = CreateWindow(WC_COMBOBOX, buf, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, rect.left, rect.top - 4, w + 18, 200, hListWnd, NULL, GetModuleHandle(0), NULL);
+						hCell = CreateWindow(WC_COMBOBOX, buf, CBS_DROPDOWN | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP, rect.left, rect.top - 4, w + 18, 200, hListWnd, NULL, GetModuleHandle(0), NULL);
 						ComboBox_AddString(hCell, TEXT(""));
 						for (int i = 0; DATATYPES16[i]; i++)
 							ComboBox_AddString(hCell, DATATYPES16[i]);
-						ComboBox_SetCurSel(hCell, 0);
+						ComboBox_SetText(hCell, buf);
 					}
 
 					if (ia->iSubItem == 1 || ia->iSubItem == 6 || ia->iSubItem == 7) {
@@ -1043,7 +1047,7 @@ namespace dialogs {
 					TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
 				}
 
-				if (pHdr->code == (DWORD)NM_CLICK && GetAsyncKeyState(VK_MENU)) {
+				if (pHdr->code == (DWORD)NM_CLICK && HIWORD(GetKeyState(VK_MENU))) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 					SendMessage(hWnd, WMU_SET_CURRENT_CELL, ia->iItem, ia->iSubItem);
 					return ListView_ShowRef(hListWnd, ia->iItem, ia->iSubItem);
@@ -1111,6 +1115,15 @@ namespace dialogs {
 
 					bool isControl = HIWORD(GetKeyState(VK_CONTROL));
 					bool isAlt = HIWORD(GetKeyState(VK_MENU));
+
+					if (kd->wVKey == VK_RETURN) {
+						int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+						if (hListWnd == GetFocus() && pos != -1) {
+							SetProp(hWnd, TEXT("CURRENTROW"), (HANDLE)pos);
+							PostMessage(hWnd, WM_COMMAND, IDM_ROW_EDIT, 0);
+						}
+						return true;
+					}
 
 					if ((kd->wVKey == VK_LEFT || kd->wVKey == VK_RIGHT) && isControl && isAlt) {
 						return true;
@@ -1232,15 +1245,6 @@ namespace dialogs {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
-
-
-				if (wParam == IDOK) { // User push Enter
-					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
-					if (hListWnd == GetFocus() && pos != -1) {
-						SetProp(hWnd, TEXT("CURRENTROW"), (HANDLE)pos);
-						PostMessage(hWnd, WM_COMMAND, IDM_ROW_EDIT, 0);
-					}
-				}
 
 				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
@@ -1383,7 +1387,7 @@ namespace dialogs {
 				if (cmd == IDM_BLOB_NULL || cmd == IDM_BLOB_IMPORT || cmd == IDM_BLOB_EXPORT) {
 					TCHAR path16[MAX_PATH]{0};
 					TCHAR filter16[] = TEXT("Images (*.jpg, *.gif, *.png, *.bmp)\0*.jpg;*.jpeg;*.gif;*.png;*.bmp\0Binary(*.bin,*.dat)\0*.bin,*.dat\0All\0*.*\0");
-					bool isOK = (cmd == IDM_BLOB_IMPORT && utils::openFile(path16, filter16)) ||
+					bool isOK = (cmd == IDM_BLOB_IMPORT && utils::openFile(path16, filter16, hWnd)) ||
 						(cmd == IDM_BLOB_EXPORT && utils::saveFile(path16, filter16, TEXT(""), hWnd)) ||
 						(cmd == IDM_BLOB_NULL && MessageBox(hWnd, TEXT("Are you sure to reset the cell?"), TEXT("Erase confirmation"), MB_OKCANCEL) == IDOK);
 
@@ -1793,6 +1797,8 @@ namespace dialogs {
 						}
 						SetProp(hWnd, TEXT("CURRENTROW"), (HANDLE)currRow);
 					};
+
+					SendMessage(hWnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hColumnsWnd, IDC_ROW_EDIT + 1), true);
 
 					if (mode == ROW_VIEW) {
 						changeCurrentItem();
@@ -2214,7 +2220,7 @@ namespace dialogs {
 	#define CHART_BAR_HEIGHT 20
 	#define CHART_BAR_SPACE 3
 
-	COLORREF COLORS[MAX_CHART_COLOR_COUNT] = {RGB(51, 34, 136), RGB(136, 204, 238), RGB(68, 170, 153), RGB(17, 119, 51), RGB(153, 153, 51), RGB(221, 204, 119), RGB(204, 102, 119), RGB(136, 34, 85), RGB(170, 68, 153)};
+	COLORREF COLORS[MAX_CHART_COLOR_COUNT] = {RGB(0, 0, 0), RGB(51, 34, 136), RGB(136, 204, 238), RGB(68, 170, 153), RGB(17, 119, 51), RGB(153, 153, 51), RGB(221, 204, 119), RGB(204, 102, 119), RGB(136, 34, 85), RGB(170, 68, 153)};
 	HPEN hPens[MAX_CHART_COLOR_COUNT];
 	HBRUSH hBrushes[MAX_CHART_COLOR_COUNT];
 
@@ -2247,6 +2253,8 @@ namespace dialogs {
 		double maxY = minmax[3];
 		bool* isColumns = (bool*)GetProp(hWnd, TEXT("ISCOLUMNS"));
 		int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
+		BYTE* colColors = (BYTE*)GetProp(hWnd, TEXT("COLCOLORS"));
+
 		int colBase = (int)GetProp(hWnd, TEXT("COLBASE"));
 		int colBaseType = colTypes[colBase];
 		bool isExport = _scrollY < 0;
@@ -2280,6 +2288,8 @@ namespace dialogs {
 				if (!isColumns[colNo] || colNo == colBase)
 					continue;
 
+				BYTE colorNo = colColors[colNo];
+
 				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
 					double val = data[colNo + rowNo * colCount];
 					bool isNull = val == CHART_NULL;
@@ -2297,7 +2307,7 @@ namespace dialogs {
 						right = tmp;
 					}
 
-					SelectBrush(hdc, isNull ? hNullBrush : hBrushes[barNo % MAX_CHART_COLOR_COUNT]);
+					SelectBrush(hdc, isNull ? hNullBrush : hBrushes[colorNo]);
 					Rectangle(hdc, left, top - scrollY, right, top + CHART_BAR_HEIGHT - scrollY);
 
 					// Value and title on bar
@@ -2308,7 +2318,7 @@ namespace dialogs {
 						_stprintf(val16, TEXT("N/A"));
 					else
 						_stprintf(val16, TEXT("%g"), data[colNo + rowNo * colCount]);
-					SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[barNo % MAX_CHART_COLOR_COUNT] : RGB(255, 255, 255));
+					SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[colorNo] : RGB(255, 255, 255));
 					SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
 					DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
 
@@ -2442,11 +2452,13 @@ namespace dialogs {
 				if (colNo == colBase)
 					continue;
 
+				BYTE colorNo = colColors[colNo];
+
 				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
 				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
 					continue;
 
-				SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
+				SelectObject(hdc, hPens[colorNo]);
 				int pointCount = 0;
 
 				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
@@ -2471,8 +2483,8 @@ namespace dialogs {
 
 					if (type == CHART_DOTS) {
 						int r = 3;
-						SelectObject(hdc, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
-						SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+						SelectObject(hdc, hPens[colorNo]);
+						SelectBrush(hdc, hBrushes[colorNo]);
 						Ellipse(hdc, x - r, y - r, x + r, y + r);
 						pointCount++;
 					}
@@ -2511,13 +2523,15 @@ namespace dialogs {
 				if (colNo == colBase)
 					continue;
 
+				BYTE colorNo = colColors[colNo];
+
 				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
 				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
 					continue;
 
 				FillRect(hTmpDC, &r, hWhiteBrush);
-				SelectObject(hTmpDC, hPens[lineNo % MAX_CHART_COLOR_COUNT]);
-				SelectObject(hTmpDC, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+				SelectObject(hTmpDC, hPens[colorNo]);
+				SelectObject(hTmpDC, hBrushes[colorNo]);
 
 				int pointCount = 0;
 				double prevX = CHART_NULL;
@@ -2555,7 +2569,7 @@ namespace dialogs {
 				}
 
 				if (pointCount > 0) {
-					COLORREF color = COLORS[lineNo % MAX_CHART_COLOR_COUNT];
+					COLORREF color = COLORS[colorNo];
 					DWORD c = ((BYTE)(GetBValue(color)) | ((BYTE)(GetGValue(color)) << 8) | ((BYTE)(GetRValue(color)) << 16));
 
 					for (int y = 0; y < h; y++) {
@@ -2592,6 +2606,8 @@ namespace dialogs {
 				if (colNo == colBase)
 					continue;
 
+				BYTE colorNo = colColors[colNo];
+
 				HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
 				if (!IsWindowEnabled(hColumnWnd) || Button_GetCheck(hColumnWnd) != BST_CHECKED)
 					continue;
@@ -2602,7 +2618,7 @@ namespace dialogs {
 				int x = w - 100;
 				int y = CHART_BORDER + 5 + lineNo * 15;
 				SelectObject(hdc, hPen);
-				SelectBrush(hdc, hBrushes[lineNo % MAX_CHART_COLOR_COUNT]);
+				SelectBrush(hdc, hBrushes[colorNo]);
 				Ellipse(hdc, x - 16, y + 1, x - 4, y + 13);
 
 				SetTextColor(hdc, RGB(0, 0, 0));
@@ -2687,8 +2703,10 @@ namespace dialogs {
 
 				double *minmax = new double[4]{0};
 				bool *isColumns = new bool[colCount]{0};
+				BYTE *colColors = new BYTE[colCount]{0};
 
 				SetProp(hWnd, TEXT("COLTYPES"), (HANDLE)colTypes);
+				SetProp(hWnd, TEXT("COLCOLORS"), (HANDLE)colColors);
 				SetProp(hWnd, TEXT("DATA"), (HANDLE)data); // <row><row>...<row>
 				SetProp(hWnd, TEXT("MINMAX"), (HANDLE)minmax); // minX, maxX, minY, maxY
 				SetProp(hWnd, TEXT("ISCOLUMNS"), (HANDLE)isColumns); // render or not
@@ -2744,6 +2762,10 @@ namespace dialogs {
 				int* colTypes = (int*)GetProp(hWnd, TEXT("COLTYPES"));
 				delete [] colTypes;
 				RemoveProp(hWnd, TEXT("COLTYPES"));
+
+				BYTE* colColors = (BYTE*)GetProp(hWnd, TEXT("COLCOLORS"));
+				delete [] colColors;
+				RemoveProp(hWnd, TEXT("COLCOLORS"));
 
 				double* minmax = (double*)GetProp(hWnd, TEXT("MINMAX"));
 				delete [] minmax;
@@ -2910,7 +2932,7 @@ namespace dialogs {
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
-					sqlite3_stmt* stmt = (sqlite3_stmt*)GetWindowLong(hWnd, GWL_USERDATA);;
+					sqlite3_stmt* stmt = (sqlite3_stmt*)GetWindowLong(hWnd, GWL_USERDATA);
 					sqlite3_stmt* stmt2;
 					sqlite3_prepare_v2(prefs::db, "replace into query_params (dbname, name, value) values (?1, ?2, ?3);", -1, &stmt2, 0);
 					char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
@@ -2942,6 +2964,116 @@ namespace dialogs {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam is an in/out buffer
+	BOOL CALLBACK cbDlgDrop (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLong(hWnd, GWL_USERDATA, (LONG)lParam);
+				HWND hTypeWnd = GetDlgItem(hWnd, IDC_DLG_TYPE);
+				ComboBox_AddString(hTypeWnd, TEXT("SELECT"));
+				ComboBox_AddString(hTypeWnd, TEXT("UPDATE"));
+				ComboBox_AddString(hTypeWnd, TEXT("INSERT"));
+				ComboBox_AddString(hTypeWnd, TEXT("DELETE"));
+				ComboBox_SetCurSel(hTypeWnd, 0);
+
+				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+				SetFocus(hColumnsWnd);
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?1) order by cid", -1, &stmt, 0)) {
+					char* name8 = utils::utf16to8((TCHAR*)lParam);
+					sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
+					delete [] name8;
+					int colNo = 0;
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						CreateWindow(WC_BUTTON, name16, WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 5, 20 * colNo, 210, 18, hColumnsWnd, (HMENU)(IDC_ROW_SWITCH + colNo), GetModuleHandle(0), 0);
+						delete [] name16;
+						colNo++;
+					}
+
+					if (colNo > 12) {
+						SetWindowLong(hColumnsWnd, GWL_WNDPROC, (LONG)&cbNewScroll);
+						SendMessage(hColumnsWnd, WMU_SET_SCROLL_HEIGHT, colNo * 20 + 5, 0);
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK) {
+					TCHAR* res = (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA);
+					TCHAR tblname[255];
+					_stprintf(tblname, res);
+
+					int type = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_TYPE));
+
+					TCHAR columns[MAX_TEXT_LENGTH]{0};
+					HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+
+					BYTE OP_SELECT = 0;
+					BYTE OP_UPDATE = 1;
+					BYTE OP_INSERT = 2;
+					BYTE OP_DELETE = 3;
+
+					int colNo = 0;
+					int valCount = 0;
+					while (1) {
+						HWND hColumnWnd = GetDlgItem(hColumnsWnd, IDC_ROW_SWITCH + colNo);
+						colNo++;
+
+						if (!IsWindow(hColumnWnd))
+							break;
+
+						if (Button_GetCheck(hColumnWnd) != BST_CHECKED)
+							continue;
+
+						TCHAR colName[255];
+						GetWindowText(hColumnWnd, colName, 255);
+
+						if (_tcslen(columns) > 0)
+							_tcscat(columns, type == OP_SELECT ? TEXT(",\n\t") : type == OP_DELETE ? TEXT(" and ") : TEXT(", "));
+						_tcscat(columns, colName);
+						if (type == OP_UPDATE || type == OP_DELETE)
+							_tcscat(columns, TEXT(" = ?"));
+
+						valCount++;
+					}
+
+					if (type == OP_SELECT)
+						_stprintf(res, TEXT("select\n\t%s\nfrom %s"), columns, tblname);
+					if (type == OP_UPDATE)
+						_stprintf(res, TEXT("update %s set %s where"), tblname, columns);
+					if (type == OP_INSERT) {
+						TCHAR placeholders[valCount * 3 + 1]{0};
+						for (int i= 0; i < valCount; i++)
+							_tcscat(placeholders, i == 0 ? TEXT("?") : TEXT(", ?"));
+						_stprintf(res, TEXT("insert into %s (%s) values (%s)"), tblname, columns, placeholders);
+					}
+					if (type == OP_DELETE)
+						_stprintf(res, TEXT("delete from %s where %s"), tblname, columns);
+
+					EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_MOUSEWHEEL: {
+				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_COLUMNS), WM_VSCROLL, MAKELPARAM(action, 0), 0);
 			}
 			break;
 		}
@@ -3590,11 +3722,6 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_KILLFOCUS: {
-				DestroyWindow(hWnd);
-			}
-			break;
-
 			case WM_KEYDOWN: {
 				if (wParam == VK_RETURN) {
 					DestroyWindow(hWnd);
@@ -4097,12 +4224,12 @@ namespace dialogs {
 			case WM_CTLCOLORSTATIC : {
 				HWND hParentWnd = GetParent(hWnd);
 				int colCount = (int)GetProp(hParentWnd, TEXT("COLCOUNT"));
+				BYTE* colColors = (BYTE*)GetProp(hParentWnd, TEXT("COLCOLORS"));
 
-				int colorNo = -1;
 				for (int colNo = 1; colNo < colCount; colNo++) {
 					HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
 					bool isChecked = Button_GetCheck(hColumnWnd) == BST_CHECKED;
-					colorNo += IsWindowEnabled(hColumnWnd) && isChecked;
+					BYTE colorNo = colColors[colNo];
 					if (hColumnWnd == (HWND)lParam && isChecked) {
 						HDC hDC = (HDC)wParam;
 						SetTextColor(hDC, RGB(255,255, 255));
@@ -4137,6 +4264,7 @@ namespace dialogs {
 					bool isFirstColumn = true;
 					for (int colNo = 0; colNo < colCount; colNo++) {
 						HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
+
 						if (((type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) &&
 							(colTypes[colNo] == CHART_NUMBER || colTypes[colNo] == CHART_DATE)) ||
 							(type == CHART_BARS && colTypes[colNo] == CHART_TEXT)) {
@@ -4171,6 +4299,7 @@ namespace dialogs {
 				if (LOWORD(wParam) == IDC_DLG_CHART_BASE && HIWORD(wParam) == CBN_SELCHANGE) {
 					HWND hParentWnd = GetParent(hWnd);
 					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
+					BYTE* colColors = (BYTE*)GetProp(hParentWnd, TEXT("COLCOLORS"));
 					bool* isColumns = (bool*)GetProp(hParentWnd, TEXT("ISCOLUMNS"));
 
 					HWND hBaseWnd = GetDlgItem(hWnd, IDC_DLG_CHART_BASE);
@@ -4180,10 +4309,13 @@ namespace dialogs {
 
 					int no = 1;
 					for (int colNo = 1; colNo < colCount; colNo++) {
+						colColors[colNo] = 0;
+
 						bool isVisible = (colTypes[colNo] == CHART_NUMBER) && (colNo != colBase);
 						HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_CHART_COLUMN + colNo);
 						if (isVisible) {
 							SetWindowPos(hColumnWnd, 0, 10, 60 + no * 25, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+							colColors[colNo] = no % MAX_CHART_COLOR_COUNT;
 							no++;
 						}
 						EnableWindow(hColumnWnd, isVisible);

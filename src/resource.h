@@ -12,6 +12,7 @@
 #define IDD_VIEWDATA_VALUE         22
 #define IDD_BIND_PARAMETERS        23
 #define IDD_ENCRYPTION             24
+#define IDD_DROP                   25
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -129,6 +130,8 @@
 #define IDC_DLG_CLEAR_VALUES       200
 #define IDC_DLG_GRID_COLOR         210 // + 4 next
 #define IDC_DLG_GRID_COLOR_EDIT    220
+
+#define IDC_DLG_TYPE               221
 
 #define IDC_DLG_CIPHER_KEY                  227
 #define IDC_DLG_CIPHER_STORE_KEY            228

@@ -7,7 +7,7 @@
 #define MAX_TEXT_LENGTH          32000
 #define MAX_TOOLTIP_LENGTH        1024
 #define MAX_REFCOLUMN_COUNT        128
-#define MAX_CHART_COLOR_COUNT        9
+#define MAX_CHART_COLOR_COUNT       10
 #define MAX_DIALOG_COUNT            32
 
 #define DLG_OK                      1
