@@ -7,6 +7,7 @@
 #include "dialogs.h"
 
 #include <process.h>
+#include <wininet.h>
 
 #include "tom.h"
 #include <richole.h>
@@ -47,6 +48,7 @@ HMENU treeMenus[IDC_MENU_DISABLED]{0};
 
 TCHAR editTableData16[255]; // filled on DataEdit Dialog; app buffer
 TCHAR searchString[255]{0};
+DWORD doubleClickTick = 0; // issue #50
 
 HFONT hDefFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 HACCEL hAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL));
@@ -118,6 +120,7 @@ int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
 void openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
 void saveQuery(const char* storage, const char* query);
+unsigned int __stdcall checkUpdate (void* data);
 
 WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldResultTab, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -244,7 +247,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TCHAR* version16 = utils::utf8to16(version8);
 	SendMessage(hStatusWnd, SB_SETTEXT, SB_SQLITE_VERSION, (LPARAM)version16);
 	delete [] version16;
-	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)TEXT(" GUI: 1.5.5"));
+	TCHAR guiVersion[32]{0};
+	_stprintf(guiVersion, TEXT(" GUI: %s"), TEXT(GUI_VERSION));
+	SendMessage(hStatusWnd, SB_SETTEXT, SB_GUI_VERSION, (LPARAM)guiVersion);
 
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT  | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
@@ -345,6 +350,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	setEditorFont(cli.hResultWnd);
 	ShowWindow (hMainWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 	SetFocus(hEditorWnd);
+
+	if (prefs::get("check-update")) {
+		// Use thread to prevent GUI blocking on startup
+		HANDLE hThread = (HANDLE)_beginthreadex(0, 0, &checkUpdate, 0, 0, 0);
+		CloseHandle(hThread);
+	}
 
 	// https://docs.microsoft.com/en-us/windows/win32/dlgbox/using-dialog-boxes
 	while (GetMessage(&msg, NULL, 0, 0)) {
@@ -1167,7 +1178,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SendMessage(hEditorWnd, WM_COPY, 0, 0);
 
 			if (cmd == IDM_EDITOR_PASTE)
-				SendMessage(hEditorWnd, WM_PASTE, 0, 0);
+				pasteText (hEditorWnd);
 
 			if (cmd == IDM_EDITOR_DELETE)
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
@@ -1357,9 +1368,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					return ListView_Sort(pHdr->hwndFrom, kd->wVKey - (isNum ? 0x31 : 0x61) + 1 );
 			}
 
-			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == EN_SELCHANGE)
-				SendMessage(hMainWnd, WMU_UPDATE_CARET_INFO, 0, 0);
-
 			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == WM_RBUTTONDOWN) {
 				POINT p;
 				GetCursorPos(&p);
@@ -1373,13 +1381,16 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (pF->nmhdr.hwndFrom == hEditorWnd && pF->msg == WM_KEYUP && pF->wParam == VK_CONTROL && IsWindowVisible(hTooltipWnd))
 				SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
 
-			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
-				SELCHANGE *pSc = (SELCHANGE *)lParam;
-				if (pSc->seltyp > 0)
-					return 1;
+			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == EN_SELCHANGE) {
+				SendMessage(hMainWnd, WMU_UPDATE_CARET_INFO, 0, 0);
 
-				PostMessage(hMainWnd, WMU_HIGHLIGHT, 0, 0);
-				isRequireParenthesisHighligth = true;
+				SELCHANGE *pSc = (SELCHANGE *)lParam;
+				if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+					isRequireParenthesisHighligth = true;
+				}
+
+				fixQuoteSelection(hEditorWnd, pSc);
 			}
 
 			if (pHdr->hwndFrom == hTreeWnd && (pHdr->code == (DWORD)NM_DBLCLK || pHdr->code == (DWORD)NM_RETURN)) {
@@ -3311,7 +3322,7 @@ void updateTree(int type, TCHAR* select) {
 					sqlite3_bind_text(substmt, 2, type8, strlen(type8), SQLITE_TRANSIENT);
 					while(SQLITE_ROW == sqlite3_step(substmt)) {
 						TCHAR* column16 = utils::utf8to16((char *) sqlite3_column_text(substmt, 0));
-						TreeView_AddItem(column16, hItem, 0);
+						TreeView_AddItem(column16, hItem, COLUMN);
 						delete [] column16;
 					}
 				}
@@ -3704,11 +3715,13 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 			searchNext = LVNI_ALL;
 		}
 
+		bool withHeader = cmd == IDM_RESULT_EXPORT || HIWORD(GetKeyState(VK_SHIFT));
+
 		const TCHAR* delimiter16 = cmd == IDM_RESULT_COPY_ROW ? tools::DELIMITERS[0] : tools::DELIMITERS[prefs::get("csv-export-delimiter")];
 		const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
 
 		if (colCount && rowCount) {
-			int bufSize = 0;
+			int bufSize = withHeader ? 255 * colCount : 0;
 			int rowNo = -1;
 			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1)
 				bufSize += getRowLength(rowNo);
@@ -3729,8 +3742,7 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 				delete [] qvalue16;
 			};
 
-			if (cmd == IDM_RESULT_EXPORT) {
-				HWND hHeader = ListView_GetHeader(hListWnd);
+			if (withHeader) {
 				for(int colNo = 1; colNo < colCount; colNo++) {
 					Header_GetItemText(hHeader, colNo, buf16, MAX_TEXT_LENGTH);
 					addValue(res16, buf16);
@@ -4126,6 +4138,12 @@ bool processEditorEvents(MSGFILTER* pF) {
 			return true;
 		}
 
+		if (key == 0x56 && isControl && !isKeyDown) { // Ctrl + V Prevent pasting other than text
+			pasteText(hWnd);
+			pF->wParam = 0;
+			return true;
+		}
+
 		if (key == 0x5A && isControl && isShift) { // Ctrl + Shift + Z
 			if (isKeyDown)
 				PostMessage(hWnd, EM_REDO, 0, 0);
@@ -4182,15 +4200,15 @@ bool processEditorEvents(MSGFILTER* pF) {
 		return res;
 	}
 
-	if (pF->msg == WM_COPY)
-		MessageBeep(0);
-
 	if (pF->msg == WM_LBUTTONDOWN && isControl) {
 		POINT p{GET_X_LPARAM(pF->lParam), GET_Y_LPARAM(pF->lParam)};
 		int pos = SendMessage(hEditorWnd, EM_CHARFROMPOS, 0, (LPARAM)&p);
 		SendMessage(hEditorWnd, EM_SETSEL, pos, pos);
 		return SendMessage(hMainWnd, WMU_SHOW_TABLE_INFO, 0, 0);
 	}
+
+	if (pF->msg == WM_LBUTTONDBLCLK)
+		doubleClickTick = GetTickCount(); // issue #50
 
 	return 0;
 }
@@ -4260,7 +4278,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	SendMessage(hEditorWnd, EM_GETLINE, currLineNo, (LPARAM)currLine);
 	size_t start = crPos - currLineIdx;
 	size_t end = start;
-	TCHAR breakers[] = TEXT(" \"'`\n\r\+-;:(),=<>!");
+	TCHAR breakers[] = TEXT(" \"'`\n\r\t+-;:(),=<>!");
 
 	while(start > 0 && !_tcschr(breakers, currLine[start - 1]))
 		start--;
@@ -4361,6 +4379,106 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		}
 		sqlite3_finalize(stmt);
 		delete [] query8;
+	}
+
+	// Columns
+	int tLen = GetWindowTextLength(hEditorWnd);
+	if (tLen < MAX_TEXT_LENGTH) {
+		TCHAR text[tLen + 1];
+		GetWindowText(hEditorWnd, text, tLen + 1);
+		_tcslwr(text);
+
+		auto isStartBy = [](TCHAR* text, TCHAR* test) {
+			for (size_t i = 0; i < _tcslen(test); i++)
+				if (text[i] != test[i])
+					return false;
+			return true;
+		};
+
+		int cPos = crPos;
+		// fix new line \r \n
+		for (int i = 0; (i < cPos) && (i < tLen + 1); i++)
+			if (text[i] == TEXT('\r'))
+				cPos = cPos + 1;
+
+		//                    qStart                                    qEnd
+		//                    |                                         |
+		// where discount > 0;   select id,   nam| from customers where ;
+		//                                 |     |
+		//                              tPos     cPos
+
+		int tPos = cPos;
+		TCHAR breakers[] = TEXT("\"\',\r\n\t ");
+		while (tPos > 0 && _tcschr(breakers, text[tPos - 1]) == 0)
+			tPos--;
+
+		while (tPos > 0 && _istgraph(text[tPos - 1]) == 0)
+			tPos--;
+
+		if (wLen || (cPos > 6 && _tcschr(breakers, text[tPos]) != 0 && tPos != cPos && (
+			isStartBy(text + tPos - 1, TEXT(",")) ||
+			isStartBy(text + tPos - 1, TEXT("(")) ||
+			isStartBy(text + tPos - 1, TEXT(">")) ||
+			isStartBy(text + tPos - 1, TEXT("<")) ||
+			isStartBy(text + tPos - 1, TEXT("=")) ||
+			(isStartBy(text + tPos - 3, TEXT("and")) && _tcschr(breakers, text[tPos - 4]) != 0) ||
+			(isStartBy(text + tPos - 2, TEXT("or")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
+			(isStartBy(text + tPos - 2, TEXT("on")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
+			(isStartBy(text + tPos - 6, TEXT("select")) && (tPos < 7 || _tcschr(breakers, text[tPos - 7]) != 0)) ||
+			(isStartBy(text + tPos - 5, TEXT("where")) && _tcschr(breakers, text[tPos - 6]) != 0) ||
+			(isStartBy(text + tPos - 8, TEXT("order by"))&& _tcschr(breakers, text[tPos - 9]) != 0)
+		))) {
+			int nParentheses = 0;
+			int qStart = cPos;
+			while (qStart > 0) {
+				if (text[qStart] == TEXT(')'))
+					nParentheses++;
+				if (text[qStart] == TEXT('(') && nParentheses > 0)
+					nParentheses--;
+
+				if (nParentheses >= 0 && (isStartBy(text + qStart, TEXT("select")) || text[qStart - 1] == TEXT(';')))
+					break;
+
+				qStart--;
+			}
+
+			nParentheses = 0;
+			int qEnd = cPos;
+			while (qEnd < tLen) {
+				if (text[qEnd] == TEXT('('))
+					nParentheses++;
+				if (text[qEnd] == TEXT(')') && nParentheses > 0)
+					nParentheses--;
+
+				if (nParentheses >= 0 && (isStartBy(text + qEnd, TEXT("select")) || text[qEnd] == TEXT(';')))
+					break;
+
+				qEnd++;
+			}
+
+			TCHAR query16[qEnd - qStart + 1]{0};
+			_tcsncpy(query16, text + qStart, qEnd - qStart);
+			if (_tcslen(query16) > 0) {
+				sqlite3_stmt *stmt;
+				char sql8[] =
+					"select c.name from sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg and c.schema = 'main' " \
+					"where t.sql is not null and t.type in ('table', 'view') and ?1 regexp '\\b' || lower(t.tbl_name) || '\\b' order by t.tbl_name, c.cid";
+
+				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+					char* query8 = utils::utf16to8(query16);
+					sqlite3_bind_text(stmt, 1, query8, strlen(query8), SQLITE_TRANSIENT);
+					delete [] query8;
+
+					bool isNoCheck = wLen == 0;
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
+						isExact += addString(name16, isNoCheck);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+			}
+		}
 	}
 
 	if (start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("pragma "), 7)) {
@@ -5083,6 +5201,15 @@ bool toggleComment (HWND hEditorWnd) {
 	return true;
 }
 
+bool pasteText (HWND hEditorWnd) {
+	TCHAR* txt = utils::getClipboardText();
+	if (_tcslen(txt) > 0)
+		SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)txt);
+	delete [] txt;
+
+	return true;
+}
+
 void switchDialog(HWND hDlg, bool isNext) {
 	int i, j;
 	for (i = 0; i < MAX_DIALOG_COUNT && (hDialogs[i] != hDlg); i++);
@@ -5172,4 +5299,69 @@ bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	}
 
 	return false;
+}
+
+unsigned int __stdcall checkUpdate (void* data) {
+	time_t t = time(0);
+	tm* now = localtime(&t);
+	int date = (now->tm_year + 1900) * 10000 + (now->tm_mon + 1 )* 100 + now->tm_mday;
+	if (date != prefs::get("last-update-check")) {
+		DWORD read;
+		char buf8[1001]{0};
+
+		char uri[] = "api.github.com";
+		char path[] = "repos/little-brother/sqlite-gui/commits/master";
+		char headers[] = "Accept: application/vnd.github.v3+json";
+
+		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
+		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 1u);
+		HINTERNET hRequest = HttpOpenRequestA(hSession, "GET", path, NULL, uri, 0, INTERNET_FLAG_SECURE, 1);
+		if (HttpSendRequestA(hRequest, headers, strlen(headers), 0, 0)) {
+			InternetReadFile(hRequest, &buf8, 1000, &read);
+
+			TCHAR* buf16 = utils::utf8to16(buf8);
+			TCHAR* message = _tcsstr(buf16, TEXT("\"message\""));
+			TCHAR* tree = _tcsstr(buf16, TEXT("\"tree\""));
+
+			if (message && _tcsstr(message, TEXT(GUI_VERSION)) == 0) {
+				TCHAR msg[1000]{0};
+				_tcsncpy(msg, message + 11, _tcslen(message) - _tcslen(tree) - 13);
+				TCHAR* msg2 = utils::replaceAll(msg, TEXT("\\n"), TEXT("\n"));
+				_stprintf(msg, TEXT("%s\n\nWould you like to download it?"), msg2);
+				if (IDYES == MessageBox(hMainWnd, msg, TEXT("New version was released"), MB_YESNO))
+					ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/releases/latest"), 0, 0 , SW_SHOW);
+				delete [] msg2;
+			}
+			delete [] buf16;
+		}
+		InternetCloseHandle(hRequest);
+		InternetCloseHandle(hSession);
+		InternetCloseHandle(hInet);
+
+		prefs::set("last-update-check", date);
+	}
+
+	return 1;
+}
+
+// Fix issue #50: Double-click broken for text in 'single quotes'
+void fixQuoteSelection(HWND hEditorWnd, SELCHANGE* pSc) {
+	if ((GetTickCount() - doubleClickTick < 100)) {
+		int lineNo = SendMessage(hEditorWnd, EM_LINEFROMCHAR, pSc->chrg.cpMin, 0);
+		int lineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, lineNo, 0);
+		int lineSize = SendMessage(hEditorWnd, EM_LINELENGTH, lineIdx, 0);
+		TCHAR line[lineSize + 1]{0};
+		line[0] = lineSize;
+		SendMessage(hEditorWnd, EM_GETLINE, lineNo, (LPARAM)line);
+		int pos;
+		bool isBug = line[pSc->chrg.cpMin - lineIdx] == TEXT('\'');
+
+		for (pos = pSc->chrg.cpMin - lineIdx + 1; isBug && (pos < pSc->chrg.cpMax - lineIdx); pos++)
+			isBug = isBug && line[pos] == TEXT(' ');
+
+		if (isBug) {
+			for (pos = pSc->chrg.cpMin - lineIdx - 1; pos >= 0 && line[pos] != TEXT('\''); pos--);
+			SendMessage(hEditorWnd, EM_SETSEL, lineIdx + pos + 1, pSc->chrg.cpMin);
+		}
+	}
 }

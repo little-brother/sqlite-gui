@@ -1672,8 +1672,8 @@ namespace tools {
 
 						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
 							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
-								"t2 as (select t.value FROM t, generate_series(1, (select ceil(%i.0/count(1)) from t), 1) order by random()), "\
-								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
+								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
+								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
 								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
 								type16, rowCount, rowCount, name16);
 						}

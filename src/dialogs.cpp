@@ -105,7 +105,7 @@ namespace dialogs {
 					SendMessage(hEditorWnd, WM_COPY, 0, 0);
 
 				if (wParam == IDM_EDITOR_PASTE)
-					SendMessage(hEditorWnd, WM_PASTE, 0, 0);
+					pasteText(hEditorWnd);
 
 				if (wParam == IDM_EDITOR_DELETE)
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, 0);
@@ -141,11 +141,12 @@ namespace dialogs {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
 					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (pSc->seltyp > 0)
-						return 1;
+					if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+						isRequireParenthesisHighligth = true;
+					}
 
-					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireParenthesisHighligth = true;
+					fixQuoteSelection(pHdr->hwndFrom, pSc);
 				}
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
@@ -3129,7 +3130,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT), prefs::get("use-highlight") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ASK_DELETE), prefs::get("ask-delete") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP), prefs::get("word-wrap") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES), prefs::get("check-update") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE), prefs::get("exit-by-escape") ? BST_CHECKED : BST_UNCHECKED);
@@ -3185,7 +3186,7 @@ namespace dialogs {
 					prefs::set("use-highlight", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_HIGHLIGHT)));
 					prefs::set("ask-delete", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ASK_DELETE)));
 					prefs::set("word-wrap", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP)));
-					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_USE_LEGACY)));
+					prefs::set("check-update", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES)));
 					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE)));
 					prefs::set("exit-by-escape", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
 					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));

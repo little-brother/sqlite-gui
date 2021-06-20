@@ -1,3 +1,6 @@
+#define GUI_VERSION                "1.5.6"
+#define GUI_VERSION2               1, 5, 6, 0
+
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
 #define IDD_QUERYLIST              13
@@ -63,7 +66,7 @@
 #define IDC_DLG_RESTORE_DB         126
 #define IDC_DLG_RESTORE_EDITOR     127
 #define IDC_DLG_USE_HIGHLIGHT      128
-#define IDC_DLG_USE_LEGACY         129
+#define IDC_DLG_CHECK_UPDATES      129
 #define IDC_DLG_ROW_LIMIT          130
 #define IDC_DLG_RETAIN_PASSPHRASE  131
 #define IDC_DLG_EXIT_BY_ESCAPE     132

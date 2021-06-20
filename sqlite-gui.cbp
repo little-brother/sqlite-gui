@@ -54,6 +54,7 @@
 			<Add library="libshlwapi" />
 			<Add library="libmsimg32" />
 			<Add library="lib/libsqlite3.a" />
+			<Add library="libwininet" />
 		</Linker>
 		<Unit filename="ToDo.txt" />
 		<Unit filename="src/dialogs.cpp" />
