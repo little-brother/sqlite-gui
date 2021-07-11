@@ -157,7 +157,6 @@ namespace utils {
 
 	int openFile(TCHAR* path, const TCHAR* filter, HWND hWnd) {
 		OPENFILENAME ofn = {0};
-
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = hWnd;
 		ofn.lpstrFile = path;
@@ -168,12 +167,23 @@ namespace utils {
 		ofn.lpstrFileTitle = NULL;
 		ofn.nMaxFileTitle = 0;
 		ofn.lpstrInitialDir = NULL;
-		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
-		return GetOpenFileName(&ofn);
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+		if (!GetOpenFileName(&ofn))
+			return false;
+
+		if (utils::isFileExists(path))
+			return true;
+
+		TCHAR ext[32]{0};
+		_tsplitpath(path, NULL, NULL, NULL, ext);
+		if (_tcslen(ext) == 0)
+			_tcscat(path, TEXT(".sqlite"));
+
+		return true;
 	}
 
 	int saveFile(TCHAR* path, const TCHAR* filter, const TCHAR* defExt, HWND hWnd) {
-
 		OPENFILENAME ofn = {0};
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = hWnd;
@@ -185,14 +195,13 @@ namespace utils {
 		ofn.lpstrFileTitle = NULL;
 		ofn.nMaxFileTitle = 0;
 		ofn.lpstrInitialDir = NULL;
-		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
 		if (!GetSaveFileName(&ofn))
 			return false;
 
 		if (_tcslen(path) == 0)
 			return saveFile(path, filter, defExt, hWnd);
-
 
 		TCHAR ext[32]{0};
 		TCHAR path2[MAX_PATH]{0};

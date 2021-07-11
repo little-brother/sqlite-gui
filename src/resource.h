@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.5.6"
-#define GUI_VERSION2               1, 5, 6, 0
+#define GUI_VERSION                "1.5.7"
+#define GUI_VERSION2               1, 5, 7, 0
 
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
@@ -133,8 +133,9 @@
 #define IDC_DLG_CLEAR_VALUES       200
 #define IDC_DLG_GRID_COLOR         210 // + 4 next
 #define IDC_DLG_GRID_COLOR_EDIT    220
+#define IDC_DLG_VALUE_SELECTOR     221
 
-#define IDC_DLG_TYPE               221
+#define IDC_DLG_TYPE               225
 
 #define IDC_DLG_CIPHER_KEY                  227
 #define IDC_DLG_CIPHER_STORE_KEY            228
@@ -194,6 +195,7 @@
 #define IDC_MENU_DIAGRAM           505
 #define IDC_MENU_QUERYLIST         506
 #define IDC_MENU_CHART             507
+#define IDC_MENU_CLI               508
 
 #define IDC_MENU_TABLEVIEW         510
 #define IDC_MENU_INDEXTRIGGER      511
@@ -314,6 +316,10 @@
 #define IDM_LINK_VIEW              1732
 #define IDM_LINK_TRIGGER           1733
 
+#define IDM_CLI_COPY               1740
+#define IDM_CLI_CUT                1741
+#define IDM_CLI_CLEAR_ALL          1742
+
 #define IDM_PREV_DIALOG            1750
 #define IDM_NEXT_DIALOG            1751
 
@@ -386,18 +392,19 @@
 #define WMU_UPDATE_CHART           WM_USER + 27
 #define WMU_UPDATE_MINMAX          WM_USER + 28
 #define WMU_RESORT_DATA            WM_USER + 29
+#define WMU_CREATE_VALUE_SELECTOR  WM_USER + 30
 
-#define WMU_TAB_ADD                WM_USER + 30
-#define WMU_TAB_DELETE             WM_USER + 31
-#define WMU_TAB_SET_CURRENT        WM_USER + 33
-#define WMU_TAB_SET_TEXT           WM_USER + 34
-#define WMU_TAB_GET_TEXT           WM_USER + 35
-#define WMU_TAB_GET_COUNT          WM_USER + 36
-#define WMU_TAB_GET_CURRENT        WM_USER + 37
-#define WMU_TAB_SET_STYLE          WM_USER + 38
-#define WMU_TAB_GET_STYLE          WM_USER + 39
+#define WMU_TAB_ADD                WM_USER + 40
+#define WMU_TAB_DELETE             WM_USER + 41
+#define WMU_TAB_SET_CURRENT        WM_USER + 43
+#define WMU_TAB_SET_TEXT           WM_USER + 44
+#define WMU_TAB_GET_TEXT           WM_USER + 45
+#define WMU_TAB_GET_COUNT          WM_USER + 46
+#define WMU_TAB_GET_CURRENT        WM_USER + 47
+#define WMU_TAB_SET_STYLE          WM_USER + 48
+#define WMU_TAB_GET_STYLE          WM_USER + 49
 
-#define NM_TAB_ADD                 WM_USER + 40
-#define NM_TAB_DELETE              WM_USER + 41
-#define NM_TAB_REQUEST_DELETE      WM_USER + 42
-#define NM_TAB_CHANGE              WM_USER + 43
+#define NM_TAB_ADD                 WM_USER + 50
+#define NM_TAB_DELETE              WM_USER + 51
+#define NM_TAB_REQUEST_DELETE      WM_USER + 52
+#define NM_TAB_CHANGE              WM_USER + 53

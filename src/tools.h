@@ -16,6 +16,7 @@ namespace tools {
 	BOOL CALLBACK cbDlgDatabaseSearch (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgStatistics (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+	bool exportCSV(TCHAR* path16, TCHAR* query16);
 	bool importSqlFile(TCHAR* path16);
 	bool reindexDatabase();
 }

@@ -60,72 +60,26 @@ namespace tools {
 					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), TEXT("csv"), hWnd))
 						return true;
 
-					// Use binary mode
-					// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
-					FILE* f = _tfopen(path16, TEXT("wb"));
-					if (f == NULL) {
-						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
-						return true;
-					}
-
 					bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
 					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
-					const TCHAR* delimiter16 = DELIMITERS[iDelimiter];
 					bool isUnixNewLine = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_NEWLINE));
 
-					TCHAR sql16[256] = {0};
-					_stprintf(sql16, TEXT("select * from \"%s\""), table16);
-
-					char* sql8 = utils::utf16to8(sql16);
-					sqlite3_stmt *stmt;
-					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-						while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
-							int colCount = sqlite3_column_count(stmt);
-							int size = 0;
-							for(int i = 0; i < colCount; i++)
-								size += sqlite3_column_type(stmt, i) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, i) + 1 : 20;
-
-							// https://en.wikipedia.org/wiki/Comma-separated_values
-							size += colCount + 64; // add place for quotes
-							TCHAR line16[size] = {0};
-							for(int i = 0; i < colCount; i++) {
-								if (i != 0)
-									_tcscat(line16, delimiter16);
-
-								TCHAR* value16 = utils::utf8to16(
-									isColumns ? (char *)sqlite3_column_name(stmt, i) :
-									sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
-								TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
-								if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
-									TCHAR val16[_tcslen(qvalue16) + 3]{0};
-									_stprintf(val16, TEXT("\"%s\""), qvalue16);
-									_tcscat(line16, val16);
-								} else {
-									_tcscat(line16, qvalue16);
-								}
-								delete [] value16;
-								delete [] qvalue16;
-							}
-
-							_tcscat(line16, isUnixNewLine ? TEXT("\n") : TEXT("\r\n"));
-							char* line8 = utils::utf16to8(line16);
-							fprintf(f, line8);
-							delete [] line8;
-							isColumns = false;
-						}
-					}
-					sqlite3_finalize(stmt);
-					fclose(f);
-					delete [] sql8;
-
+					prefs::set("csv-export-is-columns", isColumns);
 					prefs::set("csv-export-delimiter", iDelimiter);
 					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
 
-					char* table8 = utils::utf16to8(table16);
-					prefs::set("csv-export-last-table", table8);
-					delete [] table8;
+					TCHAR query16[_tcslen(table16) + 128] = {0};
+					_stprintf(query16, TEXT("select * from \"%s\""), table16);
 
-					EndDialog(hWnd, DLG_OK);
+					if (exportCSV(path16, query16)) {
+						char* table8 = utils::utf16to8(table16);
+						prefs::set("csv-export-last-table", table8);
+						delete [] table8;
+
+						EndDialog(hWnd, DLG_OK);
+					} else {
+						MessageBox(hWnd, TEXT("Error occurred while export to file"), NULL, MB_OK);
+					}
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -1756,6 +1710,64 @@ namespace tools {
 		}
 
 		return false;
+	}
+
+	bool exportCSV(TCHAR* path16, TCHAR* query16) {
+		bool isColumns = prefs::get("csv-export-is-columns");
+		int iDelimiter = prefs::get("csv-export-delimiter");
+		int isUnixNewLine = prefs::get("csv-export-is-unix-line");
+
+		const TCHAR* delimiter16 = DELIMITERS[iDelimiter];
+
+		// Use binary mode
+		// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
+		FILE* f = _tfopen(path16, TEXT("wb"));
+		if (f == NULL)
+			return false;
+
+		char* sql8 = utils::utf16to8(query16);
+		sqlite3_stmt *stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+			while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
+				int colCount = sqlite3_column_count(stmt);
+				int size = 0;
+				for(int i = 0; i < colCount; i++)
+					size += sqlite3_column_type(stmt, i) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, i) + 1 : 20;
+
+				// https://en.wikipedia.org/wiki/Comma-separated_values
+				size += colCount + 64; // add place for quotes
+				TCHAR line16[size] = {0};
+				for(int i = 0; i < colCount; i++) {
+					if (i != 0)
+						_tcscat(line16, delimiter16);
+
+					TCHAR* value16 = utils::utf8to16(
+						isColumns ? (char *)sqlite3_column_name(stmt, i) :
+						sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
+					TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
+					if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
+						TCHAR val16[_tcslen(qvalue16) + 3]{0};
+						_stprintf(val16, TEXT("\"%s\""), qvalue16);
+						_tcscat(line16, val16);
+					} else {
+						_tcscat(line16, qvalue16);
+					}
+					delete [] value16;
+					delete [] qvalue16;
+				}
+
+				_tcscat(line16, isUnixNewLine ? TEXT("\n") : TEXT("\r\n"));
+				char* line8 = utils::utf16to8(line16);
+				fprintf(f, line8);
+				delete [] line8;
+				isColumns = false;
+			}
+		}
+		sqlite3_finalize(stmt);
+		fclose(f);
+		delete [] sql8;
+
+		return true;
 	}
 
 	bool importSqlFile(TCHAR *path16){

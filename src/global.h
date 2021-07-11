@@ -75,7 +75,7 @@ void setTreeFont(HWND hWnd);
 
 bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
 void search(HWND hWnd);
-void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth);
+void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

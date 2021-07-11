@@ -9,8 +9,9 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
+	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -23,8 +24,7 @@ namespace dialogs {
 	const TCHAR* INDENT_LABELS[] = {TEXT("Tab"), TEXT("2 spaces"), TEXT("4 spaces"), 0};
 	const TCHAR* INDENTS[] = {TEXT("\t"), TEXT("  "), TEXT("    ")};
 
-	bool isRequireHighligth = false;
-	bool isRequireParenthesisHighligth = false;
+	bool isRequireHighligth = false, isRequireParenthesisHighligth = false;
 
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -155,7 +155,7 @@ namespace dialogs {
 			break;
 
 			case WMU_HIGHLIGHT: {
-				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth);
+				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth, false);
 				isRequireHighligth = false;
 				isRequireParenthesisHighligth = false;
 			}
@@ -1006,6 +1006,42 @@ namespace dialogs {
 			}
 			break;
 
+			// wParam - init text or NULL
+			case WMU_CREATE_VALUE_SELECTOR: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
+				int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
+
+				RECT rect;
+				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
+
+				HWND hValuesWnd = CreateWindowEx(WS_EX_TOPMOST, WC_COMBOBOX, NULL,
+					CBS_DROPDOWN | CBS_HASSTRINGS | CBS_AUTOHSCROLL | WS_VISIBLE | WS_CHILD,
+					rect.left, rect.top - 2, ListView_GetColumnWidth(hListWnd, currCol), 200,
+					hListWnd, (HMENU)IDC_DLG_VALUE_SELECTOR, GetModuleHandle(0), NULL);
+				SetWindowLong(hValuesWnd, GWL_USERDATA, MAKELPARAM(currRow, currCol));
+				cbOldEditDataCombobox = (WNDPROC)SetWindowLong(hValuesWnd, GWL_WNDPROC, (LONG)cbNewEditDataCombobox);
+				SendMessage(hValuesWnd, WM_SETFONT, (LPARAM)hDefFont, true);
+
+				if (wParam) {
+					ComboBox_SetText(hValuesWnd, (TCHAR*)wParam);
+				} else {
+					TCHAR value16[256]{0};
+					ListView_GetItemText(hListWnd, currRow, currCol, value16, 255);
+					ComboBox_SetText(hValuesWnd, value16);
+				}
+
+				SendMessage(hValuesWnd, WMU_UPDATE_DATA, 0, 0);
+
+				if (ComboBox_GetCount(hValuesWnd) == 1) {
+					DestroyWindow(hValuesWnd);
+					return 0;
+				}
+
+				SetFocus(hValuesWnd);
+			}
+			break;
+
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
@@ -1211,6 +1247,12 @@ namespace dialogs {
 
 					if (canInsert && kd->wVKey == VK_INSERT)
 						SendMessage(hWnd, WM_COMMAND, IDM_ROW_ADD, 0);
+
+					if (kd->wVKey == VK_SPACE && isControl) {
+						SendMessage(hWnd, WMU_CREATE_VALUE_SELECTOR, 0, 0);
+						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
+						return true;
+					}
 				}
 
 				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == hListWnd) {
@@ -1676,7 +1718,8 @@ namespace dialogs {
 				SetWindowPos(hColumnsWnd, 0, 0, 0, 410, MIN(colCount, 20) * 20 - 10, SWP_NOMOVE | SWP_NOZORDER);
 				SendMessage(hColumnsWnd, WMU_SET_SCROLL_HEIGHT, colCount * 20 - 15, 0);
 
-				SetWindowText(hWnd, mode == ROW_ADD ? TEXT("New row") : mode == ROW_EDIT ? TEXT("Edit row") : TEXT("View row"));
+				if (mode == ROW_ADD)
+					SetWindowText(hWnd, TEXT("Add row"));
 
 				HWND hClearValues = GetDlgItem(hWnd, IDC_DLG_CLEAR_VALUES);
 				HWND hOkBtn = GetDlgItem(hWnd, IDC_DLG_OK);
@@ -1713,8 +1756,13 @@ namespace dialogs {
 				HWND hListWnd = (HWND)GetProp(hWnd, TEXT("LISTVIEW"));
 				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
 				int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
+				int mode = LOWORD(GetWindowLong(hWnd, GWL_USERDATA));
 				int colCount = HIWORD(GetWindowLong(hWnd, GWL_USERDATA));
 				bool* generated = (bool*)GetProp(GetParent(hListWnd), TEXT("GENERATED"));
+
+				TCHAR title[255];
+				_stprintf(title, mode == ROW_EDIT ? TEXT("Edit row #%i") : TEXT("View row #%i"), currRow + 1);
+				SetWindowText(hWnd, title);
 
 				TCHAR val[MAX_TEXT_LENGTH];
 				for (int i = 0; i < colCount; i++) {
@@ -2156,7 +2204,7 @@ namespace dialogs {
 				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
-				processHighlight(hEditorWnd, true, false);
+				processHighlight(hEditorWnd, true, false, false);
 			}
 			break;
 
@@ -3662,11 +3710,71 @@ namespace dialogs {
 		if (msg == WM_GETDLGCODE)
 			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam));
 
-		switch(msg){
+		switch (msg) {
 			case WM_DESTROY: {
 				HWND hListWnd = GetParent(hWnd);
-				HWND hBtn = FindWindowExW(hListWnd, 0, WC_BUTTON, NULL);
-				DestroyWindow(hBtn);
+				int data = GetWindowLong(hWnd, GWL_USERDATA);
+				if (data) {
+					int size = GetWindowTextLength(hWnd);
+					TCHAR value16[size + 1]{0};
+					GetWindowText(hWnd, value16, size + 1);
+					ListView_UpdateCell(hListWnd, LOWORD(data), HIWORD(data), value16);
+				}
+
+				if (!FindWindowExW(hListWnd, 0, WC_COMBOBOX, NULL))
+					SetFocus(hListWnd);
+			}
+			break;
+
+			case WM_KILLFOCUS: {
+				DestroyWindow(hWnd);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_SPACE && HIWORD(GetKeyState(VK_CONTROL))) {
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+
+					int size = GetWindowTextLength(hWnd);
+					TCHAR value16[size + 1]{0};
+					GetWindowText(hWnd, value16, size + 1);
+					SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_CREATE_VALUE_SELECTOR, (WPARAM)value16, 0);
+					return true;
+				}
+
+				if (wParam == VK_RETURN) {
+					DestroyWindow(hWnd);
+					return true;
+				}
+
+				if (wParam == VK_ESCAPE) {
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+					DestroyWindow(hWnd);
+					return true;
+				}
+			}
+			break;
+
+			case WM_LBUTTONDBLCLK: {
+				if (GetWindowTextLength(hWnd) == 0) {
+					SetWindowLong(hWnd, GWL_USERDATA, 0);
+					return SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_CREATE_VALUE_SELECTOR, 0, 0);
+				}
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam);
+	}
+
+	// USERDATA = MAKELPARAM(iItem, iSubItem)
+	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataCombobox, hWnd, msg, wParam, lParam));
+
+		switch (msg) {
+			case WM_DESTROY: {
+				HWND hListWnd = GetParent(hWnd);
 
 				int data = GetWindowLong(hWnd, GWL_USERDATA);
 				if (data) {
@@ -3675,12 +3783,8 @@ namespace dialogs {
 					GetWindowText(hWnd, value16, size + 1);
 					ListView_UpdateCell(hListWnd, LOWORD(data), HIWORD(data), value16);
 				}
-				SetFocus(hListWnd);
-			}
-			break;
 
-			case WM_KILLFOCUS: {
-				DestroyWindow(hWnd);
+				SetFocus(hListWnd);
 			}
 			break;
 
@@ -3697,9 +3801,55 @@ namespace dialogs {
 				}
 			}
 			break;
+
+			case WMU_UPDATE_DATA: {
+				HWND hDlgWnd = GetAncestor(hWnd, GA_ROOT);
+				HWND hListWnd = GetParent(hWnd);
+				HWND hHeader = ListView_GetHeader(hListWnd);
+				int data = GetWindowLong(hWnd, GWL_USERDATA);
+				int currCol = HIWORD(data);
+
+				char* tablename8 = (char*)GetProp(hDlgWnd, TEXT("TABLENAME8"));
+				char* schema8 = (char*)GetProp(hDlgWnd, TEXT("SCHEMA8"));
+
+				TCHAR column16[256]{0};
+				Header_GetItemText(hHeader, currCol, column16, 255);
+				char* column8 = utils::utf16to8(column16);
+
+				TCHAR value16[256]{0};
+				ComboBox_GetText(hWnd, value16, 255);
+
+				char query8[strlen(column8) + strlen(tablename8) + strlen(schema8) + 128];
+				sprintf(query8, "select distinct \"%s\" from \"%s\".\"%s\" where coalesce(\"%s\", '') <> '' and (?1 is null or \"%s\" like '%%' || ?1 || '%%') order by 1", column8, schema8, tablename8, column8, column8);
+				delete [] column8;
+
+				ComboBox_AddString(hWnd, TEXT(""));
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+					if (_tcslen(value16) > 0) {
+						char* value8 = utils::utf16to8(value16);
+						sqlite3_bind_text(stmt, 1, value8, strlen(value8), SQLITE_TRANSIENT);
+						delete [] value8;
+					}
+
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* value16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hWnd, value16);
+						delete [] value16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				int pos = ComboBox_FindStringExact(hWnd, 0, value16);
+				if (pos != -1)
+					ComboBox_SetCurSel(hWnd, pos);
+
+				ComboBox_ShowDropdown(hWnd, true);
+			}
+			break;
 		}
 
-		return CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam);
+		return CallWindowProc(cbOldEditDataCombobox, hWnd, msg, wParam, lParam);
 	}
 
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {

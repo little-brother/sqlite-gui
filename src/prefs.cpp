@@ -4,14 +4,14 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 49;
+	const int ICOUNT = 50;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
 		"cli-font-size", "cli-row-limit", "cli-max-width",
 		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current",
 		"ask-delete", "word-wrap", "clear-values", "recent-count",
-		"csv-export-is-unix-line", "csv-export-delimiter",
+		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "odbc-strategy",
 		"row-limit",
 		"cipher-legacy", "retain-passphrase",
@@ -27,7 +27,7 @@ namespace prefs {
 		8, 10, 20,
 		0, 1, 1, 1, 1, 0, 0, 1, 0,
 		0, 0, 0, 10,
-		0, 0,
+		0, 0, 1,
 		0, 0, 1, 0,
 		10000,
 		0, 0,
@@ -42,7 +42,7 @@ namespace prefs {
 			if (!strcmp(iprops[i], name))
 				return ivalues[i];
 
-		return 0;
+		return -1;
 	}
 
 	bool set(const char* name, int value) {

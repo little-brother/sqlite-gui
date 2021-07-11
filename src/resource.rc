@@ -717,6 +717,18 @@ BEGIN
 	END
 END
 
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_CLI MENU
+BEGIN
+	POPUP "Terminal"
+	BEGIN
+		MENUITEM "Copy", IDM_CLI_COPY
+		MENUITEM "Cut", IDM_CLI_CUT
+		MENUITEM SEPARATOR
+		MENUITEM "Clear all", IDM_CLI_CLEAR_ALL
+	END
+END
+
 IDA_ACCEL ACCELERATORS
 BEGIN
 	VK_ESCAPE, IDM_ESCAPE, VIRTKEY
@@ -794,6 +806,7 @@ BEGIN
 		"Data editor\n" \
 		"F2 - Edit cell value without clearing\n" \
 		"Space - Edit cell value with clearing\n" \
+		"Ctrl + Space - Set cell value as one of column values\n"
 		"Alt + Click - Show data if the column references to another table by FK key\n\n" \
 		"Row dialog\n" \
 		"Ctrl + Enter - Add a row or move to the next row\n" \
@@ -809,7 +822,7 @@ BEGIN
 		"   has own TEMP-schema. So if you need to share in-memory data between\n"
 		"   tabs you should use SHARED-schema instead TEMP. Check Wiki for details.\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
-		"* In the batch mode all queries are executed in a one implicit transaction.\n\n" \
+		"* In the batch mode all queries are executed in an one implicit transaction.\n\n" \
 		"* Edit data dialog \n"
 		"   The dialog uses auto-transaction. So all changes are applied immediately.\n" \
 		"   The dialog doesn't block the main window, so you can open multiply tables \n" \
@@ -824,6 +837,7 @@ BEGIN
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
 		"* You can define your own types in the data generator by adding rows to \n   table ""generators"" in ""prefs.sqlite"". The type is defined by ""type"" column.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
+		"* Copy and Export result rows operations use the same settings as Tools >\n   Export as CSV file. Settings are updated when you export any table.\n\n" \
 		"Cons\n" \
 		"* An empty string is set to NULL when data is edit\n" \
 		"* Data diagram isn't accurate with building references in views/triggers\n"
@@ -850,7 +864,9 @@ BEGIN
 		"Transform\n"\
 		"Adds pivot(query, target), unpivot(query, target), jsontable(json, target), txttable(text, target) functions.\n\n" \
 		"Icu (third party)\n"\
-		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""" \
+		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""\n\n" \
+		"Vsv (third party)\n"\
+		"Adds support for reading VSV (Variably Separated Values), e.g. csv files." \
 		"\n\n                         >>>   Check Wiki to get details  <<<"
 
 	IDS_WELCOME "-- Welcome! Thanks for choosing sqlite-gui.\n" \
