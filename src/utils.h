@@ -7,8 +7,8 @@
 
 namespace utils {
 	TCHAR* trim(TCHAR *in);
-	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
-	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0);
+	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
+	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 
 	TCHAR* getName(const TCHAR* in, bool isSchema = false);
 

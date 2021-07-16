@@ -33,13 +33,14 @@ COLORREF GRIDCOLORS[8]{0};
 
 // AutoComplete
 const TCHAR *SQL_KEYWORDS[] = {TEXT("abort"), TEXT("action"), TEXT("add"), TEXT("after"), TEXT("all"), TEXT("alter"), TEXT("always"), TEXT("analyze"), TEXT("and"), TEXT("as"), TEXT("asc"), TEXT("attach"), TEXT("autoincrement"), TEXT("before"), TEXT("begin"), TEXT("between"), TEXT("by"), TEXT("cascade"), TEXT("case"), TEXT("cast"), TEXT("check"), TEXT("collate"), TEXT("column"), TEXT("commit"), TEXT("conflict"), TEXT("constraint"), TEXT("create"), TEXT("cross"), TEXT("current"), TEXT("current_date"), TEXT("current_time"), TEXT("current_timestamp"), TEXT("database"), TEXT("default"), TEXT("deferrable"), TEXT("deferred"), TEXT("delete"), TEXT("desc"), TEXT("detach"), TEXT("distinct"), TEXT("do"), TEXT("drop"), TEXT("each"), TEXT("else"), TEXT("end"), TEXT("escape"), TEXT("except"), TEXT("exclude"), TEXT("exclusive"), TEXT("exists"), TEXT("explain"), TEXT("fail"), TEXT("filter"), TEXT("first"), TEXT("following"), TEXT("for"), TEXT("foreign"), TEXT("from"), TEXT("full"), TEXT("generated"), TEXT("glob"), TEXT("group"), TEXT("groups"), TEXT("having"), TEXT("if"), TEXT("ignore"), TEXT("immediate"), TEXT("in"), TEXT("index"), TEXT("indexed"), TEXT("initially"), TEXT("inner"), TEXT("insert"), TEXT("instead"), TEXT("intersect"), TEXT("into"), TEXT("is"), TEXT("isnull"), TEXT("join"), TEXT("key"), TEXT("last"), TEXT("left"), TEXT("like"), TEXT("limit"), TEXT("match"), TEXT("natural"), TEXT("no"), TEXT("not"), TEXT("nothing"), TEXT("notnull"), TEXT("null"), TEXT("nulls"), TEXT("of"), TEXT("offset"), TEXT("on"), TEXT("or"), TEXT("order"), TEXT("others"), TEXT("outer"), TEXT("over"), TEXT("partition"), TEXT("plan"), TEXT("pragma"), TEXT("preceding"), TEXT("primary"), TEXT("query"), TEXT("raise"), TEXT("range"), TEXT("recursive"), TEXT("references"), TEXT("regexp"), TEXT("reindex"), TEXT("release"), TEXT("rename"), TEXT("replace"), TEXT("restrict"), TEXT("right"), TEXT("rollback"), TEXT("row"), TEXT("rows"), TEXT("savepoint"), TEXT("select"), TEXT("set"), TEXT("table"), TEXT("temp"), TEXT("temporary"), TEXT("then"), TEXT("ties"), TEXT("to"), TEXT("transaction"), TEXT("trigger"), TEXT("unbounded"), TEXT("union"), TEXT("unique"), TEXT("update"), TEXT("using"), TEXT("vacuum"), TEXT("values"), TEXT("view"), TEXT("virtual"), TEXT("when"), TEXT("where"), TEXT("window"), TEXT("with"), TEXT("without"), TEXT("returning"), TEXT("materialized"), 0};
+const TCHAR *TEMPLATES[] = {TEXT("select * from"), TEXT("select count(*) from"), TEXT("insert into"), TEXT("delete from"), TEXT("inner join"), TEXT("primary key"), TEXT("foreign key"), 0};
 TCHAR* PRAGMAS[MAX_ENTITY_COUNT] = {0};
 TCHAR* FUNCTIONS[MAX_ENTITY_COUNT] = {0};
 TCHAR* TABLES[MAX_ENTITY_COUNT] = {0};
 
 sqlite3 *db;
-HWND hMainWnd = 0, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hMainTabWnd, hTooltipWnd = 0, hDialog, hSortingResultWnd, hAutoComplete, hDragWnd = 0; // hTabWnd.lParam is current ListView HWND
-HMENU hMainMenu, hDbMenu, hEditorMenu, hResultMenu, hEditDataMenu, hBlobMenu, hCliMenu;
+HWND hMainWnd = 0, hToolbarWnd, hStatusWnd, hTreeWnd, hEditorWnd, hTabWnd, hMainTabWnd, hTooltipWnd = 0, hDialog, hSortingResultWnd, hAutoComplete, hDragWnd = 0;
+HMENU hMainMenu, hDbMenu, hEditorMenu, hResultMenu, hBlobMenu, hCliMenu;
 HWND hDialogs[MAX_DIALOG_COUNT]{0};
 HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
@@ -60,7 +61,7 @@ HICON hIcons[2] = {LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(IDI_LOGO)), Load
 struct TEditorTab {
 	int id; // unique tab identificator
 	HWND hEditorWnd;
-	HWND hTabWnd;
+	HWND hTabWnd; // hTabWnd.USERDATA is current ListView HWND (IDC_TAB_ROWS + resultNo); ListView.USERDATA = resultNo
 	HWND hQueryListWnd;
 	TCHAR* tabTooltips[MAX_RESULT_COUNT];
 	TCHAR queryElapsedTimes[MAX_RESULT_COUNT][64];
@@ -101,7 +102,7 @@ int selStartPos = -1;
 TCHAR APP_PATH[MAX_PATH]{0};
 
 int executeCLIQuery(bool isPlan = false);
-int executeEditorQuery(bool isPlan = false, bool isBatch = false);
+int executeEditorQuery(bool isPlan = false, bool isBatch = false, bool isOnlyCurrent = false);
 void suggestCLIQuery(int key);
 void loadCLIResults(int cnt);
 
@@ -119,9 +120,10 @@ void updateSizes(bool isPadding = false);
 void updateTransactionState();
 int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
-void openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
+HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
 void saveQuery(const char* storage, const char* query);
 unsigned int __stdcall checkUpdate (void* data);
+bool saveResultToTable(TCHAR* table16, int tabNo, int resultNo, int searchNext = LVNI_ALL);
 
 WNDPROC cbOldMainTab, cbOldMainTabRenameEdit, cbOldResultTab, cbOldTreeItemEdit, cbOldAutoComplete, cbOldListView;
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -167,9 +169,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hBlobMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_BLOB));
 	hBlobMenu = GetSubMenu(hBlobMenu, 0);
 
-	hEditDataMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_EDIT_DATA));
-	hEditDataMenu = GetSubMenu(hEditDataMenu, 0);
-
 	hCliMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_CLI));
 	hCliMenu = GetSubMenu(hCliMenu, 0);
 
@@ -213,7 +212,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	icex.dwICC = ICC_DATE_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
 	InitCommonControlsEx(&icex);
 
-	//sqlite3_enable_shared_cache(1);
 	if (prefs::get("backup-prefs")) {
 		_stprintf(prefPath16, TEXT("%s/prefs.backup"), APP_PATH);
 		DeleteFile(prefPath16);
@@ -433,7 +431,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 
 			if (!prefs::save())
-				MessageBox(0, TEXT("Settings saving failed"), TEXT("Error"), MB_OK);
+				MessageBox(hWnd, TEXT("Settings saving failed"), TEXT("Error"), MB_OK);
 
 			prefs::setSyncMode(1);
 			sqlite3_shutdown();
@@ -789,6 +787,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_EXECUTE || cmd == IDM_PLAN || cmd == IDM_EXECUTE_BATCH) {
 				int currTab = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 				return currTab == -1 ? executeCLIQuery(cmd == IDM_PLAN) : executeEditorQuery(cmd == IDM_PLAN, cmd == IDM_EXECUTE_BATCH);
+			}
+
+			if (cmd == IDM_EXECUTE_CURRENT || cmd == IDM_PLAN_CURRENT) {
+				int currTab = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+				if (currTab != -1)
+					return executeEditorQuery(cmd == IDM_PLAN_CURRENT, false, true);
 			}
 
 			if (cmd == IDM_INTERRUPT) {
@@ -1185,6 +1189,74 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
 				onListViewMenu(currCell.hListWnd, currCell.iItem, currCell.iSubItem, cmd);
 
+			if (cmd == IDM_RESULT_AS_TABLE) {
+				HWND hListWnd = currCell.hListWnd;
+				TCHAR table16[255];
+				_tcscpy(table16, TEXT("result"));
+				if (DLG_CANCEL == DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_TABLENAME), hMainWnd, (DLGPROC)&dialogs::cbDlgTableName, (LPARAM)table16))
+					return false;
+
+				int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+				int resultNo = GetWindowLong(hListWnd, GWL_USERDATA);
+				int searchNext = ListView_GetSelectedCount(hListWnd) < 2 ? LVNI_ALL : LVNI_SELECTED;
+				if (saveResultToTable(table16, tabNo, resultNo, searchNext)) {
+					updateTree(TABLE, table16);
+					SetFocus(hTreeWnd);
+				}
+				return true;
+			}
+
+			if (cmd >= IDM_RESULT_COMPARE && cmd <= IDM_RESULT_COMPARE + MAX_COMPARE_RESULT) {
+				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+				HWND hCurrListWnd = (HWND)GetWindowLong(tabs[currTabNo].hTabWnd, GWL_USERDATA);
+				int currResultNo = GetWindowLong(hCurrListWnd, GWL_USERDATA);
+				int currColCount = ListView_GetColumnCount(hCurrListWnd);
+
+				int menuNo = 0;
+				for (int tabNo = 0; tabNo < MAX_TAB_COUNT; tabNo++) {
+					TEditorTab tab = tabs[tabNo];
+					if (!tab.hEditorWnd)
+						continue;
+
+					for (int resultNo = 0; resultNo < TabCtrl_GetItemCount(tab.hTabWnd); resultNo++) {
+						HWND hListWnd = GetDlgItem(tab.hTabWnd, IDC_TAB_ROWS + resultNo);
+
+						if (!hListWnd)
+							continue;
+
+						if (hListWnd == hCurrListWnd)
+							continue;
+
+						if (currColCount != ListView_GetColumnCount(hListWnd))
+							continue;
+
+						if (menuNo == cmd - IDM_RESULT_COMPARE) {
+							TCHAR title[1024]{0};
+							TCHAR buf[256];
+							SendMessage(hMainTabWnd, WMU_TAB_GET_TEXT, currTabNo, (LPARAM)buf);
+							_tcscat(title, buf);
+							_tcscat(title, TEXT(" > "));
+							TabCtrl_GetItemText(tabs[currTabNo].hTabWnd, currResultNo, buf, 255);
+							_tcscat(title, buf);
+							_tcscat(title, TEXT("   vs   "));
+							SendMessage(hMainTabWnd, WMU_TAB_GET_TEXT, tabNo, (LPARAM)buf);
+							_tcscat(title, buf);
+							_tcscat(title, TEXT(" > "));
+							TabCtrl_GetItemText(tabs[tabNo].hTabWnd, resultNo, buf, 255);
+							_tcscat(title, buf);
+
+							sqlite3_exec(db, "drop table temp.result1; drop table temp.result2;", 0, 0, 0);
+							saveResultToTable(TEXT("temp.result1"), currTabNo, currResultNo);
+							saveResultToTable(TEXT("temp.result2"), tabNo, resultNo);
+							openDialog(IDD_RESULTS_COMPARISON, (DLGPROC)&dialogs::cbDlgResultsComparison, (LPARAM)title);
+							return true;
+						}
+
+						menuNo++;
+					}
+				}
+			}
+
 			if (cmd == IDM_EDITOR_COMMENT)
 				toggleComment(hEditorWnd);
 
@@ -1200,9 +1272,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_EDITOR_DELETE)
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
-			if ((cmd == IDM_EDITOR_FIND) && (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hMainWnd, (DLGPROC)&dialogs::cbDlgFind, (LPARAM)hEditorWnd) == DLG_OK)) {
-				search(hEditorWnd);
+			if (cmd == IDM_EDITOR_FIND) {
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hWnd, (DLGPROC)dialogs::cbDlgFind, (LPARAM)hEditorWnd);
 				SetFocus(hEditorWnd);
+				return true;
 			}
 
 			if (cmd == IDM_CLI_COPY)
@@ -1433,6 +1506,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
 
 				fixQuoteSelection(hEditorWnd, pSc);
+				return true;
 			}
 
 			if (pHdr->hwndFrom == hTreeWnd && (pHdr->code == (DWORD)NM_DBLCLK || pHdr->code == (DWORD)NM_RETURN)) {
@@ -1651,6 +1725,48 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				POINT p;
 				GetCursorPos(&p);
+
+				HMENU hCompareMenu = GetSubMenu(hResultMenu, 8);
+				int cnt = GetMenuItemCount(hCompareMenu);
+				for (int i = 0; i < cnt; i++)
+					DeleteMenu(hCompareMenu, 0, MF_BYPOSITION);
+
+				int currColCount = ListView_GetColumnCount(ia->hdr.hwndFrom);
+				int menuNo = 0;
+
+				for (int tabNo = 0; tabNo < MAX_TAB_COUNT && menuNo < MAX_COMPARE_RESULT; tabNo++) {
+					TEditorTab tab = tabs[tabNo];
+					if (!tab.hEditorWnd)
+						continue;
+
+					TCHAR tabname16[80] = {0};
+					SendMessage(hMainTabWnd, WMU_TAB_GET_TEXT, tabNo, (LPARAM)tabname16);
+
+					for (int resultNo = 0; resultNo < TabCtrl_GetItemCount(tab.hTabWnd) && menuNo < MAX_COMPARE_RESULT; resultNo++) {
+						HWND hListWnd = GetDlgItem(tab.hTabWnd, IDC_TAB_ROWS + resultNo);
+						if (!hListWnd)
+							continue;
+
+						if (hListWnd == ia->hdr.hwndFrom)
+							continue;
+
+						if (currColCount != ListView_GetColumnCount(hListWnd))
+							continue;
+
+						TCHAR resname16[80];
+						TabCtrl_GetItemText(tab.hTabWnd, resultNo, resname16, 80);
+
+						TCHAR menu16[160];
+						_stprintf(menu16, TEXT("%s > %s"), tabname16, resname16);
+
+						AppendMenu(hCompareMenu, MF_STRING, IDM_RESULT_COMPARE + menuNo, menu16);
+						menuNo++;
+					}
+				}
+
+				if (GetMenuItemCount(hCompareMenu) == 0)
+					AppendMenu(hCompareMenu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, TEXT("No similar results"));
+
 				TrackPopupMenu(hResultMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hMainWnd, NULL);
 			}
 
@@ -1722,6 +1838,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				for (int i = tabNo; i < MAX_TAB_COUNT - 1; i++)
 					tabs[i] = tabs[i + 1];
+
+				tabs[MAX_TAB_COUNT - 2]	= {0};
 
 				tabs[SendMessage(hMainTabWnd, WMU_TAB_GET_COUNT, 0, 0)] = {0};
 			}
@@ -2433,7 +2551,7 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	return 1;
 }
 
-int executeEditorQuery(bool isPlan, bool isBatch) {
+int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent) {
 	int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 	TEditorTab* tab = &tabs[tabNo];
 	tab->isBatch = isBatch;
@@ -2451,6 +2569,9 @@ int executeEditorQuery(bool isPlan, bool isBatch) {
 	TCHAR bufcopy[size + 1];
 	if (!SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)buf))
 		return 0;
+
+	if (isSelection)
+		onlyCurrent = false;
 
 	// Sometimes EM_GETSELTEXT returns a text without new line as \r without \n
 	for (int i = 0; isSelection && _tcschr(buf, TEXT('\r')) && (i < size + 1); i++)
@@ -2490,7 +2611,7 @@ int executeEditorQuery(bool isPlan, bool isBatch) {
 				if (query16[_tcslen(query16) - 1] == TEXT(';')) // remove last ;
 					query16[_tcslen(query16) - 1] = 0;
 				TCHAR* trimmed16 = utils::trim(query16);
-				if(_tcslen(trimmed16) > 1) {
+				if(_tcslen(trimmed16) > 1 && (!onlyCurrent || (onlyCurrent && i >= MIN(range.cpMin, range.cpMax)))) {
 					int idx = ListBox_AddString(tab->hQueryListWnd, trimmed16);
 
 					TCHAR ignores[] = TEXT(" \r\n\t;");
@@ -2500,6 +2621,9 @@ int executeEditorQuery(bool isPlan, bool isBatch) {
 
 					int lineNo = SendMessage(hEditorWnd, EM_LINEFROMCHAR, lineStart, 0) + (isSelection ? SendMessage(hEditorWnd, EM_LINEFROMCHAR, range.cpMin, 0) : 0);
 					ListBox_SetItemData(tab->hQueryListWnd, idx, lineNo);
+
+					if (onlyCurrent)
+						break;
 				}
 				start = i + 1;
 			}
@@ -3246,6 +3370,16 @@ void updateSizes(bool isPadding) {
 	}
 }
 
+int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax) {
+	TCITEM ti;
+	ti.pszText = pszText;
+	ti.cchTextMax = cchTextMax;
+	ti.mask = TCIF_TEXT;
+	TabCtrl_GetItem(hWnd, iItem, &ti);
+
+	return (int)_tcslen(pszText);
+}
+
 HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, int type = 0, int disabled = 0) {
 	TVITEM tvi{0};
 	TVINSERTSTRUCT tvins{0};
@@ -3761,93 +3895,96 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 		TCHAR buf[rowLength + 1];
 		ListView_GetItemText(hListWnd, rowNo, colNo, buf, rowLength + 1);
 		utils::setClipboardText(buf);
+		return true;
 	}
 
-	if (cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT) {
-		HWND hHeader =  ListView_GetHeader(hListWnd);
-		int colCount = (int)SendMessage(hHeader, HDM_GETITEMCOUNT, 0, 0L) - ignoreLastColumn;
-		int rowCount = ListView_GetSelectedCount(hListWnd);
-		int searchNext = LVNI_SELECTED;
-		if (cmd == IDM_RESULT_EXPORT && rowCount < 2) {
-			rowCount = ListView_GetItemCount(hListWnd);
-			searchNext = LVNI_ALL;
+	if (cmd != IDM_RESULT_COPY_ROW && cmd != IDM_RESULT_EXPORT)
+		return false;
+
+	HWND hHeader =  ListView_GetHeader(hListWnd);
+	int colCount = (int)SendMessage(hHeader, HDM_GETITEMCOUNT, 0, 0L) - ignoreLastColumn;
+	int rowCount = ListView_GetSelectedCount(hListWnd);
+	int searchNext = LVNI_SELECTED;
+	if (IDM_RESULT_EXPORT  && rowCount < 2) {
+		rowCount = ListView_GetItemCount(hListWnd);
+		searchNext = LVNI_ALL;
+	}
+
+	TCHAR path16[MAX_PATH] {0};
+	if (cmd == IDM_RESULT_EXPORT) {
+		_stprintf(path16, TEXT("result.csv"));
+		if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), TEXT("csv"), GetParent(hListWnd)))
+			return false;
+
+		if (rowCount == prefs::get("row-limit")) {
+			int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+			if (!tools::exportCSV(path16, *tabs[tabNo].tabTooltips))
+				MessageBox(hMainWnd, TEXT("Error occurred while export to file"), NULL, MB_OK);
+			else
+				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
+			return true;
+		}
+	}
+
+	bool withHeader = cmd == IDM_RESULT_EXPORT || HIWORD(GetKeyState(VK_SHIFT));
+	const TCHAR* delimiter16 = cmd == IDM_RESULT_COPY_ROW ? tools::DELIMITERS[0] : tools::DELIMITERS[prefs::get("csv-export-delimiter")];
+	const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
+
+	if (!colCount || !rowCount)
+		return false;
+
+	int bufSize = withHeader ? 255 * colCount : 0;
+	int currRowNo = -1;
+	while((currRowNo = ListView_GetNextItem(hListWnd, currRowNo, searchNext)) != -1)
+		bufSize += getRowLength(currRowNo);
+
+	bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
+	TCHAR res16[bufSize]{0};
+	TCHAR buf16[MAX_TEXT_LENGTH]{0};
+
+	auto addValue = [](TCHAR* res16, TCHAR* buf16) {
+		TCHAR* qvalue16 = utils::replaceAll(buf16, TEXT("\""), TEXT("\"\""));
+		if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
+			TCHAR val16[_tcslen(qvalue16) + 3]{0};
+			_stprintf(val16, TEXT("\"%s\""), qvalue16);
+			_tcscat(res16, val16);
+		} else {
+			_tcscat(res16, buf16);
+		}
+		delete [] qvalue16;
+	};
+
+	if (withHeader) {
+		for(int colNo = 1; colNo < colCount; colNo++) {
+			Header_GetItemText(hHeader, colNo, buf16, MAX_TEXT_LENGTH);
+			addValue(res16, buf16);
+			_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
+		}
+	}
+
+	currRowNo = -1;
+	while((currRowNo = ListView_GetNextItem(hListWnd, currRowNo, searchNext)) != -1) {
+		for(int colNo = 1; colNo < colCount; colNo++) {
+			ListView_GetItemText(hListWnd, currRowNo, colNo, buf16, MAX_TEXT_LENGTH);
+			addValue(res16, buf16);
+			_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
+		}
+	}
+
+	if (cmd == IDM_RESULT_COPY_ROW)
+		utils::setClipboardText(res16);
+
+	if (cmd == IDM_RESULT_EXPORT) {
+		FILE* f = _tfopen(path16, TEXT("wb"));
+		if (f != NULL) {
+			char* res8 = utils::utf16to8(res16);
+			fprintf(f, res8);
+			delete [] res8;
+		} else {
+			MessageBox(0, TEXT("Error to open file"), NULL, MB_OK);
 		}
 
-		TCHAR path16[MAX_PATH] {0};
-		if (cmd == IDM_RESULT_EXPORT) {
-			_stprintf(path16, TEXT("result.csv"));
-			if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), TEXT("csv"), GetParent(hListWnd)))
-				return false;
-
-			if (rowCount == prefs::get("row-limit")) {
-				int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
-				if (!tools::exportCSV(path16, *tabs[tabNo].tabTooltips))
-					MessageBox(hMainWnd, TEXT("Error occurred while export to file"), NULL, MB_OK);
-				else
-					MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
-				return true;
-			}
-		}
-
-		bool withHeader = cmd == IDM_RESULT_EXPORT || HIWORD(GetKeyState(VK_SHIFT));
-		const TCHAR* delimiter16 = cmd == IDM_RESULT_COPY_ROW ? tools::DELIMITERS[0] : tools::DELIMITERS[prefs::get("csv-export-delimiter")];
-		const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
-
-		if (colCount && rowCount) {
-			int bufSize = withHeader ? 255 * colCount : 0;
-			int rowNo = -1;
-			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1)
-				bufSize += getRowLength(rowNo);
-
-			bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
-			TCHAR res16[bufSize]{0};
-			TCHAR buf16[MAX_TEXT_LENGTH]{0};
-
-			auto addValue = [](TCHAR* res16, TCHAR* buf16) {
-				TCHAR* qvalue16 = utils::replaceAll(buf16, TEXT("\""), TEXT("\"\""));
-				if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
-					TCHAR val16[_tcslen(qvalue16) + 3]{0};
-					_stprintf(val16, TEXT("\"%s\""), qvalue16);
-					_tcscat(res16, val16);
-				} else {
-					_tcscat(res16, buf16);
-				}
-				delete [] qvalue16;
-			};
-
-			if (withHeader) {
-				for(int colNo = 1; colNo < colCount; colNo++) {
-					Header_GetItemText(hHeader, colNo, buf16, MAX_TEXT_LENGTH);
-					addValue(res16, buf16);
-					_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
-				}
-			}
-
-			rowNo = -1;
-			while((rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
-				for(int colNo = 1; colNo < colCount; colNo++) {
-					ListView_GetItemText(hListWnd, rowNo, colNo, buf16, MAX_TEXT_LENGTH);
-					addValue(res16, buf16);
-					_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
-				}
-			}
-
-			if (cmd == IDM_RESULT_COPY_ROW)
-				utils::setClipboardText(res16);
-
-			if (cmd == IDM_RESULT_EXPORT) {
-				FILE* f = _tfopen(path16, TEXT("wb"));
-				if (f != NULL) {
-					char* res8 = utils::utf16to8(res16);
-					fprintf(f, res8);
-					delete [] res8;
-				} else {
-					MessageBox(0, TEXT("Error to open file"), NULL, MB_OK);
-				}
-
-				fclose(f);
-			}
-		}
+		fclose(f);
 	}
 
 	return true;
@@ -4107,14 +4244,14 @@ void updateOccurrenceHighlighting(HWND hWnd) {
 	}
 }
 
-void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight) {
+void processHighlight(HWND hWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight) {
 	if (!isRequireHighligth && !isRequireParenthesisHighligth && !isRequireOccurrenceHighlight)
 		return;
 
 	IUnknown *tr_code = NULL;
 	ITextDocument *td_code;
 
-	SendMessage(hEditorWnd, EM_GETOLEINTERFACE, 0, (LPARAM)&tr_code);
+	SendMessage(hWnd, EM_GETOLEINTERFACE, 0, (LPARAM)&tr_code);
 	if(tr_code == (IRichEditOle*)NULL) {
 		MessageBox(0, TEXT("Error when trying to get RichEdit OLE Object"), NULL, 0);
 		return;
@@ -4122,29 +4259,30 @@ void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequirePa
 	tr_code->QueryInterface(IID_ITextDocument,(void**)&td_code);
 
 	POINT scrollPos{0};
-	SendMessage(hEditorWnd, EM_GETSCROLLPOS, 0, (LPARAM)&scrollPos);
+	SendMessage(hWnd, EM_GETSCROLLPOS, 0, (LPARAM)&scrollPos);
 
-	SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
-	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_NONE);
+	long cnt = 0;
+	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_NONE);
 	td_code->Undo(tomSuspend, NULL);
+	td_code->Freeze(&cnt);
 
 	if (isRequireHighligth)
-		updateHighlighting(hEditorWnd);
+		updateHighlighting(hWnd);
 
 	if (isRequireOccurrenceHighlight)
-		updateOccurrenceHighlighting(hEditorWnd);
+		updateOccurrenceHighlighting(hWnd);
 
 	if (isRequireParenthesisHighligth)
-		updateParenthesisHighlighting(hEditorWnd);
+		updateParenthesisHighlighting(hWnd);
 
 	td_code->Undo(tomResume, NULL);
+	td_code->Unfreeze(&cnt);
 	td_code->Release();
 	tr_code->Release();
 
-	SendMessage(hEditorWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
-	SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
-	InvalidateRect(hEditorWnd, 0, TRUE);
-	SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS);
+	SendMessage(hWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
+	InvalidateRect(hWnd, 0, TRUE);
+	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS);
 }
 
 int ListView_Sort(HWND hListWnd, int colNo) {
@@ -4205,6 +4343,11 @@ int ListView_Reset(HWND hListWnd) {
 	return true;
 }
 
+int ListView_GetColumnCount(HWND hWnd) {
+	HWND hHeader = ListView_GetHeader(hWnd);
+	return hHeader ? Header_GetItemCount(hHeader) : -1;
+}
+
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax) {
 	if (i < 0)
 		return FALSE;
@@ -4221,19 +4364,24 @@ int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax) {
 	return rc;
 }
 
-void search(HWND hWnd) {
+bool search(HWND hWnd) {
 	int len = _tcslen(searchString);
 	if (!len)
-		return;
+		return false;
 
-	int crPos;
-	SendMessage(hWnd, EM_GETSEL, (WPARAM)&crPos, (LPARAM)&crPos);
+	int crPos = LOWORD(SendMessage(hWnd, EM_GETSEL, 0, 0));
 	FINDTEXT ft = {{crPos, GetWindowTextLength(hWnd)}, searchString};
 
-	int pos = SendMessage(hWnd, EM_FINDTEXT, FR_DOWN, (LPARAM)&ft);
+	LONG mode = prefs::get("case-sensitive") ? FR_MATCHCASE | FR_DOWN : FR_DOWN;
+	int pos = SendMessage(hWnd, EM_FINDTEXT, mode, (LPARAM)&ft);
+	if (crPos == pos) {
+		ft.chrg.cpMin = crPos + _tcslen(searchString);
+		pos = SendMessage(hWnd, EM_FINDTEXT, mode, (LPARAM)&ft);
+	}
+
 	if (pos == -1 && crPos != 0) {
 		ft.chrg.cpMin = 0;
-		pos = SendMessage(hWnd, EM_FINDTEXT, FR_DOWN, (LPARAM)&ft);
+		pos = SendMessage(hWnd, EM_FINDTEXT, mode, (LPARAM)&ft);
 	}
 
 	if (pos != -1) {
@@ -4241,6 +4389,8 @@ void search(HWND hWnd) {
 	} else {
 		MessageBeep(0);
 	}
+
+	return pos != -1;
 }
 
 bool processEditorEvents(MSGFILTER* pF) {
@@ -4305,10 +4455,8 @@ bool processEditorEvents(MSGFILTER* pF) {
 			return true;
 		}
 
-		if (key == 0x46 && isControl && isKeyDown) { // Ctrl + F
-			if (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hMainWnd, (DLGPROC)&dialogs::cbDlgFind, (LPARAM)hWnd) == DLG_OK)
-				search(hWnd);
-			SetFocus(hWnd);
+		if ((key == 0x46 || key == 0x52) && isControl) { // Ctrl + F or Ctrl + R
+			SendMessage(GetAncestor(hWnd, GA_ROOT), WM_COMMAND, IDM_EDITOR_FIND, 0);
 			pF->wParam = 0;
 			return true;
 		}
@@ -4364,6 +4512,9 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				bool isAlphaNum = !_istdigit(buf[0]);
 				for (int i = 0; isAlphaNum && (i < (int)_tcslen(buf)); i++)
 					isAlphaNum = _istalnum(buf[i]) || (buf[i] == TEXT('_'));
+				for (int i = 0; TEMPLATES[i] && !isAlphaNum; i++)
+					isAlphaNum = _tcsicmp(buf, TEMPLATES[i]) == 0;
+
 				if (!isAlphaNum)
 					_stprintf(qbuf, TEXT("\"%s\""), buf);
 
@@ -4642,6 +4793,9 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 		for (int i = 0; SQL_KEYWORDS[i]; i++)
 			isExact += addString(SQL_KEYWORDS[i]);
+
+		for (int i = 0; TEMPLATES[i]; i++)
+			isExact += addString(TEMPLATES[i]);
 
 		for (int i = 0; TABLES[i]; i++)
 			isExact += addString(TABLES[i]);
@@ -5162,14 +5316,14 @@ TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos) {
 	return word;
 }
 
-void openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
+HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
 	int no = 0;
 	while (hDialogs[no])
 		no++;
 
 	if (no >= MAX_DIALOG_COUNT) {
 		MessageBox(hMainWnd, TEXT("Max dialog count (32) is exceeded"), 0, 0);
-		return;
+		return 0;
 	}
 
 	HWND hDlg = CreateDialogParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD), hMainWnd, proc, lParam);
@@ -5181,6 +5335,8 @@ void openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
 	RECT rc;
 	GetWindowRect(hDlg, &rc);
 	SetWindowPos(hDlg, 0, rc.left + no * 10, rc.top + no * 10, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+	return hDlg;
 }
 
 bool toggleWordWrap(HWND hEditorWnd) {
@@ -5490,4 +5646,105 @@ void fixQuoteSelection(HWND hEditorWnd, SELCHANGE* pSc) {
 			SendMessage(hEditorWnd, EM_SETSEL, lineIdx + pos + 1, pSc->chrg.cpMin);
 		}
 	}
+}
+
+bool saveResultToTable(TCHAR* table16, int tabNo, int resultNo, int searchNext) {
+	HWND hTabWnd = tabs[tabNo].hTabWnd;
+	HWND hListWnd = GetDlgItem(hTabWnd, IDC_TAB_ROWS + resultNo);
+	HWND hHeader = ListView_GetHeader(hListWnd);
+	int colCount = ListView_GetColumnCount(hListWnd);
+	int rowCount = searchNext == LVNI_ALL ? ListView_GetItemCount(hListWnd) : ListView_GetSelectedCount(hListWnd);
+
+	bool rc = true;
+
+	TCHAR* schema16 = utils::getName(table16, true);
+	TCHAR* tablename16 = utils::getName(table16, false);
+
+	if (rowCount == prefs::get("row-limit")) {
+		TCHAR query16[_tcslen(tabs[tabNo].tabTooltips[resultNo]) + 512];
+		_stprintf(query16, TEXT("create table \"%s\".\"%s\" as %s"), schema16, tablename16, tabs[tabNo].tabTooltips[resultNo]);
+		char* query8 = utils::utf16to8(query16);
+		rc = sqlite3_exec(db, query8, 0, 0, 0) == SQLITE_OK;
+		delete [] query8;
+	} else {
+		byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+
+		char create8[colCount * 255 + 1024]{0};
+		char insert8[colCount * 255 + 1024]{0};
+
+		char* schema8 = utils::utf16to8(schema16);
+		char* tablename8 = utils::utf16to8(tablename16);
+		sprintf(create8, "create table \"%s\".\"%s\" (", schema8, tablename8);
+		sprintf(insert8, "insert into \"%s\".\"%s\" (", schema8, tablename8);
+		delete [] schema8;
+		delete [] tablename8;
+
+		for (int colNo = 1; colNo < colCount; colNo++) {
+			TCHAR colname16[255];
+			Header_GetItemText(hHeader, colNo, colname16, 255);
+
+			char* colname8 = utils::utf16to8(colname16);
+			strcat(create8, "\"");
+			strcat(create8, colname8);
+			strcat(create8, "\"");
+
+			strcat(insert8, "\"");
+			strcat(insert8, colname8);
+			strcat(insert8, "\"");
+			delete [] colname8;
+
+			if (datatypes) {
+				strcat(create8,
+					datatypes[colNo] == SQLITE_FLOAT ? " real" :
+					datatypes[colNo] == SQLITE_INTEGER ? " integer" :
+					datatypes[colNo] == SQLITE_TEXT ? " text" :
+					""
+				);
+			}
+
+			if (colNo != colCount - 1) {
+				strcat(create8, ", ");
+				strcat(insert8, ", ");
+			}
+		}
+		strcat(create8, ")");
+
+		char placeholders8[(colCount  - 1) * 2]{0}; // count = 3 => ?, ?, ?
+		for (int i = 0; i < (colCount - 1) * 2 - 1; i++)
+			placeholders8[i] = i % 2 ? ',' : '?';
+
+		strcat(insert8, ") values (");
+		strcat(insert8, placeholders8);
+		strcat(insert8, ")");
+
+		rc = sqlite3_exec(db, create8, 0, 0, 0) == SQLITE_OK;
+		if (rc) {
+			sqlite3_stmt *stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0)) {
+				int rowNo = -1;
+
+				while(rc && (rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
+					for(int colNo = 1; colNo < colCount; colNo++) {
+						TCHAR val16[MAX_TEXT_LENGTH + 1];
+						ListView_GetItemText(hListWnd, rowNo, colNo, val16, MAX_TEXT_LENGTH);
+						char* val8 = utils::utf16to8(val16);
+						utils::sqlite3_bind_variant(stmt, colNo, val8, datatypes && datatypes[colNo] == SQLITE_TEXT);
+						delete [] val8;
+					}
+
+					rc = sqlite3_step(stmt) == SQLITE_DONE;
+					sqlite3_reset(stmt);
+				}
+			}
+			sqlite3_finalize(stmt);
+		}
+	}
+
+	if (!rc)
+		showDbError(hMainWnd);
+
+	delete [] schema16;
+	delete [] tablename16;
+
+	return rc;
 }

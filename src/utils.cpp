@@ -30,7 +30,25 @@ namespace utils {
 		return out;
 	}
 
-	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool isAll) {
+	TCHAR* _tcsistr(TCHAR* str, const TCHAR* strSearch) {
+		int len = _tcslen(str);
+		int slen = _tcslen(strSearch);
+		if (len == 0 || slen == 0 || slen > len)
+			return NULL;
+
+		TCHAR lstr[len + 1]{0};
+		_tcscpy(lstr, str);
+		_tcslwr(lstr);
+
+		TCHAR lstrSearch[slen + 1]{0};
+		_tcscpy(lstrSearch, strSearch);
+		_tcslwr(lstrSearch);
+
+		TCHAR* res = _tcsstr(lstr, lstrSearch);
+		return res ? str + len - _tcslen(res) : NULL;
+	}
+
+	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool isAll, bool ignoreCase) {
 		int len = _tcslen(in);
 		int nLen = _tcslen(newStr);
 		int oLen = _tcslen(oldStr);
@@ -44,7 +62,7 @@ namespace utils {
 
 		_tcsncat(res, in, start);
 
-		while((p = _tcsstr(p, oldStr))) {
+		while((p = (ignoreCase ? _tcsistr(p, oldStr) : _tcsstr(p, oldStr)))) {
 			_tcsncat(res, p2, p - p2);
 			_tcsncat(res, newStr, nLen);
 			p = p + oLen;
@@ -58,12 +76,12 @@ namespace utils {
 		return res;
 	}
 
-	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start) {
-		return replace(in, oldStr, newStr, start, false);
+	TCHAR* replace (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool ignoreCase) {
+		return replace(in, oldStr, newStr, start, false, ignoreCase);
 	}
 
-	TCHAR* replaceAll (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start) {
-		return replace(in, oldStr, newStr, start, true);
+	TCHAR* replaceAll (const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start, bool ignoreCase) {
+		return replace(in, oldStr, newStr, start, true, ignoreCase);
 	}
 
 	TCHAR* getName(const TCHAR* in, bool isSchema) {

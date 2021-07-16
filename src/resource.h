@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.5.7"
-#define GUI_VERSION2               1, 5, 7, 0
+#define GUI_VERSION                "1.5.8"
+#define GUI_VERSION2               1, 5, 8, 0
 
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
@@ -16,6 +16,8 @@
 #define IDD_BIND_PARAMETERS        23
 #define IDD_ENCRYPTION             24
 #define IDD_DROP                   25
+#define IDD_TABLENAME              26
+#define IDD_RESULTS_COMPARISON     27
 
 #define IDD_TOOL_EXPORT_CSV        30
 #define IDD_TOOL_EXPORT_SQL        31
@@ -96,7 +98,7 @@
 #define IDC_DLG_ROW_DOWN           153
 #define IDC_DLG_ISWITHOUT_ROWID    154
 #define IDC_DLG_MORE               155
-#define IDC_DLG_FIND               156
+
 #define IDC_DLG_REFRESH            157
 #define IDC_DLG_CONNECTION_STRING  158
 #define IDC_DLG_ISTABLE            159
@@ -132,10 +134,16 @@
 #define IDC_DLG_WORD_WRAP          199
 #define IDC_DLG_CLEAR_VALUES       200
 #define IDC_DLG_GRID_COLOR         210 // + 4 next
-#define IDC_DLG_GRID_COLOR_EDIT    220
-#define IDC_DLG_VALUE_SELECTOR     221
+#define IDC_DLG_GRID_COLOR_EDIT    215
+#define IDC_DLG_VALUE_SELECTOR     216
+#define IDC_DLG_TYPE               217
 
-#define IDC_DLG_TYPE               225
+#define IDC_DLG_FIND_STRING        220
+#define IDC_DLG_REPLACE_STRING     221
+#define IDC_DLG_FIND               222
+#define IDC_DLG_REPLACE            223
+#define IDC_DLG_REPLACE_ALL        224
+#define IDC_DLG_CASE_SENSITIVE     225
 
 #define IDC_DLG_CIPHER_KEY                  227
 #define IDC_DLG_CIPHER_STORE_KEY            228
@@ -191,11 +199,12 @@
 #define IDC_MENU_EDITOR            501
 #define IDC_MENU_RESULT            502
 #define IDC_MENU_EDIT_DATA         503
-#define IDC_MENU_BLOB              504
-#define IDC_MENU_DIAGRAM           505
-#define IDC_MENU_QUERYLIST         506
-#define IDC_MENU_CHART             507
-#define IDC_MENU_CLI               508
+#define IDC_MENU_VIEW_DATA         504
+#define IDC_MENU_BLOB              505
+#define IDC_MENU_DIAGRAM           506
+#define IDC_MENU_QUERYLIST         507
+#define IDC_MENU_CHART             508
+#define IDC_MENU_CLI               509
 
 #define IDC_MENU_TABLEVIEW         510
 #define IDC_MENU_INDEXTRIGGER      511
@@ -218,9 +227,11 @@
 #define IDM_EXECUTE                1512
 #define IDM_EXECUTE_BATCH          1513
 #define IDM_PLAN                   1514
-#define IDM_HISTORY                1515
-#define IDM_GISTS                  1516
-#define IDM_INTERRUPT              1517
+#define IDM_EXECUTE_CURRENT        1515
+#define IDM_PLAN_CURRENT           1516
+#define IDM_HISTORY                1517
+#define IDM_GISTS                  1518
+#define IDM_INTERRUPT              1519
 
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
@@ -264,26 +275,30 @@
 #define IDM_EDITOR_PASTE           1603
 #define IDM_EDITOR_DELETE          1604
 #define IDM_EDITOR_FIND            1605
-#define IDM_EDITOR_COMMENT         1606
+#define IDM_EDITOR_FIND_NEXT       1606
+#define IDM_EDITOR_REPLACE_NEXT    1607
+#define IDM_EDITOR_COMMENT         1608
 
 #define IDM_RESULT_CHART           1610
 #define IDM_RESULT_COPY_CELL       1611
 #define IDM_RESULT_COPY_ROW        1612
-#define IDM_RESULT_EXPORT          1613
+#define IDM_RESULT_AS_TABLE        1613
+#define IDM_RESULT_EXPORT          1614
+#define IDM_RESULT_COMPARE         1620 // iterable, 50
 
-#define IDM_BLOB_NULL              1620
-#define IDM_BLOB_IMPORT            1621
-#define IDM_BLOB_EXPORT            1622
+#define IDM_BLOB_NULL              1680
+#define IDM_BLOB_IMPORT            1681
+#define IDM_BLOB_EXPORT            1682
 
-#define IDM_DEMODB_BOOKSTORE       1630
-#define IDM_DEMODB_CHINOOK         1631
-#define IDM_DEMODB_NORTHWIND       1632
-#define IDM_DEMODB_WORLD           1633
+#define IDM_DEMODB_BOOKSTORE       1685
+#define IDM_DEMODB_CHINOOK         1686
+#define IDM_DEMODB_NORTHWIND       1687
+#define IDM_DEMODB_WORLD           1688
 
-#define IDM_QUERY_COPY             1650
-#define IDM_QUERY_ADD_NEW          1651
-#define IDM_QUERY_ADD_OLD          1652
-#define IDM_QUERY_DELETE           1653
+#define IDM_QUERY_COPY             1690
+#define IDM_QUERY_ADD_NEW          1691
+#define IDM_QUERY_ADD_OLD          1692
+#define IDM_QUERY_DELETE           1693
 
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702

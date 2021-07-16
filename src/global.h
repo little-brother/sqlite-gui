@@ -9,6 +9,7 @@
 #define MAX_REFCOLUMN_COUNT        128
 #define MAX_CHART_COLOR_COUNT       10
 #define MAX_DIALOG_COUNT            32
+#define MAX_COMPARE_RESULT          50
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -49,8 +50,8 @@
 
 extern sqlite3 *db;
 extern HWND  hMainWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
+extern HMENU hBlobMenu, hEditorMenu;
 
-extern HTREEITEM treeItems[5]; // 0 - current
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 extern TCHAR searchString[255];
 
@@ -67,15 +68,13 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
-extern HMENU hEditDataMenu, hResultMenu, hBlobMenu, hEditorMenu;
-
 void setEditorFont(HWND hWnd);
 void setEditorColor(HWND hWnd, COLORREF color, bool noEffects = false);
 void setTreeFont(HWND hWnd);
 
 bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
-void search(HWND hWnd);
-void processHighlight(HWND hEditorWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight);
+bool search(HWND hWnd);
+void processHighlight(HWND hWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -92,7 +91,9 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
 int ListView_Sort(HWND hListWnd, int colNo);
 int ListView_Reset(HWND hListWnd);
+int ListView_GetColumnCount(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
+int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
 TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);
 bool showDbError(HWND hWnd);

@@ -26,6 +26,9 @@ namespace dialogs {
 
 	bool isRequireHighligth = false, isRequireParenthesisHighligth = false;
 
+	HMENU hEditDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_EDIT_DATA)), 0);
+	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
+
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -110,8 +113,9 @@ namespace dialogs {
 				if (wParam == IDM_EDITOR_DELETE)
 					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, 0);
 
-				if ((wParam == IDM_EDITOR_FIND) && (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hWnd, (DLGPROC)&cbDlgFind, (LPARAM)hEditorWnd) == DLG_OK)) {
-					search(hEditorWnd);
+				if (wParam == IDM_EDITOR_FIND) {
+					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hWnd, (DLGPROC)cbDlgFind, (LPARAM)hEditorWnd);
+					SetForegroundWindow(hWnd);
 					SetFocus(hEditorWnd);
 				}
 
@@ -161,10 +165,11 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_CLOSE:
+			case WM_CLOSE: {
 				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				DestroyWindow(hWnd);
-				break;
+			}
+			break;
 		}
 
 		return false;
@@ -1069,7 +1074,7 @@ namespace dialogs {
 					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, 10);
 
 					bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
-					HMENU hMenu = !canUpdate ? hResultMenu : blobs[ia->iSubItem - 1] || _tcsstr(buf, TEXT("(BLOB:")) == buf ? hBlobMenu : hEditDataMenu;
+					HMENU hMenu = !canUpdate ? hViewDataMenu : blobs[ia->iSubItem - 1] || _tcsstr(buf, TEXT("(BLOB:")) == buf ? hBlobMenu : hEditDataMenu;
 
 					if (hMenu == hEditDataMenu) {
 						bool* generated = (bool*)GetProp(GetParent(hListWnd), TEXT("GENERATED"));
@@ -1332,7 +1337,7 @@ namespace dialogs {
 					if (prefs::get("ask-delete") && MessageBox(hWnd, TEXT("Are you sure you want to delete the row? "), TEXT("Delete confirmation"), MB_OKCANCEL) != IDOK)
 						return true;
 
-					char* placeholders8 = new char[count * 2]{0}; // count = 3 => ?, ?, ?
+					char placeholders8[count * 2]{0}; // count = 3 => ?, ?, ?
 					for (int i = 0; i < count * 2 - 1; i++)
 						placeholders8[i] = i % 2 ? ',' : '?';
 					placeholders8[count * 2 - 1] = '\0';
@@ -1342,7 +1347,6 @@ namespace dialogs {
 
 					char sql8[1024 + strlen(tablename8) + strlen(schema8) + (hasRowid ? 0 : strlen(md5keys8)) + count * 2]{0};
 					sprintf(sql8, "delete from \"%s\".\"%s\" where %s in (%s)", schema8, tablename8, hasRowid ? "rowid" : md5keys8,  placeholders8);
-					delete [] placeholders8;
 
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
@@ -2158,10 +2162,12 @@ namespace dialogs {
 		return false;
 	}
 
+	// lParam, USERDATA = hEditorWnd
 	BOOL CALLBACK cbDlgFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hEditorWnd = (HWND)lParam;
+
 				int start, end;
 				SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 				TCHAR* word;
@@ -2172,14 +2178,86 @@ namespace dialogs {
 				} else {
 					word = getWordFromCursor(hEditorWnd, false);
 				}
-				SetDlgItemText(hWnd, IDC_DLG_FIND, word);
+
+				SetDlgItemText(hWnd, IDC_DLG_FIND_STRING, word);
 				delete [] word;
+
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CASE_SENSITIVE), prefs::get("case-sensitive") ? BST_CHECKED : BST_UNCHECKED);
+				SetWindowLong(hWnd, GWL_USERDATA, (LPARAM)hEditorWnd);
+
+				EnableWindow(GetAncestor(hEditorWnd, GA_ROOT), false);
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hEditorWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+				if (wParam == IDOK || wParam == IDC_DLG_FIND || wParam == IDC_DLG_REPLACE || wParam == IDC_DLG_REPLACE_ALL)
+					prefs::set("case-sensitive", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CASE_SENSITIVE)));
+
+				if (wParam == IDC_DLG_FIND || (wParam == IDOK && GetFocus() == GetDlgItem(hWnd, IDC_DLG_FIND_STRING))) {
+					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+					search(hEditorWnd);
+				}
+
+				if (wParam == IDC_DLG_REPLACE || (wParam == IDOK && GetFocus() == GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING))) {
+					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+					TCHAR replaceString[256];
+					GetDlgItemText(hWnd, IDC_DLG_REPLACE_STRING, replaceString, 255);
+
+					if (search(hEditorWnd)) {
+						int crPos = LOWORD(SendMessage(hEditorWnd, EM_GETSEL, 0, 0));
+						SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)replaceString);
+						PostMessage(hEditorWnd, EM_SETSEL, crPos, crPos + _tcslen(replaceString));
+					}
+				}
+
+				if (wParam == IDC_DLG_REPLACE_ALL) {
+					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+					TCHAR replaceString[256];
+					GetDlgItemText(hWnd, IDC_DLG_REPLACE_STRING, replaceString, 255);
+
+					int size = GetWindowTextLength(hEditorWnd);
+					TCHAR text16[size + 1] = {0};
+					GetWindowText(hEditorWnd, text16, size + 1);
+
+					SetWindowRedraw(hEditorWnd, false);
+					int crPos = LOWORD(SendMessage(hEditorWnd, EM_GETSEL, 0, 0));
+					TCHAR* rtext16 = utils::replaceAll(text16, searchString, replaceString, 0, !prefs::get("case-sensitive"));
+					SendMessage(hEditorWnd, EM_SETSEL, 0, -1);
+					SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)rtext16);
+					SetWindowRedraw(hEditorWnd, true);
+					InvalidateRect(hEditorWnd, NULL, true);
+					PostMessage(hEditorWnd, EM_SETSEL, crPos, crPos);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				HWND hEditorWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+				EnableWindow(GetAncestor(hEditorWnd, GA_ROOT), true);
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam = out buf
+	BOOL CALLBACK cbDlgTableName (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, (TCHAR*)lParam);
+				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 			}
 			break;
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK || wParam == IDOK) {
-					GetDlgItemText(hWnd, IDC_DLG_FIND, searchString, 255);
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), 255);
 					EndDialog(hWnd, DLG_OK);
 				}
 
@@ -2201,7 +2279,7 @@ namespace dialogs {
 			case WM_INITDIALOG: {
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 				setEditorFont(hEditorWnd);
-				SendMessage(hEditorWnd, WM_SETTEXT, (WPARAM)0, (LPARAM)lParam);
+				SendMessage(hEditorWnd, WM_SETTEXT, 0, (LPARAM)lParam);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
 				processHighlight(hEditorWnd, true, false, false);
@@ -2213,7 +2291,7 @@ namespace dialogs {
 				RECT rc = {0};
 				GetClientRect(hWnd, &rc);
 				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
-				SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)0, (LPARAM)0);
+				SendMessage(hEditorWnd, EM_SETSEL, 0, 0);
 			}
 			break;
 
@@ -2243,6 +2321,50 @@ namespace dialogs {
 			case WM_CLOSE:
 				EndDialog(hWnd, DLG_CANCEL);
 				break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgResultsComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowText(hWnd, (TCHAR*)lParam);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COMPARED);
+
+				char sql8[] = "with " \
+					"t as (select '-->' dir, * from temp.result1 except select '-->' dir, * from temp.result2)," \
+					"t2 as (select '<--' dir, * from temp.result2 except select '<--' dir, * from temp.result1)" \
+					"select * from t union all select * from t2";
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0))
+					ListView_SetData(hListWnd, stmt);
+				else
+					showDbError(hWnd);
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COMPARED);
+				RECT rc = {0};
+				GetClientRect(hWnd, &rc);
+				SetWindowPos(hListWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
+			}
+			break;
 		}
 
 		return false;

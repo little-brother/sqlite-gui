@@ -46,6 +46,10 @@
 	Returns a human readable size
 	select tosize(1024) --> 1.00KB
 	select tosize(2 * 1024 * 1024) --> 2.00MB
+	
+	levenshtein(str1, str2)
+	Calculates Levenshtein distance between two strings
+	select levenshtein('9128 LEEWARD CIR, INDIANAPOLIS, IN', upper('9128 Leeward Circle, Indianapolis, IN')) --> 3
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
@@ -652,6 +656,73 @@ static void tosize (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
 }
 
+
+// https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#C
+int utf8len(const unsigned char* s) {
+	const unsigned char *s0;
+	unsigned char c;
+	if (s == 0) 
+		return 0;
+		
+	s0 = s;
+	while ((c = *s) != 0) {
+		s++;
+		if (c >= 0xc0) {
+			while((*s & 0xc0)==0x80){ 
+				s++; 
+				s0++; 
+			}
+		}
+	}
+	return (int)(s - s0);
+}
+
+const char* utf8char (const char* s, int idx) {
+	int pos = 0, i = 0;
+	while (i < idx) {
+		pos += utf8size(s[pos]);
+		i++;
+	}
+	return s + pos;
+}
+
+int min3(int a, int b, int c) {	
+	return a <= b && a <= c ? a : b <= a && b <= c ? b : c;
+}
+
+static void levenshtein (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	if (sqlite3_value_type(argv[0]) == SQLITE_NULL || sqlite3_value_type(argv[1]) == SQLITE_NULL) 
+		return sqlite3_result_null(ctx);
+			 
+	const char* s1 = sqlite3_value_text(argv[0]);
+	const char* s2 = sqlite3_value_text(argv[1]);
+	
+	int len1 = utf8len(s1);
+	int len2 = utf8len(s2);
+	unsigned int matrix[len2 + 1][len1 + 1];
+	matrix[0][0] = 0;
+	for (int x = 1; x <= len2; x++)
+		matrix[x][0] = matrix[x - 1][0] + 1;
+	for (int y = 1; y <= len1; y++)
+		matrix[0][y] = matrix[0][y - 1] + 1;
+	for (int x = 1; x <= len2; x++)
+		for (int y = 1; y <= len1; y++) {
+			const char *c1 = utf8char(s1, y - 1);
+			const char *c2 = utf8char(s2, x - 1);
+
+			int clen1 = utf8size(c1[0]);
+			int clen2 = utf8size(c2[0]);
+			
+			int isEqual = clen1 == clen2;
+			for (int i = 0; isEqual && i < clen1; i++)
+				isEqual = c1[i] == c2[i];
+								
+			matrix[x][y] = min3(matrix[x - 1][y] + 1, matrix[x][y - 1] + 1, matrix[x - 1][y - 1] + !isEqual);
+		}
+	
+	sqlite3_result_int(ctx, matrix[len2][len1]);
+}
+
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
@@ -667,6 +738,7 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 		SQLITE_OK == sqlite3_create_function(db, "base64_decode", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, base64_decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "strpart", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, strpart, 0, 0) &&	
 		SQLITE_OK == sqlite3_create_function(db, "conv", 3, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, conv, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, tosize, 0, 0) ?		
+		SQLITE_OK == sqlite3_create_function(db, "tosize", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, tosize, 0, 0) &&		
+		SQLITE_OK == sqlite3_create_function(db, "levenshtein", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, levenshtein, 0, 0) ?				
 		SQLITE_OK : SQLITE_ERROR;
 }
