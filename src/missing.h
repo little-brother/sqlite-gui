@@ -1,6 +1,13 @@
 #ifndef __MISSING_H__
 #define __MISSING_H__
 
+typedef struct tagNMCHAR {
+  NMHDR hdr;
+  UINT  ch;
+  DWORD dwItemPrev;
+  DWORD dwItemNext;
+} NMCHAR, *LPNMCHAR;
+
 typedef struct tagTVKEYDOWN {
   NMHDR hdr;
   WORD  wVKey;

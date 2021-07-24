@@ -192,8 +192,8 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		TCHAR create16[colCount * MAX_COLUMN_LENGTH + 512];
 		TCHAR insert16[colCount * MAX_COLUMN_LENGTH + 512];
 	
-		_stprintf(create16, TEXT("create table if not exists temp.\"%s%i\" (\""), tablename16, sid);
-		_stprintf(insert16, TEXT("insert into temp.\"%s%i\" (\""), tablename16, sid);
+		_stprintf(create16, TEXT("create table if not exists temp.\"%ls%i\" (\""), tablename16, sid);
+		_stprintf(insert16, TEXT("insert into temp.\"%ls%i\" (\""), tablename16, sid);
 
 		for (int colNo = 1; colNo <= colCount; colNo++) {
 			TCHAR colName[MAX_COLUMN_LENGTH + 1];
@@ -355,13 +355,13 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		
 		SQLAllocHandle(SQL_HANDLE_STMT, hConn, &hStmt);
 		TCHAR check16[_tcslen(target16) + 255];
-		_stprintf(check16, TEXT("select * from \"%s\" where 1 = 2"), target16);
+		_stprintf(check16, TEXT("select * from \"%ls\" where 1 = 2"), target16);
 		rc = SQLExecDirect(hStmt, (SQLWCHAR*)check16, SQL_NTS);
 		SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 
 		if (rc == SQL_ERROR) {
 			TCHAR create16[colCount * MAX_COLUMN_LENGTH + 512];
-			_stprintf(create16, TEXT("create table \"%s\" ("), target16);
+			_stprintf(create16, TEXT("create table \"%ls\" ("), target16);
 					
 			for (int colNo = 0; colNo < colCount; colNo++) {
 				TCHAR* colName16 = utf8to16((const char*)sqlite3_column_name(stmt, colNo));			
@@ -378,7 +378,7 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 					_tcscmp(colType16, TEXT("numeric")) == 0
 				);	
 								
-				_stprintf(field16, TEXT("\"%s\" %s%s"), 
+				_stprintf(field16, TEXT("\"%ls\" %ls%ls"), 
 					colName16, 
 					isNumeric ? TEXT("numeric") : TEXT("text"),
 					colNo != colCount - 1 ? TEXT(", ") : TEXT(""));
@@ -396,11 +396,11 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 
 		SQLAllocHandle(SQL_HANDLE_STMT, hConn, &hStmt);
 		TCHAR _target16[_tcslen(target16) + 2];
-		_stprintf(_target16, TEXT("%s%s"), target16, _tcscmp(driverName16, TEXT("EXCEL")) == 0 ? TEXT("$") : TEXT(""));
+		_stprintf(_target16, TEXT("%ls%ls"), target16, _tcscmp(driverName16, TEXT("EXCEL")) == 0 ? TEXT("$") : TEXT(""));
 		rc = SQLColumns(hStmt, NULL, 0, NULL, 0, (SQLWCHAR*)_target16, SQL_NTS, NULL, 0);
 		
 		TCHAR insert16[colCount * MAX_COLUMN_LENGTH + 512];
-		_stprintf(insert16, TEXT("insert into \"%s\" (\""), _target16);	
+		_stprintf(insert16, TEXT("insert into \"%ls\" (\""), _target16);	
 		
 		int colCount2 = 0;
 		if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO) {			

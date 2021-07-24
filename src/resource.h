@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.5.8"
-#define GUI_VERSION2               1, 5, 8, 0
+#define GUI_VERSION                "1.5.9"
+#define GUI_VERSION2               1, 5, 9, 0
 
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
@@ -19,15 +19,17 @@
 #define IDD_TABLENAME              26
 #define IDD_RESULTS_COMPARISON     27
 
-#define IDD_TOOL_EXPORT_CSV        30
-#define IDD_TOOL_EXPORT_SQL        31
-#define IDD_TOOL_IMPORT_CSV        32
-#define IDD_TOOL_EXPORT_IMPORT_ODBC 33
-#define IDD_TOOL_GENERATE_DATA     34
-#define IDD_TOOL_DATABASE_DIAGRAM  35
-#define IDD_TOOL_COMPARE_DATABASE  36
-#define IDD_TOOL_DATABASE_SEARCH   37
-#define IDD_TOOL_STATISTICS        38
+#define IDD_TOOL_IMPORT_CSV        30
+#define IDD_TOOL_IMPORT_JSON       31
+#define IDD_TOOL_EXPORT_CSV        32
+#define IDD_TOOL_EXPORT_JSON       33
+#define IDD_TOOL_EXPORT_SQL        34
+#define IDD_TOOL_EXPORT_IMPORT_ODBC 35
+#define IDD_TOOL_GENERATE_DATA     36
+#define IDD_TOOL_DATABASE_DIAGRAM  37
+#define IDD_TOOL_COMPARE_DATABASE  38
+#define IDD_TOOL_DATABASE_SEARCH   39
+#define IDD_TOOL_STATISTICS        40
 
 #define IDA_ACCEL                  49
 #define IDA_ACCEL2                 50
@@ -48,33 +50,34 @@
 #define IDC_QUERYLIST              69
 #define IDC_REFLIST                70
 
-#define IDC_DLG_EDITOR             110
-#define IDC_DLG_LABEL              111
-#define IDC_DLG_TABLENAME          112
-#define IDC_DLG_ISCOLUMNS          113
-#define IDC_DLG_DELIMITER          114
-#define IDC_DLG_ENCODING           115
-#define IDC_DLG_NEWLINE            116
-#define IDC_DLG_OBJECTLIST         117
-#define IDC_DLG_DATAONLY           118
-#define IDC_DLG_DDLONLY            119
-#define IDC_DLG_DATADDL            120
-#define IDC_DLG_PREVIEW            121
-#define IDC_DLG_COLUMNS            122
+#define IDC_DLG_EDITOR             100
+#define IDC_DLG_LABEL              101
+#define IDC_DLG_TABLENAME          102
+#define IDC_DLG_ISCOLUMNS          103
+#define IDC_DLG_DELIMITER          104
+#define IDC_DLG_ENCODING           105
+#define IDC_DLG_NEWLINE            106
+#define IDC_DLG_OBJECTLIST         107
+#define IDC_DLG_DATAONLY           108
+#define IDC_DLG_DDLONLY            109
+#define IDC_DLG_DATADDL            110
+#define IDC_DLG_PREVIEW            111
+#define IDC_DLG_COLUMNS            112
 
-#define IDC_DLG_FONT_FAMILY        123
-#define IDC_DLG_FONT_SIZE          124
-#define IDC_DLG_AUTOLOAD           125
-#define IDC_DLG_RESTORE_DB         126
-#define IDC_DLG_RESTORE_EDITOR     127
-#define IDC_DLG_USE_HIGHLIGHT      128
-#define IDC_DLG_CHECK_UPDATES      129
-#define IDC_DLG_ROW_LIMIT          130
-#define IDC_DLG_RETAIN_PASSPHRASE  131
-#define IDC_DLG_EXIT_BY_ESCAPE     132
-#define IDC_DLG_INDENT             133
-#define IDC_DLG_TOOLBAR            134
-#define IDC_DLG_STARTUP            135
+#define IDC_DLG_FONT_FAMILY        113
+#define IDC_DLG_FONT_SIZE          114
+#define IDC_DLG_AUTOLOAD           115
+#define IDC_DLG_RESTORE_DB         116
+#define IDC_DLG_RESTORE_EDITOR     117
+#define IDC_DLG_CHECK_UPDATES      118
+#define IDC_DLG_ROW_LIMIT          119
+#define IDC_DLG_RETAIN_PASSPHRASE  120
+#define IDC_DLG_EXIT_BY_ESCAPE     121
+#define IDC_DLG_INDENT             122
+#define IDC_DLG_TOOLBAR            123
+#define IDC_DLG_HTTP_SERVER        124
+#define IDC_DLG_HTTP_SERVER_PORT   125
+#define IDC_DLG_STARTUP            126
 
 #define IDC_DLG_QUERYADD           136
 #define IDC_DLG_QUERYFILTER        137
@@ -235,19 +238,21 @@
 
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
-#define IDM_IMPORT_ODBC            1522
-#define IDM_EXPORT_SQL             1523
-#define IDM_EXPORT_CSV             1524
-#define IDM_EXPORT_ODBC            1525
-#define IDM_CHECK_INTEGRITY        1526
-#define IDM_CHECK_FOREIGN_KEY      1527
-#define IDM_VACUUM                 1528
-#define IDM_REINDEX                1529
-#define IDM_STATISTICS             1530
-#define IDM_GENERATE_DATA          1531
-#define IDM_DATABASE_DIAGRAM       1532
-#define IDM_COMPARE_DATABASE       1534
-#define IDM_DATABASE_SEARCH        1535
+#define IDM_IMPORT_JSON            1522
+#define IDM_IMPORT_ODBC            1523
+#define IDM_EXPORT_SQL             1524
+#define IDM_EXPORT_CSV             1525
+#define IDM_EXPORT_JSON            1526
+#define IDM_EXPORT_ODBC            1527
+#define IDM_CHECK_INTEGRITY        1528
+#define IDM_CHECK_FOREIGN_KEY      1529
+#define IDM_VACUUM                 1530
+#define IDM_REINDEX                1531
+#define IDM_STATISTICS             1532
+#define IDM_GENERATE_DATA          1533
+#define IDM_DATABASE_DIAGRAM       1534
+#define IDM_COMPARE_DATABASE       1535
+#define IDM_DATABASE_SEARCH        1536
 
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541

@@ -46,9 +46,6 @@ namespace tools {
 				SetFocus(hTable);
 			}
 			break;
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
@@ -69,7 +66,7 @@ namespace tools {
 					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
 
 					TCHAR query16[_tcslen(table16) + 128] = {0};
-					_stprintf(query16, TEXT("select * from \"%s\""), table16);
+					_stprintf(query16, TEXT("select * from \"%ls\""), table16);
 
 					if (exportCSV(path16, query16)) {
 						char* table8 = utils::utf16to8(table16);
@@ -83,7 +80,18 @@ namespace tools {
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -107,11 +115,6 @@ namespace tools {
 				sqlite3_finalize(stmt);
 
 				SetFocus(hListWnd);
-			}
-			break;
-
-			case WM_CLOSE: {
-				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 
@@ -160,7 +163,7 @@ namespace tools {
 
 							while (SQLITE_ROW == sqlite3_step(stmt)) {
 								TCHAR* line16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-								_ftprintf(f, TEXT("%s;\n\n"), line16);
+								_ftprintf(f, TEXT("%ls;\n\n"), line16);
 								delete [] line16;
 							}
 						} else {
@@ -186,10 +189,10 @@ namespace tools {
 							sprintf(sql8, "select * from \"%s\"", table8);
 
 							if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-								_ftprintf(f, TEXT("-- %s\n"), table16);
+								_ftprintf(f, TEXT("-- %ls\n"), table16);
 
 								TCHAR header16[MAX_TEXT_LENGTH]{0};
-								_stprintf(header16, TEXT("insert into \"%s\" ("), table16);
+								_stprintf(header16, TEXT("insert into \"%ls\" ("), table16);
 
 								int colCount = sqlite3_column_count(stmt);
 								for (int i = 0; i < colCount; i++) {
@@ -245,7 +248,18 @@ namespace tools {
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -280,6 +294,7 @@ namespace tools {
 		return line;
 	}
 
+	// lParam = in path
 	BOOL CALLBACK cbDlgImportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -394,10 +409,6 @@ namespace tools {
 			}
 			break;
 
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
-
 			case WM_COMMAND: {
 				WORD id = LOWORD(wParam);
 				WORD cmd = HIWORD(wParam);
@@ -420,12 +431,13 @@ namespace tools {
 					TCHAR create16[MAX_TEXT_LENGTH]{0};
 					TCHAR insert16[MAX_TEXT_LENGTH]{0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
+					_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), buf16);
 
 					TCHAR* schema16 = utils::getName(buf16, true);
 					TCHAR* tablename16 = utils::getName(buf16);
 
-					_stprintf(create16, TEXT("create table \"%s\".\"%s\" ("), schema16, tablename16);
-					_stprintf(insert16, TEXT("insert into \"%s\".\"%s\" ("), schema16, tablename16);
+					_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
+					_stprintf(insert16, TEXT("insert into \"%ls\".\"%ls\" ("), schema16, tablename16);
 
 					delete [] tablename16;
 					delete [] schema16;
@@ -550,7 +562,191 @@ namespace tools {
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, -1);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, -1);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam = in file
+	BOOL CALLBACK cbDlgImportJSON (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLong(hWnd, GWL_USERDATA, lParam);
+
+				TCHAR* name16 = utils::getFileName((TCHAR*)lParam, true);
+				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
+				delete [] name16;
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+					TCHAR table16[256];
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 255);
+
+					char* path8 = utils::utf16to8((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA));
+					char* data8 = utils::readFile(path8);
+					delete [] path8;
+					if (data8 == 0) {
+						MessageBox(hWnd, TEXT("File is empty"), TEXT("Info"), MB_OK);
+						EndDialog(hWnd, DLG_CANCEL);
+						return true;
+					}
+
+					sqlite3_stmt* stmt;
+					bool rc = SQLITE_OK == sqlite3_prepare_v2(db,
+							"with t as (select value from json_each(?1) limit 1) " \
+							"select " \
+							"'create table \"' || ?2 || '\" (' || group_concat('\"' || e.key || '\" '|| e.type, ',') || ')' crt, " \
+							"'insert into \"' || ?2 || '\" select ' || group_concat(\"json_extract(value, '$.\" || replace(e.key, '''', '''''') || \"') \", ',') || ' from json_each(\?1)' ins "
+							"from t, json_each(t.value) e;", -1, &stmt, 0);
+					if (rc) {
+						char* table8 = utils::utf16to8(table16);
+						sqlite3_bind_text(stmt, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, table8, strlen(table8),  SQLITE_TRANSIENT);
+
+						delete [] table8;
+						rc = SQLITE_ROW == sqlite3_step(stmt);
+						if (rc) {
+							const  char* create8 = (const char*)sqlite3_column_text(stmt, 0);
+							const  char* insert8 = (const char*)sqlite3_column_text(stmt, 1);
+							rc = SQLITE_OK == sqlite3_exec(db, create8, 0, 0, 0);
+							if (rc) {
+								sqlite3_stmt* stmt2;
+								if (SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt2, 0)) {
+									sqlite3_bind_text(stmt2, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+									rc = SQLITE_DONE == sqlite3_step(stmt2);
+								} else
+									showDbError(hWnd);
+
+								sqlite3_finalize(stmt2);
+							}
+						}
+					}
+
+					if (!rc)
+						showDbError(hWnd);
+
+					sqlite3_finalize(stmt);
+
+					if (rc) {
+						_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), table16);
+						EndDialog(hWnd, DLG_OK);
+					}
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgExportJSON (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type in ('table', 'view') order by 1", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hTable, name16);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				ComboBox_SetCurSel(hTable, 0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+					TCHAR table16[256] = {0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
+
+					TCHAR path16[MAX_PATH];
+					_stprintf(path16, table16);
+					if (!utils::saveFile(path16, TEXT("JSON files\0*.json\0All\0*.*\0"), TEXT("json"), hWnd))
+						return true;
+
+					FILE* f = _tfopen(path16, TEXT("wb"));
+					if (f == NULL) {
+						MessageBox(hWnd, TEXT("Unable to open target file"), NULL, MB_OK);
+						return true;
+					}
+
+					sqlite3_stmt* stmt;
+					bool rc = SQLITE_OK == sqlite3_prepare_v2(db,
+							"select 'select json_group_array(json_object(' || group_concat('''' || name || ''', ' || name, ', ') || ')) from ' || ?1 " \
+							"from pragma_table_info(?1) order by cid", -1, &stmt, 0);
+					if (rc) {
+						char* table8 = utils::utf16to8(table16);
+						sqlite3_bind_text(stmt, 1, table8, strlen(table8),  SQLITE_TRANSIENT);
+						delete [] table8;
+
+						if (SQLITE_ROW == sqlite3_step(stmt)) {
+							sqlite3_stmt* stmt2;
+							if (SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0)) {
+								rc = SQLITE_ROW == sqlite3_step(stmt2);
+								if (rc)
+									fprintf(f, (const char*)sqlite3_column_text(stmt2, 0));
+							} else
+								showDbError(hWnd);
+
+							sqlite3_finalize(stmt2);
+
+						}
+					}
+					sqlite3_finalize(stmt);
+					fclose(f);
+
+					if (rc) {
+						EndDialog(hWnd, DLG_OK);
+					} else {
+						showDbError(hWnd);
+					}
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -592,10 +788,6 @@ namespace tools {
 			}
 			break;
 
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
-
 			case WM_COMMAND: {
 				bool isExport = GetWindowLong(hWnd, GWL_USERDATA);
 
@@ -626,7 +818,7 @@ namespace tools {
 				if (LOWORD(wParam) == IDC_DLG_ODBC_MANAGER) {
 					TCHAR winPath[MAX_PATH], appPath[MAX_PATH];
 					GetWindowsDirectory(winPath, MAX_PATH);
-					_stprintf(appPath, TEXT("%s/SysWOW64/odbcad32.exe"), winPath);
+					_stprintf(appPath, TEXT("%ls/SysWOW64/odbcad32.exe"), winPath);
 					ShellExecute(0, 0, appPath, 0, 0, SW_SHOW);
 					SetFocus(0);
 					return 0;
@@ -711,7 +903,7 @@ namespace tools {
 
 							if (isExists) {
 								if (strategy == 1) {
-									_stprintf(res16, TEXT("%s - skipped\n"), table16);
+									_stprintf(res16, TEXT("%ls - skipped\n"), table16);
 									_tcscat(result16, res16);
 									continue;
 								}
@@ -738,7 +930,7 @@ namespace tools {
 
 							if (isExists) {
 								if (strategy == 1) {
-									_stprintf(res16, TEXT("%s - skipped\n"), table16);
+									_stprintf(res16, TEXT("%ls - skipped\n"), table16);
 									_tcscat(result16, res16);
 									continue;
 								}
@@ -755,7 +947,7 @@ namespace tools {
 										if (err8 && strlen(err8)) {
 											TCHAR res16[1024];
 											TCHAR* err16 = utils::utf8to16(err8);
-											_stprintf(res16, TEXT("Couldn't %s table %s. Perhaps the driver doesn't support this operation.\n%s"), strategy == 3 ? TEXT("drop") : TEXT("clear"), table16, err16);
+											_stprintf(res16, TEXT("Couldn't %ls table %ls. Perhaps the driver doesn't support this operation.\n%ls"), strategy == 3 ? TEXT("drop") : TEXT("clear"), table16, err16);
 											MessageBox(hWnd, res16, TEXT("Error"), MB_OK);
 											delete [] err16;
 											isError = true;
@@ -799,13 +991,13 @@ namespace tools {
 							}
 
 							TCHAR* _res16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-							_stprintf(res16, TEXT("%s - %s\n"), table16, _res16);
+							_stprintf(res16, TEXT("%ls - %ls\n"), table16, _res16);
 							_tcscat(result16, res16);
 							delete [] _res16;
 
 							sqlite3_finalize(stmt);
 						} else {
-							_stprintf(res16, TEXT("%s - error\n"), table16);
+							_stprintf(res16, TEXT("%ls - error\n"), table16);
 							_tcscat(result16, res16);
 						}
 
@@ -824,7 +1016,7 @@ namespace tools {
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -845,6 +1037,17 @@ namespace tools {
 				}
 
 				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -871,11 +1074,6 @@ namespace tools {
 				setEditorFont(GetDlgItem(hWnd, IDC_DLG_COMPARED_DDL));
 			}
 			break;
-
-			case WM_CLOSE:
-				sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
 
 			case WM_COMMAND: {
 				TCHAR path16[MAX_PATH]{0};
@@ -965,6 +1163,9 @@ namespace tools {
 					if (!rc)
 						showDbError(hWnd);
 				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -1031,6 +1232,17 @@ namespace tools {
 				}
 			}
 			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE:
+				sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
+				EndDialog(hWnd, DLG_CANCEL);
+				break;
 		}
 
 		return false;
@@ -1082,10 +1294,6 @@ namespace tools {
 				sqlite3_finalize(stmt);
 			}
 			break;
-
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
 
 			case WM_LBUTTONDOWN: {
 				ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLES), SW_HIDE);
@@ -1165,6 +1373,9 @@ namespace tools {
 
 					SetDlgItemText(hWnd, IDC_DLG_SEARCH_QUERY_TEXT, text16);
 				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 
 				if (LOWORD(wParam) == IDC_DLG_TABLENAMES && (HIWORD(wParam) == (UINT)EN_KILLFOCUS) && (GetFocus() != GetDlgItem(hWnd, IDC_DLG_TABLES)))
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLES), SW_HIDE);
@@ -1248,6 +1459,16 @@ namespace tools {
 			}
 			break;
 
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
 		}
 
 		return false;
@@ -1388,11 +1609,6 @@ namespace tools {
 			}
 			break;
 
-			case WM_CLOSE: {
-				EndDialog(hWnd, DLG_CANCEL);
-			}
-			break;
-
 			case WMU_TARGET_CHANGED: {
 				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS);
 				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_DESTROY);
@@ -1403,7 +1619,7 @@ namespace tools {
 				TCHAR* tablename16 = utils::getName(name16);
 
 				TCHAR query16[MAX_TEXT_LENGTH]{0};
-				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") where schema = \"%s\" order by cid"), tablename16, schema16);
+				_stprintf(query16, TEXT("select name from pragma_table_info(\"%ls\") where schema = \"%ls\" order by cid"), tablename16, schema16);
 				delete [] tablename16;
 				delete [] schema16;
 
@@ -1502,7 +1718,7 @@ namespace tools {
 				TCHAR query16[MAX_TEXT_LENGTH]{0};
 				GetWindowText(hRefTableWnd, buf16, 255);
 
-				_stprintf(query16, TEXT("select name from pragma_table_info(\"%s\") order by cid"), buf16);
+				_stprintf(query16, TEXT("select name from pragma_table_info(\"%ls\") order by cid"), buf16);
 				char* query8 = utils::utf16to8(query16);
 
 				sqlite3_stmt *stmt;
@@ -1580,7 +1796,7 @@ namespace tools {
 
 						if (_tcscmp(type16, TEXT("sequence")) == 0) {
 							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
-							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = rownum + %i - 1"), name16, start);
+							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = rownum + %i - 1"), name16, start);
 						}
 
 						if (_tcscmp(type16, TEXT("number")) == 0) {
@@ -1590,7 +1806,7 @@ namespace tools {
 							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER, multi, 31);
 							TCHAR* multi2 = utils::replace(multi, TEXT(","), TEXT("."));
 
-							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %s"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
+							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %ls"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
 							delete [] multi2;
 						}
 
@@ -1601,11 +1817,11 @@ namespace tools {
 							TCHAR refcolumn16[256]{0};
 							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
 
-							_stprintf(query16, TEXT("with t as (select %s value from \"%s\" order by random()), " \
+							_stprintf(query16, TEXT("with t as (select %ls value from \"%ls\" order by random()), " \
 								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
 								"t2 as (select t.value FROM t, series order by random()), " \
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
-								"update temp.data_generator set \"%s\" = t3.value from t3 where t3.rownum = temp.data_generator.rownum"),
+								"update temp.data_generator set \"%ls\" = t3.value from t3 where t3.rownum = temp.data_generator.rownum"),
 								refcolumn16, reftable16, rowCount, rowCount, name16);
 						}
 
@@ -1620,15 +1836,15 @@ namespace tools {
 							TCHAR end16[32] = {0};
 							_stprintf(end16, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
 
-							_stprintf(query16, TEXT("update temp.data_generator set \"%s\" = date('%s', '+' || ((strftime('%%s', '%s', '+1 day', '-1 second') - strftime('%%s', '%s')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
+							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = date('%ls', '+' || ((strftime('%%s', '%ls', '+1 day', '-1 second') - strftime('%%s', '%ls')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
 								name16, start16, end16, start16);
 						}
 
 						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
-							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%s\" order by random()), "\
+							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
 								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
 								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
-								"update temp.data_generator set \"%s\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
+								"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
 								type16, rowCount, rowCount, name16);
 						}
 
@@ -1665,6 +1881,17 @@ namespace tools {
 				}
 			}
 			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
 		}
 
 		return false;
@@ -1682,16 +1909,13 @@ namespace tools {
 					rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
 				sqlite3_finalize(stmt);
 
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' from dbstat s left join temp.row_statistics r on s.name = r.name  group by s.name;", -1, &stmt, 0))
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, sm.type, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' " \
+					"from dbstat s left join sqlite_master sm on s.name = sm.name left join temp.row_statistics r on s.name = r.name group by s.name;", -1, &stmt, 0))
 					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_STATISTICS), stmt);
 
 				sqlite3_finalize(stmt);
 			}
 			break;
-
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -1701,10 +1925,36 @@ namespace tools {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (pHdr->code == LVN_COLUMNCLICK) {
+				if (pHdr->code == LVN_COLUMNCLICK && pHdr->idFrom == IDC_DLG_STATISTICS) {
 					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
 					return ListView_Sort(pHdr->hwndFrom, pLV->iSubItem);
 				}
+
+				if (pHdr->code == (WORD)NM_DBLCLK && pHdr->idFrom == IDC_DLG_STATISTICS) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+					TCHAR text16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_STATISTICS, text16, 1024);
+
+					TCHAR name16[256]{0}, type16[256]{0};
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 1, name16, 255);
+					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 2, type16, 255);
+					if (_tcscmp(type16, TEXT("table")) == 0) {
+						_stprintf(editTableData16, TEXT("%ls"), name16);
+						DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
+						SetFocus(pHdr->hwndFrom);
+					}
+				}
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -1747,7 +1997,7 @@ namespace tools {
 					TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
 					if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
 						TCHAR val16[_tcslen(qvalue16) + 3]{0};
-						_stprintf(val16, TEXT("\"%s\""), qvalue16);
+						_stprintf(val16, TEXT("\"%ls\""), qvalue16);
 						_tcscat(line16, val16);
 					} else {
 						_tcscat(line16, qvalue16);
@@ -1980,9 +2230,9 @@ namespace tools {
 				auto addColumn = [] (HWND hTableWnd, char* name8, char* type8) {
 					TCHAR* colname16 = utils::utf8to16(name8);
 					TCHAR* type16 = utils::utf8to16(type8);
-					TCHAR buf[1024]{0};
-					_stprintf(buf, TEXT("%s: %s"), colname16, type16);
-					ListBox_AddString(hTableWnd, buf);
+					TCHAR buf16[1024]{0};
+					_stprintf(buf16, TEXT("%ls: %ls"), colname16, type16);
+					ListBox_AddString(hTableWnd, buf16);
 
 					delete [] type16;
 					delete [] colname16;
@@ -2358,23 +2608,15 @@ namespace tools {
 				if (HIWORD(wParam) == LBN_SELCHANGE && GetParent((HWND)lParam) == hWnd)
 					return SendMessage(hWnd, WMU_UPDATE_DIAGRAM, 0, 0);
 
-
-				if (wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
-			case WM_CLOSE: {
-				delete [] dbname8;
-				for (int i = 0; i < MAX_LINK_COUNT; i++)
-					links[i].type = 0;
-
-				int tblNo = 0;
-				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-					RemoveProp(hTableWnd, TEXT("HIGHLIGHTED"));
-					tblNo++;
-				}
-				EndDialog(hWnd, DLG_CANCEL);
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->code == (WORD)NM_CHAR && (((NMCHAR*) lParam)->ch == VK_ESCAPE))
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -2405,6 +2647,26 @@ namespace tools {
 					tblNo++;
 				}
 				InvalidateRect(hWnd, NULL, false);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				delete [] dbname8;
+				for (int i = 0; i < MAX_LINK_COUNT; i++)
+					links[i].type = 0;
+
+				int tblNo = 0;
+				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
+					RemoveProp(hTableWnd, TEXT("HIGHLIGHTED"));
+					tblNo++;
+				}
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}

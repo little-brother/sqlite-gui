@@ -228,7 +228,7 @@ namespace utils {
 		if (_tcslen(ext) > 0)
 			_tcscpy(path2, path);
 		else
-			_stprintf(path2, TEXT("%s%s%s"), path, _tcslen(defExt) > 0 ? TEXT(".") : TEXT(""), defExt);
+			_stprintf(path2, TEXT("%ls%ls%ls"), path, _tcslen(defExt) > 0 ? TEXT(".") : TEXT(""), defExt);
 
 		bool isFileExists = utils::isFileExists(path2);
 		if (isFileExists && IDYES != MessageBox(hWnd, TEXT("Overwrite file?"), TEXT("Confirmation"), MB_YESNO))
@@ -280,9 +280,9 @@ namespace utils {
 		TCHAR name16[MAX_PATH], ext16[32], name_ext16[MAX_PATH + 32];
 		_tsplitpath(path16, NULL, NULL, name16, ext16);
 		if (noExt)
-			_stprintf(name_ext16, TEXT("%s"), name16);
+			_stprintf(name_ext16, TEXT("%ls"), name16);
 		else
-			_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
+			_stprintf(name_ext16, TEXT("%ls%ls"), name16, ext16);
 		char* name8 = utils::utf16to8(name_ext16);
 		delete [] path16;
 		return name8;
@@ -293,9 +293,9 @@ namespace utils {
 		TCHAR ext16[32], name_ext16[MAX_PATH + 32];
 		_tsplitpath(path16, NULL, NULL, name16, ext16);
 		if (noExt)
-			_stprintf(name_ext16, TEXT("%s"), name16);
+			_stprintf(name_ext16, TEXT("%ls"), name16);
 		else
-			_stprintf(name_ext16, TEXT("%s%s"), name16, ext16);
+			_stprintf(name_ext16, TEXT("%ls%ls"), name16, ext16);
 
 		return name16;
 	}
@@ -346,7 +346,7 @@ namespace utils {
         int mag = floor(log10(bSize)/log10(1024));
         double size = (double) bSize / (1L << (mag * 10));
 
-        _stprintf(res, TEXT("(BLOB: %.2lf%s)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
+        _stprintf(res, TEXT("(BLOB: %.2lf%ls)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
         return res;
 	}
 
@@ -440,5 +440,34 @@ namespace utils {
 		BYTE b = (b1*rem + b2*av) / 255;
 
 		return RGB(r, g, b);
+	}
+
+	// https://stackoverflow.com/a/14530993/6121703
+	void urlDecode (char *dst, const char *src) {
+		char a, b;
+		while (*src) {
+			if ((*src == '%') && ((a = src[1]) && (b = src[2])) && (isxdigit(a) && isxdigit(b))) {
+				if (a >= 'a')
+					a -= 'a'-'A';
+				if (a >= 'A')
+					a -= ('A' - 10);
+				else
+					a -= '0';
+				if (b >= 'a')
+					b -= 'a'-'A';
+				if (b >= 'A')
+					b -= ('A' - 10);
+				else
+					b -= '0';
+				*dst++ = 16 * a + b;
+				src+=3;
+			} else if (*src == '+') {
+				*dst++ = ' ';
+				src++;
+			} else {
+				*dst++ = *src++;
+			}
+		}
+		*dst++ = '\0';
 	}
 }

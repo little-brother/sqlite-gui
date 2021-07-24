@@ -19,6 +19,7 @@
 #define ACTION_DESTROY              2
 #define ACTION_RESIZETAB            3
 #define ACTION_UPDATETAB            4
+#define ACTION_REDRAW               5
 
 #define ROW_VIEW                    0
 #define ROW_EDIT                    1
@@ -63,8 +64,9 @@ extern const TCHAR *TYPES16p[6];
 extern COLORREF GRIDCOLORS[8];
 
 extern HFONT hDefFont;
-extern WNDPROC cbOldListView;
+extern WNDPROC cbOldListView, cbOldEdit;
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
@@ -85,6 +87,7 @@ bool toggleComment (HWND hEditorWnd);
 bool pasteText (HWND hEditorWnd);
 void fixQuoteSelection(HWND hEditorWnd, SELCHANGE* pSc);
 void switchDialog(HWND hDlg, bool isNext);
+void showTooltip(int x, int y, TCHAR* text16);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);

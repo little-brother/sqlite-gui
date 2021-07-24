@@ -22,15 +22,15 @@
 1562796420 d:\codes\sqlite-gui\sqlite3.h
 	<stdarg.h>
 
-1626434550 source:d:\codes\sqlite-gui\src\resource.rc
+1627167564 source:d:\codes\sqlite-gui\src\resource.rc
 	<windows.h>
 	<commctrl.h>
 	<richedit.h>
 	"resource.h"
 
-1626443644 d:\codes\sqlite-gui\src\resource.h
+1627159290 d:\codes\sqlite-gui\src\resource.h
 
-1626295352 source:d:\codes\sqlite-gui\src\prefs.cpp
+1627047871 source:d:\codes\sqlite-gui\src\prefs.cpp
 	<ctime>
 	"prefs.h"
 
@@ -43,11 +43,12 @@
 1583506689 d:\codes\sqlite-gui\src\sqlite3.h
 	<stdarg.h>
 
-1626441762 source:d:\codes\sqlite-gui\src\main.cpp
+1627169490 source:d:\codes\sqlite-gui\src\main.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
 	"prefs.h"
+	"http.h"
 	"utils.h"
 	"tools.h"
 	"dialogs.h"
@@ -59,12 +60,12 @@
 
 1583970008 d:\codes\sqlite-gui\src\main.h
 
-1626301305 d:\codes\sqlite-gui\src\utils.h
+1626866356 d:\codes\sqlite-gui\src\utils.h
 	<tchar.h>
 	<windows.h>
 	"sqlite3.h"
 
-1626443151 source:d:\codes\sqlite-gui\src\utils.cpp
+1627168590 source:d:\codes\sqlite-gui\src\utils.cpp
 	<windows.h>
 	<gdiplus.h>
 	<stdio.h>
@@ -74,7 +75,7 @@
 	<math.h>
 	"utils.h"
 
-1626267734 source:d:\codes\sqlite-gui\src\tools.cpp
+1627144800 source:d:\codes\sqlite-gui\src\tools.cpp
 	<stdlib.h>
 	"global.h"
 	"missing.h"
@@ -84,7 +85,7 @@
 	"dialogs.h"
 	"prefs.h"
 
-1626441170 d:\codes\sqlite-gui\src\global.h
+1627168122 d:\codes\sqlite-gui\src\global.h
 	<windows.h>
 	<windowsx.h>
 	<commctrl.h>
@@ -99,13 +100,13 @@
 	"missing.h"
 	"sqlite3.h"
 
-1626267734 d:\codes\sqlite-gui\src\tools.h
+1626971919 d:\codes\sqlite-gui\src\tools.h
 	<windows.h>
 
 1626434425 d:\codes\sqlite-gui\src\dialogs.h
 	<windows.h>
 
-1626443663 source:d:\codes\sqlite-gui\src\dialogs.cpp
+1627169692 source:d:\codes\sqlite-gui\src\dialogs.cpp
 	<windows.h>
 	<gdiplus.h>
 	"resource.h"
@@ -126,7 +127,7 @@
 	"oaidl.h"
 	"ocidl.h"
 
-1621369970 d:\codes\sqlite-gui\src\missing.h
+1627168333 d:\codes\sqlite-gui\src\missing.h
 
 1595499199 c:\mingw\include\windows.h
 	<winresrc.h>
@@ -498,4 +499,15 @@
 	<ole2.h>
 
 1595499198 c:\mingw\include\richole.h
+
+1627119451 source:d:\codes\sqlite-gui\src\http.cpp
+	<windows.h>
+	<process.h>
+	<ws2tcpip.h>
+	<shlwapi.h>
+	<stdio.h>
+	"utils.h"
+
+1627047120 d:\codes\sqlite-gui\src\http.h
+	"sqlite3.h"
 

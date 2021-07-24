@@ -15,8 +15,6 @@
 					<Add option="-std=c++11" />
 					<Add option="-g" />
 					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-DUNICODE" />
-					<Add option="-D_UNICODE" />
 					<Add directory="include" />
 				</Compiler>
 			</Target>
@@ -29,22 +27,24 @@
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
 					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-DUNICODE" />
-					<Add option="-D_UNICODE" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
-					<Add option="-static" />
 				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
 			<Add option="-std=c++11" />
+			<Add option="-m32" />
+			<Add option="-DUNICODE" />
+			<Add option="-D_UNICODE" />
+			<Add option="-D_WIN32_WINNT=0x0501" />
 		</Compiler>
 		<Linker>
 			<Add option="-static" />
+			<Add option="-m32" />
 			<Add library="gdi32" />
 			<Add library="user32" />
 			<Add library="kernel32" />
@@ -53,13 +53,17 @@
 			<Add library="libcomdlg32" />
 			<Add library="libshlwapi" />
 			<Add library="libmsimg32" />
-			<Add library="lib/libsqlite3.a" />
 			<Add library="libwininet" />
+			<Add library="libws2_32" />
+			<Add library="libsqlite3" />
+			<Add directory="lib" />
 		</Linker>
 		<Unit filename="ToDo.txt" />
 		<Unit filename="src/dialogs.cpp" />
 		<Unit filename="src/dialogs.h" />
 		<Unit filename="src/global.h" />
+		<Unit filename="src/http.cpp" />
+		<Unit filename="src/http.h" />
 		<Unit filename="src/main.cpp" />
 		<Unit filename="src/missing.h" />
 		<Unit filename="src/prefs.cpp" />

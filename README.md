@@ -23,6 +23,7 @@ Small, simple, powerfull, fast, free.
 * [Query parameters](https://github.com/little-brother/sqlite-gui/wiki#query-parameters)
 * Data generator
 * [Extension pack](https://github.com/little-brother/sqlite-gui/wiki#extensions)
+* [Built-in REST API web server](https://github.com/little-brother/sqlite-gui/wiki#rest-api-web-server)
 * Demo database "Bookstore" for beginners
 * Does not require installation
 

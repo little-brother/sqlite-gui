@@ -34,5 +34,6 @@ namespace utils {
 	COLORREF blend(COLORREF c1, COLORREF c2, BYTE alpha);
 
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
+	void urlDecode (char *dst, const char *src);
 }
 #endif

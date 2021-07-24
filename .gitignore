@@ -2,4 +2,7 @@ bin/
 obj/
 extensions/*.dll
 extensions/*.bat
+http-debug.txt
+sqlite-gui.depend
+sqlite-gui.layout
 ToDo.txt
