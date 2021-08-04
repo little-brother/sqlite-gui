@@ -1,6 +1,6 @@
 /*
 	xml_valid(xml)
-	Returns 1 if the argument is well-formed XML and 0, overwise.
+	Returns 1 if the argument is well-formed XML and 0, otherwise.
 	select xml_valid('<a>A</a>'); --> 1
 	select xml_valid('<a>A/a>'); --> 0
 	

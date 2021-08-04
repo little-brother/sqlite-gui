@@ -7,7 +7,7 @@
 	odbc_write(query, connectionString, target)
 	Upload query resultset from SQLite to external database.
 	If the target doesn't exist then it will be created. 
-	Overwise, query columns should be complete the same with target coiumns.
+	Otherwise, query columns should be complete the same with target coiumns.
 
 	odbc_query(connectionString, query)
 	Execute query on external database e.g. to create target table.

@@ -22,17 +22,18 @@
 1562796420 d:\codes\sqlite-gui\sqlite3.h
 	<stdarg.h>
 
-1627167564 source:d:\codes\sqlite-gui\src\resource.rc
+1627908008 source:d:\codes\sqlite-gui\src\resource.rc
 	<windows.h>
 	<commctrl.h>
 	<richedit.h>
 	"resource.h"
 
-1627159290 d:\codes\sqlite-gui\src\resource.h
+1627907856 d:\codes\sqlite-gui\src\resource.h
 
-1627047871 source:d:\codes\sqlite-gui\src\prefs.cpp
+1628015748 source:d:\codes\sqlite-gui\src\prefs.cpp
 	<ctime>
 	"prefs.h"
+	"resource.h"
 
 1622020017 d:\codes\sqlite-gui\src\prefs.h
 	<stdio.h>
@@ -43,7 +44,7 @@
 1583506689 d:\codes\sqlite-gui\src\sqlite3.h
 	<stdarg.h>
 
-1627169490 source:d:\codes\sqlite-gui\src\main.cpp
+1628072922 source:d:\codes\sqlite-gui\src\main.cpp
 	"global.h"
 	"missing.h"
 	"resource.h"
@@ -60,12 +61,12 @@
 
 1583970008 d:\codes\sqlite-gui\src\main.h
 
-1626866356 d:\codes\sqlite-gui\src\utils.h
+1627398034 d:\codes\sqlite-gui\src\utils.h
 	<tchar.h>
 	<windows.h>
 	"sqlite3.h"
 
-1627168590 source:d:\codes\sqlite-gui\src\utils.cpp
+1627596750 source:d:\codes\sqlite-gui\src\utils.cpp
 	<windows.h>
 	<gdiplus.h>
 	<stdio.h>
@@ -75,7 +76,7 @@
 	<math.h>
 	"utils.h"
 
-1627144800 source:d:\codes\sqlite-gui\src\tools.cpp
+1627308790 source:d:\codes\sqlite-gui\src\tools.cpp
 	<stdlib.h>
 	"global.h"
 	"missing.h"
@@ -85,7 +86,7 @@
 	"dialogs.h"
 	"prefs.h"
 
-1627168122 d:\codes\sqlite-gui\src\global.h
+1627850728 d:\codes\sqlite-gui\src\global.h
 	<windows.h>
 	<windowsx.h>
 	<commctrl.h>
@@ -103,10 +104,10 @@
 1626971919 d:\codes\sqlite-gui\src\tools.h
 	<windows.h>
 
-1626434425 d:\codes\sqlite-gui\src\dialogs.h
+1627490946 d:\codes\sqlite-gui\src\dialogs.h
 	<windows.h>
 
-1627169692 source:d:\codes\sqlite-gui\src\dialogs.cpp
+1628071830 source:d:\codes\sqlite-gui\src\dialogs.cpp
 	<windows.h>
 	<gdiplus.h>
 	"resource.h"
@@ -500,7 +501,7 @@
 
 1595499198 c:\mingw\include\richole.h
 
-1627119451 source:d:\codes\sqlite-gui\src\http.cpp
+1627415469 source:d:\codes\sqlite-gui\src\http.cpp
 	<windows.h>
 	<process.h>
 	<ws2tcpip.h>
@@ -510,4 +511,8 @@
 
 1627047120 d:\codes\sqlite-gui\src\http.h
 	"sqlite3.h"
+
+1627648435 d:\codes\sqlite-gui\include\em_inflate.h
+	<sys/types.h>
+	<stdlib.h>
 

@@ -94,7 +94,7 @@ namespace utils {
 			p++;
 
 		TCHAR* q = p ? _tcschr(TEXT("'`\"["), p[0]) : 0;
-		if (q) {
+		if (q && q[0]) {
 			TCHAR* q2 = _tcschr(p + 1, q[0] == TEXT('[') ? TEXT(']') : q[0]);
 			if (q2 && ((isSchema && q2[1] == TEXT('.')) || (!isSchema && q2[1] != TEXT('.'))))
 				_tcsncpy(res, p + 1, _tcslen(p) - _tcslen(q2) - 1);
@@ -333,6 +333,21 @@ namespace utils {
 			return sqlite3_bind_double(stmt, pos, d);
 
 		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+	}
+
+	BYTE sqlite3_type(const char* decltype8) {
+		if (decltype8 == 0)
+			return SQLITE_TEXT;
+
+		char type8[strlen(decltype8) + 1]{0};
+		strcpy(type8, decltype8);
+		strlwr(type8);
+
+		return strstr(type8, "char") != NULL || strstr(type8, "text") != NULL ? SQLITE_TEXT :
+			strstr(type8, "int") != NULL ? SQLITE_INTEGER :
+			strstr(type8, "float") != NULL || strstr(type8, "double") != NULL || strstr(type8, "real") != NULL || strstr(type8, "numeric") != NULL ? SQLITE_FLOAT :
+			strcmp(type8, "blob") == 0 ? SQLITE_BLOB :
+			SQLITE_TEXT;
 	}
 
 	const TCHAR* sizes[] = { TEXT("b"), TEXT("KB"), TEXT("MB"), TEXT("GB"), TEXT("TB") };

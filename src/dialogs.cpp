@@ -9,10 +9,11 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldAddTableHeader, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
+	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldAddTableComboboxEdit, cbOldAddTableHeader, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewAddTableComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableHeader(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -20,6 +21,7 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewChart(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
+	COLORREF GetBrushColor(HBRUSH brush);
 
 	const TCHAR* DATATYPES16[] = {TEXT("integer"), TEXT("real"), TEXT("text"), TEXT("blob"), TEXT("json"), 0};
 	const TCHAR* INDENT_LABELS[] = {TEXT("Tab"), TEXT("2 spaces"), TEXT("4 spaces"), 0};
@@ -267,7 +269,7 @@ namespace dialogs {
 							_tcslen(row[7]) ? TEXT(" check(") : TEXT(""),
 							_tcslen(row[7]) ? row[7] : TEXT(""),
 							_tcslen(row[7]) ? TEXT(")") : TEXT(""),
-							!_tcslen(row[3]) || pkCount > 1 ? TEXT("") : !_tcscmp(TEXT("integer"), row[2]) && !isWithoutRowid ? TEXT(" primary key autoincrement")	: TEXT(" primary key"),
+							!_tcslen(row[3]) || pkCount > 1 ? TEXT("") : _tcsstr(TEXT("int"), row[2]) != NULL && !isWithoutRowid ? TEXT(" primary key autoincrement")	: TEXT(" primary key"),
 							_tcslen(row[5]) ? TEXT(" unique") : TEXT("")
 							);
 
@@ -424,6 +426,11 @@ namespace dialogs {
 						for (int i = 0; DATATYPES16[i]; i++)
 							ComboBox_AddString(hCell, DATATYPES16[i]);
 						ComboBox_SetText(hCell, buf);
+
+						COMBOBOXINFO ci{0};
+						ci.cbSize = sizeof(COMBOBOXINFO);
+						GetComboBoxInfo(hCell, &ci);
+						cbOldAddTableComboboxEdit = (WNDPROC)SetWindowLong(ci.hwndItem, GWL_WNDPROC, (LONG)cbNewAddTableComboboxEdit);
 					}
 
 					if (ia->iSubItem == 1 || ia->iSubItem == 6 || ia->iSubItem == 7) {
@@ -767,7 +774,7 @@ namespace dialogs {
 				CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 300, 0, 400, 100, hListWnd, (HMENU)IDC_REFLIST, GetModuleHandle(0), 0);
 
 				SetProp(hWnd, TEXT("CURRENTROW"), (HANDLE)0);
-				SetProp(hWnd, TEXT("CURRENTCOLUMN"), (HANDLE)1);
+				SetProp(hWnd, TEXT("CURRENTCOLUMN"), (HANDLE)0);
 
 				DWORD tStart = GetTickCount();
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0 , 0);
@@ -834,17 +841,29 @@ namespace dialogs {
 							sqlite3_step(stmt);
 							generated[i + 1] = sqlite3_column_int(stmt, 0); // first column is the row length, the last is a rowid
 						}
-						sqlite3_finalize(stmt);
 					}
+					sqlite3_finalize(stmt);
 					SetProp(hWnd, TEXT("GENERATED"), (HANDLE)generated);
+
+					BYTE* decltypes = new BYTE[colCount + 1]{0};
+					char query8[255 + strlen(schema8) + strlen(tablename8)];
+					sprintf(query8, "select * from \"%s\".\"%s\" where 1 = 2", schema8, tablename8);
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						sqlite3_step(stmt);
+						for (int colNo = 0; colNo < colCount; colNo++)
+							decltypes[colNo + 1] = utils::sqlite3_type(sqlite3_column_decltype(stmt, colNo));
+					}
+					sqlite3_finalize(stmt);
+					SetProp(hWnd, TEXT("DECLTYPES"), (HANDLE)decltypes);
 				}
 
 				SetWindowPos(hWnd, 0, prefs::get("x") + 40, prefs::get("y") + 70, prefs::get("width") - 75, prefs::get("height") - 110,  SWP_NOZORDER);
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 
 				// Single table mode
-				if (!hTooltipWnd)
-					hTooltipWnd = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hWnd, NULL, GetModuleHandle(0), NULL);
+				createTooltip(hWnd);
+
+				ListView_SetItemState(hListWnd, -1, 0, LVIS_FOCUSED | LVIS_SELECTED);
 			}
 			break;
 
@@ -918,14 +937,14 @@ namespace dialogs {
 					if (GetProp(hWnd, TEXT("BLOBS")) == NULL) {
 						bool* blobs = new bool[colCount]{0};
 						for (int i = 0; i < colCount; i++)
-							blobs[i] = sqlite3_column_decltype(stmt, i) != 0 && stricmp(sqlite3_column_decltype(stmt, i), "blob") == 0;
+							blobs[i] = utils::sqlite3_type(sqlite3_column_decltype(stmt, i)) == SQLITE_BLOB;
 						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)blobs);
 					}
 
 					if (GetProp(hWnd, TEXT("TEXTS")) == NULL) {
 						bool* texts = new bool[colCount]{0};
 						for (int i = 0; i < colCount; i++)
-							texts[i] = sqlite3_column_decltype(stmt, i) != 0 && stricmp(sqlite3_column_decltype(stmt, i), "text") == 0;
+							texts[i] = utils::sqlite3_type(sqlite3_column_decltype(stmt, i)) == SQLITE_TEXT;
 						SetProp(hWnd, TEXT("TEXTS"), (HANDLE)texts);
 					}
 
@@ -991,11 +1010,10 @@ namespace dialogs {
 			case WMU_SET_CURRENT_CELL: {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 				RECT rect;
-
 				int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
-				InvalidateRect(hListWnd, &rect, true);
+				InvalidateRect(hListWnd, &rect, false);
 
 				currRow = wParam;
 				currCol = lParam;
@@ -1004,7 +1022,7 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("CURRENTCOLUMN"), (HANDLE)currCol);
 
 				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
-				InvalidateRect(hListWnd, &rect, true);
+				InvalidateRect(hListWnd, &rect, false);
 			}
 			break;
 
@@ -1178,7 +1196,7 @@ namespace dialogs {
 					if (canUpdate && (pCustomDraw->nmcd.dwDrawStage == CDDS_POSTPAINT) | CDDS_ITEM) {
 						int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
 						int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
-						if (pCustomDraw->nmcd.dwItemSpec == (DWORD)currRow && (GetFocus() == hListWnd)) {
+						if (pCustomDraw->nmcd.dwItemSpec == (DWORD)currRow && (GetFocus() == hListWnd) && currCol > 0) {
 							RECT rect;
 							ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
 
@@ -1287,7 +1305,12 @@ namespace dialogs {
 						return true;
 					}
 
-					if (canUpdate && !isControl && ((kd->wVKey == VK_SPACE) || (kd->wVKey >= 0x30 && kd->wVKey <= 0x5A) || (kd->wVKey >= 0x60 && kd->wVKey <= 0x6F))&& isValid) { // 0, 1, ..., y, z + NumPads
+					if (canUpdate && !isControl && (
+						(kd->wVKey == VK_SPACE) ||
+						(kd->wVKey == VK_OEM_PLUS) || (kd->wVKey == VK_OEM_MINUS) || (kd->wVKey == VK_OEM_COMMA) || (kd->wVKey == VK_OEM_PERIOD) || // +-,.
+						(kd->wVKey >= 0x30 && kd->wVKey <= 0x5A) || // 0, 1, ..., y, z
+						(kd->wVKey >= 0x60 && kd->wVKey <= 0x6F) // Numpad
+						) && isValid) {
 						SendMessage(hWnd, WMU_EDIT_VALUE, 0, kd->wVKey);
 						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
 						return true;
@@ -1637,6 +1660,12 @@ namespace dialogs {
 					RemoveProp(hWnd, TEXT("WIDTHS"));
 				}
 
+				BYTE* decltypes = (BYTE*)GetProp(hWnd, TEXT("DECLTYPES"));
+				if (decltypes != NULL) {
+					delete [] decltypes;
+					RemoveProp(hWnd, TEXT("DECLTYPES"));
+				}
+
 				RemoveProp(hWnd, TEXT("ISTABLE"));
 				RemoveProp(hWnd, TEXT("HASROWID"));
 				RemoveProp(hWnd, TEXT("CANINSERT"));
@@ -1746,7 +1775,7 @@ namespace dialogs {
 			case WM_INITDIALOG: {
 				int mode = LOWORD(lParam);
 				int isResultWnd = HIWORD(lParam);
-				HWND hListWnd = isResultWnd ? (HWND)GetWindowLong(hTabWnd, GWL_USERDATA) : GetDlgItem(GetWindow(hWnd, GW_OWNER), IDC_DLG_QUERYLIST);
+				HWND hListWnd = isResultWnd ? (HWND)SendMessage(hMainWnd, WMU_GET_CURRENT_RESULT, 0, 0) : GetDlgItem(GetWindow(hWnd, GW_OWNER), IDC_DLG_QUERYLIST);
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				int colCount = Header_GetItemCount(hHeader) - !isResultWnd;
 
@@ -1806,6 +1835,21 @@ namespace dialogs {
 					SendMessage(hWnd, WMU_SET_DLG_ROW_DATA, 0, 0);
 				}
 				SetFocus(GetDlgItem(hColumnsWnd, IDC_ROW_EDIT + 1));
+
+				BYTE* decltypes = (BYTE*)GetProp(GetParent(hListWnd), TEXT("DECLTYPES"));
+				if ((mode == ROW_ADD || mode == ROW_EDIT) && decltypes) {
+					HBRUSH* brushes = new HBRUSH[colCount + 1]{0};
+					for (int colNo = 1; colNo < colCount; colNo++) {
+						brushes[colNo] = decltypes[colNo] == SQLITE_TEXT ? CreateSolidBrush(prefs::get("color-text")) :
+							decltypes[colNo] == SQLITE_TEXT ? CreateSolidBrush(prefs::get("color-text")) :
+							decltypes[colNo] == SQLITE_NULL ? CreateSolidBrush(prefs::get("color-null")) :
+							decltypes[colNo] == SQLITE_BLOB ? CreateSolidBrush(prefs::get("color-blob")) :
+							decltypes[colNo] == SQLITE_INTEGER ? CreateSolidBrush(prefs::get("color-integer")) :
+							decltypes[colNo] == SQLITE_FLOAT ? CreateSolidBrush(prefs::get("color-real")) :
+							0;
+					}
+					SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
+				}
 			}
 			break;
 
@@ -1841,13 +1885,6 @@ namespace dialogs {
 			case WM_MOUSEWHEEL: {
 				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
 				SendMessage(GetDlgItem(hWnd, IDC_DLG_COLUMNS), WM_VSCROLL, MAKELPARAM(action, 0), 0);
-			}
-			break;
-
-			case WM_CLOSE: {
-				RemoveProp(hWnd, TEXT("LISTVIEW"));
-				RemoveProp(hWnd, TEXT("CURRENTROW"));
-				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 
@@ -2137,6 +2174,39 @@ namespace dialogs {
 					EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
+
+			case WMU_CTLCOLOREDIT: {
+				int colCount = HIWORD(GetWindowLong(hWnd, GWL_USERDATA));
+				int id = GetDlgCtrlID((HWND)lParam);
+				if (id >= IDC_ROW_EDIT && id < IDC_ROW_EDIT + colCount) {
+					HWND hListWnd = (HWND)GetProp(hWnd, TEXT("LISTVIEW"));
+					byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+					int colNo = id - IDC_ROW_EDIT;
+
+					if (!brushes || !datatypes)
+						return 0;
+
+					HBRUSH hBrush = brushes[colNo];
+					SetBkColor((HDC)wParam, GetBrushColor(hBrush));
+					return (INT_PTR)hBrush;
+				}
+			}
+			break;
+
+			case WM_DESTROY: {
+				HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
+				if (brushes) {
+					for (int i = 0; i < 5; i++)
+						DeleteObject(brushes[i]);
+					delete [] brushes;
+				}
+				RemoveProp(hWnd, TEXT("BRUSHES"));
+
+				RemoveProp(hWnd, TEXT("LISTVIEW"));
+				RemoveProp(hWnd, TEXT("CURRENTROW"));
+			}
+			break;
 		}
 
 		return false;
@@ -2221,17 +2291,7 @@ namespace dialogs {
 			case WM_INITDIALOG: {
 				HWND hEditorWnd = (HWND)lParam;
 
-				int start, end;
-				SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
-				TCHAR* word;
-				if (start != end) {
-					word = new TCHAR[end - start + 1]{0};
-					TEXTRANGE tr{{start, end}, word};
-					SendMessage(hEditorWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
-				} else {
-					word = getWordFromCursor(hEditorWnd, false);
-				}
-
+				TCHAR* word = getCurrentText(hEditorWnd);
 				SetDlgItemText(hWnd, IDC_DLG_FIND_STRING, word);
 				delete [] word;
 
@@ -2435,6 +2495,164 @@ namespace dialogs {
 		return false;
 	}
 
+	BOOL CALLBACK cbDlgShortcuts (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
+				setEditorFont(hEditorWnd);
+				if (prefs::get("word-wrap"))
+					toggleWordWrap(hEditorWnd);
+				SetFocus(hEditorWnd);
+
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_SHORTCUTS);
+				SendMessage(hListWnd, WM_SETFONT, (LPARAM)hDefFont, true);
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name, query from shortcuts order by 1", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						int no = ListBox_AddString(hListWnd, name16);
+						ListBox_SetItemData(hListWnd, no, (LPARAM)utils::utf8to16((const char*)sqlite3_column_text(stmt, 1)));
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				if (ListBox_GetCount(hListWnd) == 0) {
+					MessageBox(hWnd, TEXT("Shortcuts table is corrupted.\nOpen prefs.sqlite and drop this\ntable and restart application."), TEXT("Error"), MB_OK);
+					EndDialog(hWnd, DLG_CANCEL);
+					return false;
+				}
+
+				SetWindowLong(hListWnd, GWL_USERDATA, 0);
+				ListBox_SetCurSel(hListWnd, 0);
+				SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_SHORTCUTS, LBN_SELCHANGE), (LPARAM)hListWnd);
+			}
+			break;
+
+			case WM_SIZE: {
+				RECT rc;
+				GetClientRect(hWnd, &rc);
+				int w = 100;
+
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_SHORTCUTS), 0, 0, 0, w, rc.bottom - rc.top - 43, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_EDITOR), 0, w + 2, 0, rc.right - rc.left - w - 2, rc.bottom - rc.top - 43, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_LABEL), 0, 10, rc.bottom - rc.top - 27, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_OK), 0, rc.right - rc.left - 165, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_CANCEL), 0, rc.right - rc.left - 83, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_SHORTCUTS);
+
+				if (LOWORD(wParam) == IDC_DLG_SHORTCUTS && HIWORD(wParam) == LBN_SELCHANGE) {
+					int prev = (int)GetWindowLong(hListWnd, GWL_USERDATA);
+					int curr = ListBox_GetCurSel(hListWnd);
+
+					if (prev != curr)
+						SendMessage(hWnd, WMU_UPDATE_DATA, prev, 0);
+
+					SetWindowText(hEditorWnd, (TCHAR*)ListBox_GetItemData(hListWnd, curr));
+					SetWindowLong(hListWnd, GWL_USERDATA, curr);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
+					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+					isRequireHighligth = true;
+				}
+
+				if (wParam == IDM_EDITOR_COMMENT)
+					toggleComment(hEditorWnd);
+
+				if (wParam == IDM_EDITOR_CUT)
+					SendMessage(hEditorWnd, WM_CUT, 0, 0);
+
+				if (wParam == IDM_EDITOR_COPY)
+					SendMessage(hEditorWnd, WM_COPY, 0, 0);
+
+				if (wParam == IDM_EDITOR_PASTE)
+					pasteText(hEditorWnd);
+
+				if (wParam == IDM_EDITOR_DELETE)
+					SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, 0);
+
+				if (wParam == IDC_DLG_OK) {
+					int curr = ListBox_GetCurSel(hListWnd);
+					SendMessage(hWnd, WMU_UPDATE_DATA, curr, 0);
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "update shortcuts set query = ?2 where name = ?1", -1, &stmt, 0)) {
+						for (int i = 0; i < ListBox_GetCount(hListWnd); i++) {
+							TCHAR name16[100]{0};
+							ListBox_GetText(hListWnd, i, name16);
+
+							char* name8 = utils::utf16to8(name16);
+							char* query8 = utils::utf16to8((TCHAR*)ListBox_GetItemData(hListWnd, i));
+							sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, query8, strlen(query8), SQLITE_TRANSIENT);
+							delete [] name8;
+							delete [] query8;
+							sqlite3_step(stmt);
+							sqlite3_reset(stmt);
+						}
+					}
+					sqlite3_finalize(stmt);
+					EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
+					SELCHANGE *pSc = (SELCHANGE *)lParam;
+					if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+						isRequireParenthesisHighligth = true;
+					}
+
+					fixQuoteSelection(pHdr->hwndFrom, pSc);
+				}
+
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
+					return processEditorEvents((MSGFILTER*)lParam);
+			}
+			break;
+
+			// wParam = row number
+			case WMU_UPDATE_DATA: {
+				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_SHORTCUTS);
+				delete [] (TCHAR*)ListBox_GetItemData(hListWnd, wParam);
+				int size = GetWindowTextLength(hEditorWnd);
+				TCHAR* data = new TCHAR[size + 1];
+				GetWindowText(hEditorWnd, data, size + 1);
+				ListBox_SetItemData(hListWnd, wParam, (int)data);
+			}
+			break;
+
+			case WMU_HIGHLIGHT: {
+				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth, false);
+				isRequireHighligth = false;
+				isRequireParenthesisHighligth = false;
+			}
+			break;
+
+			case WM_DESTROY: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_SHORTCUTS);
+				for (int i = 0; i < ListBox_GetCount(hListWnd); i++)
+					delete [] (TCHAR*)ListBox_GetItemData(hListWnd, i);
+			}
+			break;
+		}
+
+		return false;
+	}
 
 	#define CHART_LINES     0
 	#define CHART_DOTS      1
@@ -3497,7 +3715,6 @@ namespace dialogs {
 					HBRUSH hBrush = brushes[id - IDC_DLG_GRID_COLOR];
 
 					SetBkColor((HDC)wParam, GetBrushColor(hBrush));
-					//SetWindowLongPtr(hWnd, DWLP_MSGRESULT, (INT_PTR)hBrush);
 					return (INT_PTR)hBrush;
 				}
 			}
@@ -4086,6 +4303,16 @@ namespace dialogs {
 		return CallWindowProc(cbOldAddTableCell, hWnd, msg, wParam, lParam);
 	}
 
+	LRESULT CALLBACK cbNewAddTableComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldAddTableComboboxEdit, hWnd, msg, wParam, lParam));
+
+		if (msg == WM_CHAR && (wParam == VK_RETURN || wParam == VK_ESCAPE))
+			SendMessage(GetParent(hWnd), WM_KEYDOWN, wParam, lParam);
+
+		return CallWindowProc(cbOldAddTableComboboxEdit, hWnd, msg, wParam, lParam);
+	}
+
 	// USERDATA = the last column under cursor
 	LRESULT CALLBACK cbNewAddTableHeader(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_MOUSEMOVE) {
@@ -4101,8 +4328,10 @@ namespace dialogs {
 			TrackMouseEvent(&tme);
 
 			SendMessage(hWnd, HDM_HITTEST, 0, (LPARAM)&hi);
-			if (hi.iItem == -1)
-				return SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+			if (hi.iItem == -1) {
+				hideTooltip();
+				return true;
+			}
 
 			if (GetWindowLong(hWnd, GWL_USERDATA) == hi.iItem)
 				return true;
@@ -4120,9 +4349,9 @@ namespace dialogs {
 			SetWindowLong(hWnd, GWL_USERDATA, hi.iItem);
 		}
 
-		if ((msg == WM_MOUSELEAVE) && IsWindowVisible(hTooltipWnd)) {
+		if ((msg == WM_MOUSELEAVE)) {
 			SetWindowLong(hWnd, GWL_USERDATA, 1000);
-			SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+			hideTooltip();
 		}
 
 		return CallWindowProc(cbOldAddTableHeader, hWnd, msg, wParam, lParam);
@@ -4388,6 +4617,11 @@ namespace dialogs {
 				RemoveProp(hWnd, TEXT("SCROLLY"));
 			}
 			break;
+
+			case WM_CTLCOLOREDIT: {
+				return SendMessage(GetParent(hWnd), WMU_CTLCOLOREDIT, wParam, lParam);
+			}
+			break;
 		}
 
 		return CallWindowProc(DefWindowProc, hWnd, msg, wParam, lParam);
@@ -4564,12 +4798,14 @@ namespace dialogs {
 
 				int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
 				if (type == CHART_BARS) {
-					bool* isColumns = (bool*)GetProp(hParentWnd, TEXT("ISCOLUMNS"));
 					int colCount = (int)GetProp(hParentWnd, TEXT("COLCOUNT"));
 					int rowCount = (int)GetProp(hParentWnd, TEXT("ROWCOUNT"));
 					int dataColCount = 0;
-					for (int colNo = 0; colNo < colCount; colNo++)
-						dataColCount += isColumns[colNo];
+					HWND hOptionsWnd = GetDlgItem(hParentWnd, IDC_DLG_CHART_OPTIONS);
+					for (int colNo = 0; colNo < colCount; colNo++) {
+						HWND hColumnWnd = GetDlgItem(hOptionsWnd, IDC_DLG_CHART_COLUMN + colNo);
+						dataColCount += IsWindowEnabled(hColumnWnd) && Button_GetCheck(hColumnWnd) == BST_CHECKED;
+					}
 
 					SCROLLINFO si{0};
 					si.cbSize = sizeof(SCROLLINFO);
@@ -4726,6 +4962,13 @@ namespace dialogs {
 					SendMessage(hParentWnd, WMU_UPDATE_MINMAX, 0, 0);
 					SendMessage(hChartWnd, WM_PAINT, 0, 0);
 					InvalidateRect(hWnd, NULL, true);
+
+					int type = (int)GetProp(hParentWnd, TEXT("TYPE"));
+					if (type == CHART_BARS) {
+						RECT rc{0};
+						GetClientRect(hChartWnd, &rc);
+						PostMessage(hChartWnd, WM_SIZE, 0, MAKELPARAM(rc.right, rc.bottom));
+					}
 				}
 
 			}

@@ -71,7 +71,7 @@ static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 			return;
 		}
 		
-		*pCounter = sqlite3_value_type(argv[0]) == SQLITE_NULL ? 0 : sqlite3_value_int(argv[0]);
+		*pCounter = argc == 0 || sqlite3_value_type(argv[0]) == SQLITE_NULL ? 0 : sqlite3_value_int(argv[0]);
 		sqlite3_set_auxdata(ctx, 0, pCounter, sqlite3_free);
 	} else {
 		++*pCounter;
@@ -729,7 +729,8 @@ __declspec(dllexport)
 int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
 	(void)pzErrMsg;  /* Unused parameter */
-	return SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&
+	return SQLITE_OK == sqlite3_create_function(db, "rownum", 0, SQLITE_UTF8, 0, rownum, 0, 0) &&
+		SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "concat", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, concat, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "decode", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "crc32", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, crc32, 0, 0) && 

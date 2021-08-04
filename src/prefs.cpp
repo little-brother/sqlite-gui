@@ -1,10 +1,11 @@
 #include <ctime>
 #include "prefs.h"
+#include "resource.h"
 
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 54;
+	const int ICOUNT = 60;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -17,8 +18,10 @@ namespace prefs {
 		"cipher-legacy", "retain-passphrase",
 		"check-update", "last-update-check",
 		"case-sensitive",
+		"help-version",
 		"http-server", "http-server-port", "http-server-debug",
 		"color-null", "color-blob", "color-text", "color-integer", "color-real",
+		"color-keyword", "color-function", "color-quoted", "color-comment", "color-parenthesis",
 		"data-generator-row-count", "data-generator-truncate",
 		"link-fk", "link-view", "link-trigger"
 	};
@@ -35,8 +38,11 @@ namespace prefs {
 		0, 0,
 		1, 0,
 		0,
+		0,
 		0, 3000, 0,
-		0x00FFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0, // reverse order BGR
+		// colors are stored in reverse order BGR
+		0xFFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0,
+		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F,
 		100, 0,
 		1, 0, 0
 	};
@@ -61,14 +67,14 @@ namespace prefs {
 	}
 
 	char* get(const char* name, const char* def) {
+		char* value = NULL;
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare_v2(db, "select value from prefs where name = ?1", -1, &stmt, 0))
-			return NULL;
-
-		sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
-		const char* val = SQLITE_ROW == sqlite3_step(stmt) ? (char*)sqlite3_column_text(stmt, 0) : def;
-		char* value = new char[strlen(val) + 1]{0};
-		strcpy(value, val);
+		if (SQLITE_OK == sqlite3_prepare_v2(db, "select value from prefs where name = ?1", -1, &stmt, 0)) {
+			sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
+			const char* val = SQLITE_ROW == sqlite3_step(stmt) ? (char*)sqlite3_column_text(stmt, 0) : def;
+			value = new char[strlen(val) + 1]{0};
+			strcpy(value, val);
+		}
 
 		sqlite3_finalize(stmt);
 		return value;
@@ -128,40 +134,71 @@ namespace prefs {
 			"create table if not exists temp.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
 			"create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));" \
 			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
+			"create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);"
+			"create table if not exists shortcuts as " \
+			"select cast('Alt + F1' as text) name, cast(0x70 as integer) key, cast(0 as integer) ctrl, cast(1 as integer) alt, cast(' "\
+				"-- Columns\npragma table_info(''$SUB$'');\n\n" \
+				"-- Foreign keys\npragma foreign_key_list(''$SUB$'');\n\n" \
+				"-- DDL\nselect * from sqlite_master where tbl_name = ''$SUB$'';\n\n" \
+				"-- Memory usage\nselect tosize(SUM(payload)) payload, tosize(SUM(pgsize)) total from dbstat where name = ''$SUB$'';" \
+			"' as text) query " \
+			"union select 'Ctrl + 1', 0x31, 1, 0, '-- $SUB$\nselect * from \"$SUB$\" limit 100' " \
+			"union select 'Ctrl + 2', 0x32, 1, 0, '-- $SUB$\nselect count(*) from \"$SUB$\"' " \
+			"union select 'Ctrl + 3', 0x33, 1, 0, NULL " \
+			"union select 'Ctrl + 4', 0x34, 1, 0, NULL " \
+			"union select 'Ctrl + 5', 0x35, 1, 0, NULL " \
+			"union select 'Ctrl + 6', 0x36, 1, 0, NULL " \
+			"union select 'Ctrl + 7', 0x37, 1, 0, NULL " \
+			"union select 'Ctrl + 8', 0x38, 1, 0, NULL " \
+			"union select 'Ctrl + 9', 0x39, 1, 0, NULL " \
+			"union select 'Ctrl + 0', 0x30, 1, 0, NULL "
+			";"
 			"commit;";
 
 		if (SQLITE_OK != sqlite3_exec(db, sql8, 0, 0, 0))
 			return false;
 
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare_v2(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
-			sqlite3_finalize(stmt);
-			return false;
+		if (SQLITE_OK == sqlite3_prepare_v2(db, "select name, value from prefs where value GLOB '*[0-9]*'", -1, &stmt, 0)) {
+			while(sqlite3_step(stmt) == SQLITE_ROW)
+				set((char*) sqlite3_column_text(stmt, 0), sqlite3_column_int(stmt, 1));
+		}
+		sqlite3_finalize(stmt);
+
+		// Load help table from resource
+		if (HELP_VERSION != get("help-version")) {
+			HMODULE hInstance = GetModuleHandle(0);
+			HRSRC rc = FindResource(hInstance, MAKEINTRESOURCE(IDR_HELP), RT_RCDATA);
+			HGLOBAL rcData = LoadResource(hInstance, rc);
+			int size = SizeofResource(hInstance, rc);
+			LPVOID data = LockResource(rcData);
+			if (size > 0 && data) {
+				char sql8[size + 1]{0};
+				memcpy(sql8, (const char*)data, size);
+				if (SQLITE_OK == sqlite3_exec(db, sql8, 0, 0, 0))
+					set("help-version", HELP_VERSION);
+				else
+					MessageBoxA(0, sqlite3_errmsg(db), 0, 0);
+			}
+			FreeResource(rcData);
 		}
 
-		while(sqlite3_step(stmt) == SQLITE_ROW)
-			set((char*) sqlite3_column_text(stmt, 0), atoi((char*) sqlite3_column_text(stmt, 1)));
-
-		sqlite3_finalize(stmt);
 		return true;
 	}
 
 	bool save() {
 		sqlite3_stmt* stmt;
-		if (SQLITE_OK != sqlite3_prepare_v2(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0))
-			return false;
-
-		for(int i = 0; i < ICOUNT; i++) {
-			sqlite3_bind_text(stmt, 1, iprops[i], strlen(iprops[i]),  SQLITE_TRANSIENT);
-			sqlite3_bind_int(stmt, 2, ivalues[i]);
-			sqlite3_step(stmt);
-			sqlite3_reset(stmt);
+		bool rc = SQLITE_OK == sqlite3_prepare_v2(db, "replace into 'prefs' (name, value) values (?1, ?2);", -1, &stmt, 0);
+		if (rc) {
+			for(int i = 0; i < ICOUNT; i++) {
+				sqlite3_bind_text(stmt, 1, iprops[i], strlen(iprops[i]),  SQLITE_TRANSIENT);
+				sqlite3_bind_int(stmt, 2, ivalues[i]);
+				sqlite3_step(stmt);
+				sqlite3_reset(stmt);
+			}
 		}
-
 		sqlite3_finalize(stmt);
-		sqlite3_close(db);
-		db = NULL;
-		return true;
+		return rc;
 	}
 
 	bool backup() {

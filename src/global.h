@@ -50,7 +50,7 @@
 #include "sqlite3.h"
 
 extern sqlite3 *db;
-extern HWND  hMainWnd, hTabWnd, hSortingResultWnd, hTooltipWnd;
+extern HWND  hMainWnd;
 extern HMENU hBlobMenu, hEditorMenu;
 
 extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
@@ -80,14 +80,16 @@ void processHighlight(HWND hWnd, bool isRequireHighligth, bool isRequireParenthe
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-TCHAR* getWordFromCursor(HWND hWnd, bool isTable, int pos = -1);
+TCHAR* getCurrentText(HWND hWnd);
 bool toggleWordWrap(HWND hEditorWnd);
 bool toggleTextCase (HWND hEditorWnd);
 bool toggleComment (HWND hEditorWnd);
 bool pasteText (HWND hEditorWnd);
 void fixQuoteSelection(HWND hEditorWnd, SELCHANGE* pSc);
 void switchDialog(HWND hDlg, bool isNext);
+void createTooltip(HWND hWnd);
 void showTooltip(int x, int y, TCHAR* text16);
+void hideTooltip();
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);

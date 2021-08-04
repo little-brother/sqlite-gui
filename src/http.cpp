@@ -117,7 +117,7 @@ namespace http {
 
 		isRun = true;
 		MessageBeep(0);
-		debug("OK", port);
+		debug("OK");
 
 		while(isRun) {
 			initSocketDescriptors(&(socketDescriptors), ServerSocket, ClientSocketList);

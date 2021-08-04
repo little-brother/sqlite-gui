@@ -1,5 +1,6 @@
-#define GUI_VERSION                "1.5.9"
-#define GUI_VERSION2               1, 5, 9, 0
+#define GUI_VERSION                "1.6.0"
+#define GUI_VERSION2               1, 6, 0, 0
+#define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
@@ -18,6 +19,7 @@
 #define IDD_DROP                   25
 #define IDD_TABLENAME              26
 #define IDD_RESULTS_COMPARISON     27
+#define IDD_SHORTCUTS              28
 
 #define IDD_TOOL_IMPORT_CSV        30
 #define IDD_TOOL_IMPORT_JSON       31
@@ -148,6 +150,8 @@
 #define IDC_DLG_REPLACE_ALL        224
 #define IDC_DLG_CASE_SENSITIVE     225
 
+#define IDC_DLG_SHORTCUTS          226
+
 #define IDC_DLG_CIPHER_KEY                  227
 #define IDC_DLG_CIPHER_STORE_KEY            228
 #define IDC_DLG_CIPHER                      229
@@ -226,6 +230,7 @@
 #define IDM_ATTACH                 1406
 #define IDM_SETTINGS               1407
 
+#define IDM_SHORTCUTS              1510
 #define IDM_SAVE                   1511
 #define IDM_EXECUTE                1512
 #define IDM_EXECUTE_BATCH          1513
@@ -364,6 +369,8 @@
 
 #define IDT_EDIT_DATA              7000 // timer
 
+#define IDR_HELP                   9000
+
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001
 #define IDS_CREATE_VIEW            10002
@@ -392,7 +399,7 @@
 #define WMU_TYPE_CHANGED           WM_USER + 7
 #define WMU_REFTABLE_CHANGED       WM_USER + 8
 #define WMU_HIGHLIGHT              WM_USER + 9
-#define WMU_SHOW_TABLE_INFO        WM_USER + 10
+#define WMU_SHOW_INFO              WM_USER + 10
 #define WMU_RESET_LISTVIEW         WM_USER + 11
 #define WMU_EDIT_VALUE             WM_USER + 12
 #define WMU_UPDATE_COLSIZE         WM_USER + 13
@@ -413,6 +420,8 @@
 #define WMU_UPDATE_MINMAX          WM_USER + 28
 #define WMU_RESORT_DATA            WM_USER + 29
 #define WMU_CREATE_VALUE_SELECTOR  WM_USER + 30
+#define WMU_CTLCOLOREDIT           WM_USER + 31
+#define WMU_GET_CURRENT_RESULT     WM_USER + 32
 
 #define WMU_TAB_ADD                WM_USER + 40
 #define WMU_TAB_DELETE             WM_USER + 41

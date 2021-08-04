@@ -276,6 +276,20 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_SHORTCUTS DIALOGEX 100, 50, 400, 300
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
+	CAPTION "Query shortcuts"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	CONTROL "",IDC_DLG_SHORTCUTS, WC_LISTBOX, LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOTIFY, 0, 0, 498, 273, WS_EX_STATICEDGE
+	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL, 0, 0, 498, 273, WS_EX_STATICEDGE
+
+	LTEXT "The placeholder $SUB$ contains selection or word under caret", IDC_DLG_LABEL, 0, 0, 200, 14, SS_LEFT
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 445, 282, 50, 14, WS_TABSTOP
+	PUSHBUTTON "Save", IDC_DLG_OK, 390, 282, 50, 14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_TOOL_DATABASE_DIAGRAM DIALOGEX 50, 50, 550, 400
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME | WS_CLIPCHILDREN
 	CAPTION "Database diagram"
@@ -429,7 +443,6 @@ BEGIN
 
 	PUSHBUTTON "Help", IDC_DLG_HELP, 5, 185, 60, 14
 	PUSHBUTTON "OK", IDC_DLG_OK, 115, 185, 100, 14
-
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -529,7 +542,8 @@ BEGIN
 		MENUITEM SEPARATOR
 		MENUITEM "&History\tCtrl+H", IDM_HISTORY
 		MENUITEM "Saved\tCtrl+G", IDM_GISTS
-
+		MENUITEM SEPARATOR
+		MENUITEM "Shortcuts", IDM_SHORTCUTS
 	END
 
 	POPUP "Tools"
@@ -848,7 +862,7 @@ BEGIN
 	IDS_CREATE_VIEW "create view myview\nas\nselect * from mytable"
 	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n) where colA is not null"
 	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
-	IDS_ABOUT "sqlite-gui is a visual tool for SQLite database.\nVisit our homepage to get the source code and latest binaries.\n\nLittle Brother (c) 2020-2021\nlb.im@ya.ru"
+	IDS_ABOUT "sqlite-gui is a visual tool for SQLite database\nLittle Brother (c) 2020-2021"
 	IDS_HOTKEYS "Global\n" \
 		"Esc - App exit\n" \
 		"F5 - Refresh navigation tree\n" \
@@ -872,8 +886,9 @@ BEGIN
 		"Shift + F3 - Toggle text case\n" \
 		"Ctrl + W - Toggle word wrap mode\n" \
 		"Ctrl + / - Comment/uncomment block\n" \
-		"Ctrl + . - Get the table columns desc\n" \
-		"Ctrl + Click - Edit the table data\n\n" \
+		"Ctrl + Space, Ctrl + Click - Get quick help\n" \
+		"Ctrl + Click - Edit the table data\n" \
+		"and query shortcuts\n\n" \
 		"Console editor\n" \
 		"Ctrl + Up - Previous query\n" \
 		"Ctrl + Down - Next query\n" \
@@ -929,13 +944,13 @@ BEGIN
 		"Various SQL functions and table-valued functions for processing JSON.\n\n" \
 		"XML\n" \
 		"Text functions for processing XML: xml_valid(xml), xml_extract(xml, xpath, sep = """"), xml_append(xml, xpath, insertion, pos = after), xml_update(xml, xpath, replacement), xml_remove(xml, xpath) and a table-valued function - xml_each(xml, xpath).\n\n" \
-		"Math\n" \
-		"This library provides common mathematical and string functions: acos, asin, atan, atn2, atan2, acosh, asinh, atanh, difference, degrees, radians, cos, sin, tan, cot, cosh, sinh, tanh, coth, exp, log, log10, power, sign, sqrt, square, ceil, floor, pi, replicate, charindex, leftstr, rightstr, ltrim, rtrim, trim, replace, reverse, proper, padl, padr, padc, strfilter, stdev, variance, mode, median, lower_quartile, upper_quartile.\n\n" \
+		"Fileio\n"\
+		"Implements functions to work with file system readfile(path) and writefile(path, data) and virtual table fsdir(path).\n\n" \
 		"Series\n" \
 		"Adds the generate_series(start, stop, step) table-function\n" \
 		"Example: select * from generate_series(0, 100, 5);\n\n" \
 		"Uuid\n"\
-		"This extension implements uuid(), uuid_str(X) and uuid_blob(X) functions that handling RFC-4122 UUIDs\n\n" \
+		"This extension implements uuid(), uuid_str(X) and uuid_blob(X) functions that handling RFC-4122 UUIDs.\n\n" \
 		"Regexp\n"\
 		"Implements regexp(regexp, stringToMatch) function and ""B regexp A"" operator. This is a non-POSIX regexp.\n\n" \
 		"Ora\n"\
@@ -944,8 +959,6 @@ BEGIN
 		"Adds odbc_read(connectionString, query, target), odbc_write(query, connectionString, target), odbc_query(connectionString, query) and odbc_dsn() functions.\n\n" \
 		"Exec\n"\
 		"Adds exec(cmd, codepage) function and virtual table.\n\n" \
-		"Transform\n"\
-		"Adds pivot(query, target), unpivot(query, target), jsontable(json, target), txttable(text, target) functions.\n\n" \
 		"Icu (third party)\n"\
 		"Adds partial support for national symbols e.g. ""select lower('\x042B');"" returns ""\x044B""\n\n" \
 		"Vsv (third party)\n"\
@@ -993,3 +1006,5 @@ IDI_LOGO2 ICON "resources/logo2.ico"
 IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
 IDB_TOOLBAR_DATA BITMAP "resources/toolbar_data.bmp"
 IDB_DIAGRAM_TOOLBAR BITMAP "resources/toolbar_diagram.bmp"
+
+IDR_HELP RCDATA "resources/help.sql"

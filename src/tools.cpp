@@ -1930,7 +1930,7 @@ namespace tools {
 					return ListView_Sort(pHdr->hwndFrom, pLV->iSubItem);
 				}
 
-				if (pHdr->code == (WORD)NM_DBLCLK && pHdr->idFrom == IDC_DLG_STATISTICS) {
+				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->idFrom == IDC_DLG_STATISTICS) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 					TCHAR text16[1024];
 					GetDlgItemText(hWnd, IDC_DLG_STATISTICS, text16, 1024);
