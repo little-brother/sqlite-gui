@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.6.0"
-#define GUI_VERSION2               1, 6, 0, 0
+#define GUI_VERSION                "1.6.1"
+#define GUI_VERSION2               1, 6, 1, 0
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -199,7 +199,6 @@
 #define IDC_DLG_CHART_BASE         299
 #define IDC_DLG_CHART_COLUMN       300 // iterable
 
-
 #define IDC_TAB_EDIT               499
 
 #define IDC_MENU_MAIN              500
@@ -248,16 +247,17 @@
 #define IDM_EXPORT_SQL             1524
 #define IDM_EXPORT_CSV             1525
 #define IDM_EXPORT_JSON            1526
-#define IDM_EXPORT_ODBC            1527
-#define IDM_CHECK_INTEGRITY        1528
-#define IDM_CHECK_FOREIGN_KEY      1529
-#define IDM_VACUUM                 1530
-#define IDM_REINDEX                1531
-#define IDM_STATISTICS             1532
-#define IDM_GENERATE_DATA          1533
-#define IDM_DATABASE_DIAGRAM       1534
-#define IDM_COMPARE_DATABASE       1535
-#define IDM_DATABASE_SEARCH        1536
+#define IDM_EXPORT_EXCEL           1527
+#define IDM_EXPORT_ODBC            1528
+#define IDM_CHECK_INTEGRITY        1529
+#define IDM_CHECK_FOREIGN_KEY      1530
+#define IDM_VACUUM                 1533
+#define IDM_REINDEX                1534
+#define IDM_STATISTICS             1535
+#define IDM_GENERATE_DATA          1536
+#define IDM_DATABASE_DIAGRAM       1537
+#define IDM_COMPARE_DATABASE       1538
+#define IDM_DATABASE_SEARCH        1539
 
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541
@@ -288,12 +288,14 @@
 #define IDM_EDITOR_FIND_NEXT       1606
 #define IDM_EDITOR_REPLACE_NEXT    1607
 #define IDM_EDITOR_COMMENT         1608
+#define IDM_EDITOR_FORMAT          1609
 
 #define IDM_RESULT_CHART           1610
 #define IDM_RESULT_COPY_CELL       1611
 #define IDM_RESULT_COPY_ROW        1612
 #define IDM_RESULT_AS_TABLE        1613
 #define IDM_RESULT_EXPORT          1614
+#define IDM_RESULT_EXCEL           1615
 #define IDM_RESULT_COMPARE         1620 // iterable, 50
 
 #define IDM_BLOB_NULL              1680
@@ -370,6 +372,7 @@
 #define IDT_EDIT_DATA              7000 // timer
 
 #define IDR_HELP                   9000
+#define IDR_EXCEL                  9001
 
 #define IDS_CREATE_DDL             10000
 #define IDS_CREATE_TABLE           10001

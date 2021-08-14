@@ -564,6 +564,7 @@ BEGIN
 			MENUITEM "SQL", IDM_EXPORT_SQL
 			MENUITEM "CSV", IDM_EXPORT_CSV
 			MENUITEM "JSON", IDM_EXPORT_JSON
+			MENUITEM "Excel", IDM_EXPORT_EXCEL
 			MENUITEM "via ODBC", IDM_EXPORT_ODBC
 		END
 		MENUITEM "Generate data", IDM_GENERATE_DATA, GRAYED
@@ -705,6 +706,7 @@ BEGIN
 	POPUP ""
 	BEGIN
 		MENUITEM "Comment\tCtrl+/", IDM_EDITOR_COMMENT
+		MENUITEM "Format\tCtrl+T", IDM_EDITOR_FORMAT
 		MENUITEM SEPARATOR
 		MENUITEM "Cut\tCtrl+X", IDM_EDITOR_CUT
 		MENUITEM "Copy\tCtrl+C", IDM_EDITOR_COPY
@@ -727,6 +729,7 @@ BEGIN
 		MENUITEM SEPARATOR
 		MENUITEM "Save as table", IDM_RESULT_AS_TABLE
 		MENUITEM "Export to csv", IDM_RESULT_EXPORT
+		MENUITEM "View in Excel", IDM_RESULT_EXCEL
 		MENUITEM SEPARATOR
 		POPUP "Compare with"
 		BEGIN
@@ -883,6 +886,7 @@ BEGIN
 		"F12/Ctrl + Alt + Enter - Execute as batch (synchronous is off, joint output)\n" \
 		"Tab - Add indents\n" \
 		"Tab + Shift - Remove indents\n" \
+		"Shift + T - Format query\n" \
 		"Shift + F3 - Toggle text case\n" \
 		"Ctrl + W - Toggle word wrap mode\n" \
 		"Ctrl + / - Comment/uncomment block\n" \
@@ -1007,4 +1011,5 @@ IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
 IDB_TOOLBAR_DATA BITMAP "resources/toolbar_data.bmp"
 IDB_DIAGRAM_TOOLBAR BITMAP "resources/toolbar_diagram.bmp"
 
-IDR_HELP RCDATA "resources/help.sql"
+IDR_HELP   RCDATA "resources/help.sql"
+IDR_EXCEL  RCDATA "resources/template.xlsx"

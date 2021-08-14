@@ -5,11 +5,11 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 60;
+	const int ICOUNT = 62;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-width", "splitter-height",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
-		"cli-font-size", "cli-row-limit", "cli-max-width",
+		"cli-font-size", "cli-row-limit",
 		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current",
 		"ask-delete", "word-wrap", "clear-values", "recent-count",
 		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
@@ -21,15 +21,16 @@ namespace prefs {
 		"help-version",
 		"http-server", "http-server-port", "http-server-debug",
 		"color-null", "color-blob", "color-text", "color-integer", "color-real",
-		"color-keyword", "color-function", "color-quoted", "color-comment", "color-parenthesis",
+		"color-keyword", "color-function", "color-quoted", "color-comment", "color-parenthesis", "color-pragma",
 		"data-generator-row-count", "data-generator-truncate",
-		"link-fk", "link-view", "link-trigger"
+		"link-fk", "link-view", "link-trigger",
+		"format-keyword-case", "format-function-case",
 	};
 
 	int ivalues[ICOUNT] = {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1, 3000, 1,
-		8, 10, 20,
+		8, 10,
 		0, 1, 1, 1, 1, 0, 0, 1, 0,
 		0, 0, 0, 10,
 		0, 0, 1,
@@ -42,9 +43,10 @@ namespace prefs {
 		0, 3000, 0,
 		// colors are stored in reverse order BGR
 		0xFFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0,
-		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F,
+		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F, 0x404080,
 		100, 0,
-		1, 0, 0
+		1, 0, 0,
+		1, 1
 	};
 
 	int get(const char* name) {

@@ -131,7 +131,7 @@ namespace tools {
 					if (!utils::saveFile(path16, TEXT("SQL files\0*.sql\0All\0*.*\0"), TEXT("sql"), hWnd))
 						return true;
 
-					FILE* f = _tfopen(path16, TEXT("w, ccs=UTF-8"));
+					FILE* f = _tfopen(path16, TEXT("wb"));
 					if (f == NULL) {
 						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
 						return true;
@@ -139,20 +139,20 @@ namespace tools {
 
 					bool isDDL = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DDLONLY));
 					bool isData = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATAONLY));
+					bool rc = true;
 
 					if (isDDL) {
 						int count = ListView_GetSelectedCount(hListWnd);
-						char* placeholders8 = new char[count * 2]{0}; // count = 3 => ?, ?, ?
+						char placeholders8[count * 2]{0}; // count = 3 => ?, ?, ?
 						for (int i = 0; i < count * 2 - 1; i++)
 							placeholders8[i] = i % 2 ? ',' : '?';
-						placeholders8[count * 2 - 1] = '\0';
 
-						char* sql8 = new char[128 + count * 2]{0};
+						char sql8[128 + count * 2]{0};
 						sprintf(sql8, "select sql from sqlite_master where rowid in (%s)", placeholders8);
-						delete [] placeholders8;
 
 						sqlite3_stmt *stmt;
-						if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
+						if (rc) {
 							TCHAR buf16[64]{0};
 							int pos = -1;
 							for (int i = 0; i < count; i++) {
@@ -161,19 +161,13 @@ namespace tools {
 								sqlite3_bind_int64(stmt, i + 1, _tcstol(buf16, NULL, 10));
 							}
 
-							while (SQLITE_ROW == sqlite3_step(stmt)) {
-								TCHAR* line16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-								_ftprintf(f, TEXT("%ls;\n\n"), line16);
-								delete [] line16;
-							}
-						} else {
-							showDbError(hWnd);
+							while (SQLITE_ROW == sqlite3_step(stmt))
+								fprintf(f, "%s;\n\n", sqlite3_column_text(stmt, 0));
 						}
 						sqlite3_finalize(stmt);
-						delete [] sql8;
 					}
 
-					if (isData) {
+					if (rc && isData) {
 						int pos = -1;
 						while((pos = ListView_GetNextItem(hListWnd, pos, LVNI_SELECTED)) != -1) {
 							TCHAR type16[64];
@@ -185,66 +179,40 @@ namespace tools {
 
 							sqlite3_stmt *stmt;
 							char* table8 = utils::utf16to8(table16);
-							char* sql8 = new char[256 + strlen(table8)]{0};
-							sprintf(sql8, "select * from \"%s\"", table8);
+							char sql8[] = "select 'select ' || quote('insert into \"' || ?1 || '\" (\"' || group_concat(name, '\", \"') || '\") values (') || '||' || " \
+								"group_concat('quote(\"' || name || '\")', '|| '', '' || ') || '|| '');'' || char(10) from \"' || ?1 || '\"'" \
+								"from pragma_table_info(?1) order by cid";
 
-							if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-								_ftprintf(f, TEXT("-- %ls\n"), table16);
+							rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
+							if (rc) {
+								sqlite3_bind_text(stmt, 1, table8, strlen(table8),  SQLITE_TRANSIENT);
 
-								TCHAR header16[MAX_TEXT_LENGTH]{0};
-								_stprintf(header16, TEXT("insert into \"%ls\" ("), table16);
+								rc = SQLITE_ROW == sqlite3_step(stmt);
+								if (rc) {
+									sqlite3_stmt *stmt2;
+									rc = SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0);
 
-								int colCount = sqlite3_column_count(stmt);
-								for (int i = 0; i < colCount; i++) {
-									if (i != 0)
-										_tcscat(header16, TEXT(", "));
-									TCHAR* column16 = utils::utf8to16((char*)sqlite3_column_name(stmt, i));
-									_tcscat(header16, column16);
-									delete [] column16;
-								}
-								_tcscat(header16, TEXT(") values ("));
-
-								while(SQLITE_ROW == sqlite3_step(stmt)) {
-									TCHAR line16[MAX_TEXT_LENGTH]{0};
-									_tcscpy(line16, header16);
-
-									for (int i = 0; i < colCount; i++) {
-										if (i != 0)
-											_tcscat(line16, TEXT(", "));
-
-										TCHAR* value16 = utils::utf8to16((char*)sqlite3_column_text(stmt, i));
-										int type = sqlite3_column_type(stmt, i);
-
-										if (type == SQLITE_BLOB)
-											_tcscat(line16, TEXT("'BLOB (unsupported)'"));
-										else if (type == SQLITE_NULL)
-											_tcscat(line16, TEXT("null"));
-										else if (type == SQLITE_TEXT) {
-											_tcscat(line16, TEXT("'"));
-											TCHAR* dvalue16 = utils::replaceAll(value16, TEXT("'"), TEXT("''"));
-											TCHAR* ddvalue16 = utils::replaceAll(dvalue16, TEXT("%"), TEXT("%%"));
-											_tcscat(line16, ddvalue16);
-											_tcscat(line16, TEXT("'"));
-											delete [] dvalue16;
-											delete [] ddvalue16;
-										} else
-											_tcscat(line16, value16);
-										delete [] value16;
+									int rowNo = 0;
+									fprintf(f, "-- %s\n", table8);
+									while (SQLITE_ROW == sqlite3_step(stmt2)) {
+										fprintf(f, (const char*)sqlite3_column_text(stmt2, 0));
+										rowNo++;
 									}
-									_tcscat(line16, TEXT(");\n"));
-									_ftprintf(f, line16);
-								}
-								_ftprintf(f, TEXT("\r\n\r\n"));
-							}
+									fprintf(f, "-- %i rows\n\n", rowNo);
 
+									sqlite3_finalize(stmt2);
+								}
+							}
 							sqlite3_finalize(stmt);
 							delete [] table8;
-							delete [] sql8;
 						}
 					}
 					fclose(f);
 
-					EndDialog(hWnd, DLG_OK);
+					if (rc)
+						EndDialog(hWnd, DLG_OK);
+					else
+						showDbError(hWnd);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -277,7 +245,7 @@ namespace tools {
 			if (_fgetts(buf, bsize + 1, f)) {
 				if (_tcslen(line) + bsize > size) {
 					size *= 2;
-					realloc(line, size + 1);
+					line = (TCHAR*)realloc(line, size + 1);
 				}
 				_tcscat(line, buf);
 
@@ -427,14 +395,13 @@ namespace tools {
 					HWND hHeader = ListView_GetHeader(hPreviewWnd);
 					int colCount = Header_GetItemCount(hHeader);
 
-					TCHAR buf16[256]{0};
+					TCHAR tblname16[256]{0};
 					TCHAR create16[MAX_TEXT_LENGTH]{0};
 					TCHAR insert16[MAX_TEXT_LENGTH]{0};
-					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, buf16, 255);
-					_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), buf16);
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, tblname16, 255);
 
-					TCHAR* schema16 = utils::getName(buf16, true);
-					TCHAR* tablename16 = utils::getName(buf16);
+					TCHAR* schema16 = utils::getName(tblname16, true);
+					TCHAR* tablename16 = utils::getName(tblname16);
 
 					_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
 					_stprintf(insert16, TEXT("insert into \"%ls\".\"%ls\" ("), schema16, tablename16);
@@ -458,6 +425,7 @@ namespace tools {
 							_tcscat(insert16, TEXT(", "));
 						}
 
+						TCHAR buf16[256];
 						Header_GetItemText(hHeader, i, buf16, 255);
 						catQuotted(create16, buf16);
 						catQuotted(insert16, buf16);
@@ -543,12 +511,8 @@ namespace tools {
 					sqlite3_finalize(stmt);
 					fclose(f);
 
-					if (!rc) {
-						char *err8 = (char*)sqlite3_errmsg(db);
-						TCHAR* err16 = utils::utf8to16(err8);
-						MessageBox(hWnd, err16, NULL, MB_OK);
-						delete [] err16;
-					}
+					if (!rc)
+						showDbError(hWnd);
 
 					if (isAutoTransaction)
 						sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
@@ -557,6 +521,7 @@ namespace tools {
 						prefs::set("csv-import-encoding", iEncoding);
 						prefs::set("csv-import-delimiter", iDelimiter);
 						prefs::set("csv-import-is-columns", +isColumns);
+						_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), TEXT("%ls"), tblname16);
 						EndDialog(hWnd, lineNo - isColumns);
 					}
 				}
@@ -704,7 +669,7 @@ namespace tools {
 
 					sqlite3_stmt* stmt;
 					bool rc = SQLITE_OK == sqlite3_prepare_v2(db,
-							"select 'select json_group_array(json_object(' || group_concat('''' || name || ''', ' || name, ', ') || ')) from ' || ?1 " \
+							"select 'select json_group_array(json_object(' || group_concat('''' || name || ''', iif(typeof(\"' || name || '\") <> ''blob'', \"' || name || '\", ''(BLOB)'')', ', ') || ')) from \"' || ?1 || '\"' " \
 							"from pragma_table_info(?1) order by cid", -1, &stmt, 0);
 					if (rc) {
 						char* table8 = utils::utf16to8(table16);
@@ -732,6 +697,62 @@ namespace tools {
 					} else {
 						showDbError(hWnd);
 					}
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgExportExcel (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowText(hWnd, TEXT("Export data of table/view to Excel file"));
+
+				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type in ('table', 'view') order by 1", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hTable, name16);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				ComboBox_SetCurSel(hTable, 0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+					TCHAR table16[256] = {0};
+					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
+
+					TCHAR path16[MAX_PATH];
+					_stprintf(path16, table16);
+					if (!utils::saveFile(path16, TEXT("Excel files\0*.xlsx\0All\0*.*\0"), TEXT("xlsx"), hWnd))
+						return true;
+
+					TCHAR query16[_tcslen(table16) + 128] = {0};
+					_stprintf(query16, TEXT("select * from \"%ls\""), table16);
+
+					if (exportExcel(path16, query16))
+						EndDialog(hWnd, DLG_OK);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -1960,6 +1981,167 @@ namespace tools {
 		}
 
 		return false;
+	}
+
+	bool exportExcel(TCHAR* path16, TCHAR* query16) {
+		FILE* f = _tfopen(path16, TEXT("wb"));
+		if (f == NULL)
+			return false;
+
+		int maxSheetSize = 32000;
+		int sheetSize = 0;
+		char* sheetData = new char[maxSheetSize]{0};
+
+		auto maskSpecialChars = [](const char* input, char* output) {
+			int res = 0;
+			int pos = 0;
+			for (int i = 0; i < (int)strlen(input); i++) {
+				char c = input[i];
+				if (strchr("<>&\"'", c) > 0) {
+					strncpy(output + pos,
+						c == '<' ? "&#60;" :
+						c == '>' ? "&#62;" :
+						c == '&' ? "&#38;" :
+						c == '"' ? "&#34;" :
+						"&#39;", 6);
+					pos += 5;
+					res++;
+				} else {
+					output[pos] = c;
+					pos++;
+				}
+			}
+
+			return res;
+		};
+
+		char* query8 = utils::utf16to8(query16);
+		sqlite3_stmt *stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+			int colCount = sqlite3_column_count(stmt);
+
+			char title[colCount * 512]{0};
+			strcat(title, "<row>");
+			for (int colNo = 0; colNo < colCount; colNo++) {
+				const char* val = (const char*)sqlite3_column_name(stmt, colNo);
+				char mval[4 * strlen(val) + 1]{0};
+				maskSpecialChars(val, mval);
+
+				char buf[strlen(mval) + 200];
+				sprintf(buf, "<c t=\"inlineStr\"><is><t>%s</t></is></c>", mval);
+				strcat(title, buf);
+			}
+			strcat(title, "</row>");
+			strcat(sheetData, title);
+			sheetSize += strlen(title);
+
+			while (SQLITE_ROW == sqlite3_step(stmt)) {
+				int size = 0;
+				for(int colNo = 0; colNo < colCount; colNo++)
+					size += (sqlite3_column_type(stmt, colNo) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, colNo) : 20) + 256;
+
+				char row[size]{0};
+				strcat(row, "<row>");
+
+				for (int colNo = 0; colNo < colCount; colNo++) {
+					int colType = sqlite3_column_type(stmt, colNo);
+					size = (colType == SQLITE_TEXT ? sqlite3_column_bytes(stmt, colNo) : 20) + 256;
+					char buf[size]{0};
+					if (colType == SQLITE_FLOAT) {
+						sprintf(buf, "<c><v>%lf</v></c>", sqlite3_column_double(stmt, colNo));
+						for (int i = 0; i < (int)strlen(buf); i++)
+							if (buf[i] == ',')
+								buf[i] = '.';
+					}
+
+					if (colType == SQLITE_INTEGER)
+						sprintf(buf, "<c><v>%i</v></c>", sqlite3_column_int(stmt, colNo));
+
+					if (colType == SQLITE_TEXT) {
+						const char* val = (const char*)sqlite3_column_text(stmt, colNo);
+						char mval[4 * strlen(val) + 1]{0};
+						maskSpecialChars(val, mval);
+						sprintf(buf, "<c t=\"inlineStr\"><is><t>%s</t></is></c>", mval);
+					}
+
+					if (colType == SQLITE_NULL)
+						sprintf(buf, "<c><v></v></c>");
+
+					if (colType == SQLITE_BLOB)
+						sprintf(buf, "<c><v>(BLOB)</v></c>");
+
+					strcat(row, buf);
+				}
+				strcat(row, "</row>");
+
+				int rlen = strlen(row);
+				while (maxSheetSize - sheetSize - 100 < rlen) {
+					maxSheetSize *= 2;
+					sheetData = (char*)realloc(sheetData, maxSheetSize);
+				}
+
+				strncpy(sheetData + sheetSize, row, rlen + 1);
+				sheetSize += rlen;
+			}
+
+			HMODULE hInstance = GetModuleHandle(0);
+			HRSRC rc = FindResource(hInstance, MAKEINTRESOURCE(IDR_EXCEL), RT_RCDATA);
+			HGLOBAL rcData = LoadResource(hInstance, rc);
+			int templateSize = SizeofResource(hInstance, rc);
+			LPVOID templateData = LockResource(rcData);
+			if (templateSize > 0 && templateData) {
+				BYTE data[templateSize + 1]{0};
+				memcpy(data, (const char*)templateData, templateSize);
+
+				sheetSize = strlen(sheetData);
+				int offsetCRC = 0x17F1;
+				int offsetFileStart = 0x1819;
+				int offsetData = 0x1969;
+				int offsetFileEnd = 0x1A24;
+				int offsetCRC2 = 0x1C69;
+				int offsetCH = 0x1CAF;
+				int valueCH = 0x1A25 + strlen(sheetData);
+
+				BYTE* header = data + offsetFileStart;
+				UINT crc = ~0U;
+				for (int i = 0; i < offsetData - offsetFileStart; ++i)
+					crc = utils::crc32_tab[(crc ^ *header++) & 0xFF] ^ (crc >> 8);
+
+				BYTE* ins = (BYTE*)sheetData;
+				for (int i = 0; i < sheetSize; ++i)
+					crc = utils::crc32_tab[(crc ^ *ins++) & 0xFF] ^ (crc >> 8);
+
+				BYTE* footer = data + offsetData;
+				for (int i = 0; i < offsetFileEnd - offsetData + 1; ++i)
+					crc = utils::crc32_tab[(crc ^ *footer++) & 0xFF] ^ (crc >> 8);
+
+				crc = crc ^ ~0U;
+				int newFileSize = offsetFileEnd - offsetFileStart + 1 + sheetSize;
+
+				for (int byteNo = 0; byteNo < 4; byteNo++) {
+					(data + offsetCRC)[byteNo] = (crc >> (8 * byteNo)) & 0xff;
+					(data + offsetCRC + 4)[byteNo] = (newFileSize >> (8 * byteNo)) & 0xff;
+					(data + offsetCRC + 8)[byteNo] = (newFileSize >> (8 * byteNo)) & 0xff;
+
+					(data + offsetCRC2)[byteNo] = (crc >> (8 * byteNo)) & 0xff;
+					(data + offsetCRC2 + 4)[byteNo] = (newFileSize >> (8 * byteNo)) & 0xff;
+					(data + offsetCRC2 + 8)[byteNo] = (newFileSize >> (8 * byteNo)) & 0xff;
+
+					(data + offsetCH)[byteNo] = (valueCH >> (8 * byteNo)) & 0xff;
+				}
+
+				fwrite (data, sizeof(char), offsetData, f);
+				fwrite (sheetData, sizeof(char), strlen(sheetData), f);
+				fwrite (data + offsetData, sizeof(char), templateSize - offsetData, f);
+			}
+			FreeResource(rcData);
+		}
+		sqlite3_finalize(stmt);
+		fclose(f);
+		delete [] query8;
+		delete [] sheetData;
+
+		return true;
 	}
 
 	bool exportCSV(TCHAR* path16, TCHAR* query16) {

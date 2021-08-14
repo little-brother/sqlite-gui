@@ -134,6 +134,9 @@ namespace dialogs {
 					SetFocus(hEditorWnd);
 				}
 
+				if (wParam == IDM_EDITOR_FORMAT)
+					formatQuery(hEditorWnd);
+
 				if (wParam == IDC_DLG_OK) {
 					int size = GetWindowTextLength(hEditorWnd) + 1;
 					TCHAR query16[size]{0};
@@ -2459,6 +2462,11 @@ namespace dialogs {
 				else
 					showDbError(hWnd);
 				sqlite3_finalize(stmt);
+
+				if (ListView_GetItemCount(hListWnd) == 0) {
+					MessageBox(hWnd, TEXT("The results are the same"), TEXT("Info"), MB_OK);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+				}
 			}
 			break;
 

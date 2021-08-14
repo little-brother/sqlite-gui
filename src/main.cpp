@@ -268,7 +268,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, 0, 0);
 
 	cli.hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
-	SendMessage(cli.hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS);
+	SendMessage(cli.hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 	SetWindowLong(cli.hEditorWnd, GWL_USERDATA, 0);
 	SendMessage(cli.hEditorWnd, EM_EXLIMITTEXT, 0, 32767 * 10);
 	if (prefs::get("word-wrap"))
@@ -277,6 +277,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	SendMessage(cli.hResultWnd, EM_SETBKGNDCOLOR, 0, RGB(0, 0, 0));
 	SendMessage(cli.hResultWnd, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(10, 10));
 	CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 0, 0, 150, 200, cli.hResultWnd, (HMENU)IDC_CLI_RAWDATA, GetModuleHandle(0), NULL);
+	DragAcceptFiles(cli.hEditorWnd, true);
 
 	hDbMenu = GetSubMenu(hMainMenu, 0);
 	if (!isCipherSupport)
@@ -457,6 +458,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			SendMessage(hToolbarWnd, WM_SIZE, 0, 0);
 			SendMessage(hStatusWnd, WM_SIZE, 0, 0);
 
+			int h = HIWORD(lParam);
+			if (hTabWnd && IsWindowVisible(hTabWnd) && h) {
+				RECT rc;
+				GetClientRect(hTabWnd, &rc);
+
+				if (rc.bottom && rc.right) {
+					int oldH = prefs::get("splitter-height") + rc.bottom + 52 /* ~ Top menu + toolbar + statusbar */;
+					prefs::set("splitter-height", prefs::get("splitter-height") * h / oldH);
+				}
+			}
+
 			updateSizes(true);
 		}
 		break;
@@ -467,6 +479,19 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			isMoveX = (abs(x - prefs::get("splitter-width")) < 10);
 			isMoveY = (x > prefs::get("splitter-width") + 10) && (abs(y - top - prefs::get("splitter-height")) < 10);
+
+			// Drag by tab nc-area
+			if (!isMoveY && (x > prefs::get("splitter-width") + 10)) {
+				POINT p{x, y};
+				ClientToScreen(hMainWnd, &p);
+				ScreenToClient(hTabWnd, &p);
+
+				RECT rc = {0, 0, -10, 30};
+				int tabCount = TabCtrl_GetItemCount(hTabWnd);
+				if (tabCount != 0)
+					TabCtrl_GetItemRect(hTabWnd, tabCount - 1, &rc);
+				isMoveY = (p.x > rc.right + 10) && (p.y <= rc.bottom) && (p.y >= rc.top);
+			}
 
 			if (isMoveX || isMoveY)
 				SetCapture(hMainWnd);
@@ -893,6 +918,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							if (!isOut) {
 								if (dir == 1)
 									SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)indent);
+
+								SendMessage(hWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
+								SetWindowRedraw(hEditorWnd, true);
+								InvalidateRect(hEditorWnd, NULL, true);
 								return true;
 							}
 						}
@@ -929,6 +958,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				isRequireHighligth = false;
 				isRequireParenthesisHighligth = false;
+
+				return true;
 			}
 
 			if (cmd == IDM_ESCAPE) {
@@ -1237,12 +1268,35 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				return true;
 			}
 
+			if (cmd == IDM_RESULT_EXCEL) {
+				HWND hListWnd = currCell.hListWnd;
+				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+				HWND hCurrListWnd = (HWND)GetWindowLong(tabs[currTabNo].hTabWnd, GWL_USERDATA);
+				int currResultNo = GetWindowLong(hCurrListWnd, GWL_USERDATA);
+
+				TCHAR tmpPath16[MAX_PATH], path16[MAX_PATH];
+				GetTempPath(MAX_PATH, tmpPath16);
+				SYSTEMTIME st;
+				GetLocalTime(&st);
+				_stprintf(path16, TEXT("%sQuery-result-%.2u-%.2u.xlsx"), tmpPath16, st.wHour, st.wMinute);
+
+				int searchNext = ListView_GetSelectedCount(hListWnd) < 2 ? LVNI_ALL : LVNI_SELECTED;
+				sqlite3_exec(db, "drop table temp.excel;", 0, 0, 0);
+				saveResultToTable(TEXT("temp.excel"), currTabNo, currResultNo, searchNext);
+				if (tools::exportExcel(path16, TEXT("select * from temp.excel")))
+					ShellExecute(0, TEXT("open"), path16, NULL, NULL, 0);
+				else
+					MessageBox(hMainWnd, TEXT("Can't export data to Excel"), NULL, MB_OK);
+
+				return true;
+			}
+
 			if (cmd >= IDM_RESULT_COMPARE && cmd <= IDM_RESULT_COMPARE + MAX_COMPARE_RESULT) {
 				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 				HWND hCurrListWnd = (HWND)GetWindowLong(tabs[currTabNo].hTabWnd, GWL_USERDATA);
 				int currResultNo = GetWindowLong(hCurrListWnd, GWL_USERDATA);
 
-				HMENU hCompareMenu = GetSubMenu(hResultMenu, 8);
+				HMENU hCompareMenu = GetSubMenu(hResultMenu, 9);
 				MENUITEMINFO mii{0};
 				mii.cbSize = sizeof(MENUITEMINFO);
 				mii.fMask = MIIM_DATA;
@@ -1292,6 +1346,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetFocus(hEditorWnd);
 				return true;
 			}
+
+			if (cmd == IDM_EDITOR_FORMAT)
+				formatQuery(hEditorWnd);
 
 			if (cmd == IDM_CLI_COPY)
 				SendMessage(cli.hResultWnd, WM_COPY, 0, 0);
@@ -1393,13 +1450,16 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					updateTree();
 			}
 
-			if ((cmd == IDM_EXPORT_CSV) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_CSV), hMainWnd, (DLGPROC)&tools::cbDlgExportCSV) == DLG_OK))
+			if ((cmd == IDM_EXPORT_CSV) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_CSV), hMainWnd, (DLGPROC)tools::cbDlgExportCSV) == DLG_OK))
 				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 
-			if ((cmd == IDM_EXPORT_JSON) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_JSON), hMainWnd, (DLGPROC)&tools::cbDlgExportJSON) == DLG_OK))
+			if ((cmd == IDM_EXPORT_JSON) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_JSON), hMainWnd, (DLGPROC)tools::cbDlgExportJSON) == DLG_OK))
 				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 
-			if ((cmd == IDM_EXPORT_SQL) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_SQL), hMainWnd, (DLGPROC)&tools::cbDlgExportSQL) == DLG_OK))
+			if ((cmd == IDM_EXPORT_EXCEL) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_JSON), hMainWnd, (DLGPROC)tools::cbDlgExportExcel) == DLG_OK))
+				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
+
+			if ((cmd == IDM_EXPORT_SQL) && (DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_EXPORT_SQL), hMainWnd, (DLGPROC)tools::cbDlgExportSQL) == DLG_OK))
 				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 
 			if (cmd == IDM_GENERATE_DATA)
@@ -1447,10 +1507,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				isRequireHighligth = true;
 			}
 
-			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_KILLFOCUS && IsWindowVisible(hTooltipWnd)) {
-				MessageBeep(0);
+			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_KILLFOCUS && IsWindowVisible(hTooltipWnd))
 				hideTooltip();
-			}
 
 			if (wParam == IDCANCEL)
 				SendMessage(hMainWnd, WM_CLOSE, 0, 0);
@@ -1551,6 +1609,38 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				fixQuoteSelection(hEditorWnd, pSc);
 				return true;
+			}
+
+			if ((pHdr->idFrom == IDC_EDITOR || pHdr->idFrom == IDC_CLI_EDITOR) && pHdr->code == EN_DROPFILES) {
+				TCHAR path16[MAX_PATH];
+				HDROP drop = (HDROP)((ENDROPFILES*)lParam)->hDrop;
+				DragQueryFileW(drop, 0, path16, MAX_PATH);
+				DragFinish(drop);
+
+				FILE* f = _tfopen(path16, TEXT("r, ccs=UTF-8"));
+				if (f == NULL) {
+					MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
+					return 0;
+				}
+
+				fseek(f, 0L, SEEK_END);
+				long size = ftell(f);
+				rewind(f);
+
+				if (size > 0) {
+					TCHAR* data16 = new TCHAR[size]{0};
+					fread(data16, size, 1, f);
+
+					int pos = ((ENDROPFILES*)lParam)->cp;
+					SendMessage(pHdr->hwndFrom, EM_SETSEL, pos, pos);
+					SendMessage(pHdr->hwndFrom, EM_REPLACESEL, true, (LPARAM)data16);
+					delete [] data16;
+				} else {
+					MessageBox(0, TEXT("Only text files are supported"), 0, MB_OK);
+				}
+
+				fclose(f);
+				return 0;
 			}
 
 			if (pHdr->hwndFrom == hTreeWnd && (pHdr->code == (DWORD)NM_DBLCLK || pHdr->code == (DWORD)NM_RETURN)) {
@@ -1770,7 +1860,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				POINT p;
 				GetCursorPos(&p);
 
-				HMENU hCompareMenu = GetSubMenu(hResultMenu, 8);
+				HMENU hCompareMenu = GetSubMenu(hResultMenu, 9);
 				int cnt = GetMenuItemCount(hCompareMenu);
 				for (int i = 0; i < cnt; i++)
 					DeleteMenu(hCompareMenu, 0, MF_BYPOSITION);
@@ -1838,12 +1928,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					id = id < tabs[i].id ? tabs[i].id : id;
 
 				hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
-				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS);
+				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 				SendMessage(hEditorWnd, EM_EXLIMITTEXT, 0, 32767 * 10);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
 				hTabWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_TAB, GetModuleHandle(0), NULL);
 				cbOldResultTab = (WNDPROC)SetWindowLong(hTabWnd, GWL_WNDPROC, (LONG)cbNewResultTab);
+				DragAcceptFiles(hEditorWnd, true);
 
 				tabs[tabNo].hEditorWnd = hEditorWnd;
 				tabs[tabNo].hTabWnd = hTabWnd;
@@ -1991,16 +2082,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&crStart, (WPARAM)&crEnd);
 				SetWindowRedraw(hEditorWnd, false);
 
-				auto isText = [](int pos) {
-					CHARFORMAT cf = {0};
-					cf.cbSize = sizeof(CHARFORMAT);
-					cf.dwMask = CFM_COLOR;
-
-					SendMessage(hEditorWnd, EM_SETSEL, pos, pos + 1);
-					SendMessage(hEditorWnd, EM_GETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf);
-					return cf.crTextColor == 0;
-				};
-
 				bool isSearch = true;
 				int pCounter = 1;
 				int aCounter = 0;
@@ -2017,8 +2098,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					while (isSearch && pos >= 0) {
 						TCHAR c = currLine[pos];
 
-						if (_tcschr(TEXT(",();"), c) != 0 && isText(currLineIdx + pos)) {
-
+						if (_tcschr(TEXT(",();"), c) != 0 && !RichEdit_GetTextColor(hEditorWnd, currLineIdx + pos)) {
 							if (c == TEXT(',') && pCounter == 1)
 								aCounter++;
 
@@ -3624,8 +3704,15 @@ void updateSizes(bool isPadding) {
 		rc.right -= 5;
 		rc.bottom -= 5;
 		SendMessage(hEditorWnd, EM_SETRECT, 0, (LPARAM)&rc);
+	}
 
-		hTabWnd != 0 && EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
+	if (hTabWnd) {
+		if (isPadding) {
+			EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
+		} else {
+			HWND hResultWnd = (HWND)GetWindowLong(hTabWnd, GWL_USERDATA);
+			SetWindowPos(hResultWnd, 0, 0, 0, rc.right - splitterW - 15, h - splitterH - tabH - 15, SWP_NOZORDER | SWP_NOMOVE);
+		}
 	}
 }
 
@@ -3637,6 +3724,16 @@ int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax) {
 	TabCtrl_GetItem(hWnd, iItem, &ti);
 
 	return (int)_tcslen(pszText);
+}
+
+COLORREF RichEdit_GetTextColor (HWND hWnd, int pos) {
+	CHARFORMAT cf = {0};
+	cf.cbSize = sizeof(CHARFORMAT);
+	cf.dwMask = CFM_COLOR;
+
+	SendMessage(hWnd, EM_SETSEL, pos, pos + 1);
+	SendMessage(hWnd, EM_GETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf);
+	return cf.crTextColor;
 }
 
 HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, int type = 0, int disabled = 0) {
@@ -4257,11 +4354,12 @@ void updateHighlighting(HWND hWnd) {
 
 	int pos = 0;
 	int rCount = 0;
-	int mode = 0; // 0 - casual, 1 - keyword, 2 - function, 3 - quotted string, 4 - single line comment, 5 - multiline comment
-	COLORREF colors[6] = {
+	int mode = 0; // 0 - casual, 1 - keyword, 2 - function, 3 - pragma, 4 - quotted string, 5 - single line comment, 6 - multiline comment
+	COLORREF colors[7] = {
 		RGB(0, 0, 0),
 		(COLORREF)prefs::get("color-keyword"),
 		(COLORREF)prefs::get("color-function"),
+		(COLORREF)prefs::get("color-pragma"),
 		(COLORREF)prefs::get("color-quoted"),
 		(COLORREF)prefs::get("color-comment"),
 		(COLORREF)prefs::get("color-comment")
@@ -4270,9 +4368,9 @@ void updateHighlighting(HWND hWnd) {
 
 	while (pos < size) {
 		mode =
-			text[pos] == TEXT('/') && (pos < size - 1) && text[pos + 1] == TEXT('*') ? 5 :
-			text[pos] == TEXT('-') && (pos < size - 1) && text[pos + 1] == TEXT('-') ? 4 :
-			text[pos] == TEXT('"') || text[pos] == TEXT('\'') ? 3 :
+			text[pos] == TEXT('/') && (pos < size - 1) && text[pos + 1] == TEXT('*') ? 6 :
+			text[pos] == TEXT('-') && (pos < size - 1) && text[pos + 1] == TEXT('-') ? 5 :
+			text[pos] == TEXT('"') || text[pos] == TEXT('\'') ? 4 :
 			_tcschr(breakers, text[pos]) ? 0 :
 			1;
 
@@ -4287,7 +4385,8 @@ void updateHighlighting(HWND hWnd) {
 			break;
 
 			case 1:
-			case 2: {
+			case 2:
+			case 3: {
 				do {
 					rCount += text[pos] == TEXT('\r');
 					pos++;
@@ -4300,26 +4399,22 @@ void updateHighlighting(HWND hWnd) {
 				TCHAR* tbuf = utils::trim(buf);
 				mode = 0;
 
-				int i = 0;
-				while (SQL_KEYWORDS[i] && !mode && tbuf) {
-					mode = !_tcsicmp(SQL_KEYWORDS[i], tbuf);
-					i++;
-				}
+				if (_tcslen(buf)) {
+					for (int i = 0; !mode && SQL_KEYWORDS[i]; i++)
+						mode = !_tcscmp(SQL_KEYWORDS[i], tbuf) ? 1 : 0;
 
-				if (mode == 0) {
-					i = 0;
-					while (FUNCTIONS[i] && !mode && tbuf) {
-						mode = !_tcsicmp(FUNCTIONS[i], tbuf) ? 2 : 0;
-						i++;
-					}
+					for (int i = 0; !mode && FUNCTIONS[i]; i++)
+						mode = !_tcscmp(FUNCTIONS[i], tbuf) ? 2 : 0;
 
+					for (int i = 0; !mode && PRAGMAS[i]; i++)
+						mode = !_tcscmp(PRAGMAS[i], tbuf) || (_tcsncmp(tbuf, TEXT("pragma_"), 7) == 0 && _tcscmp(tbuf + 7, PRAGMAS[i]) == 0) ? 3 : 0;
 				}
 
 				delete [] tbuf;
 			}
 			break;
 
-			case 3: {
+			case 4: {
 				TCHAR q = text[start];
 				do {
 					rCount += text[pos] == TEXT('\r');
@@ -4331,7 +4426,7 @@ void updateHighlighting(HWND hWnd) {
 			}
 			break;
 
-			case 4: {
+			case 5: {
 				while (text[pos] != TEXT('\n') && pos < size) {
 					rCount += text[pos] == TEXT('\r');
 					pos++;
@@ -4339,7 +4434,7 @@ void updateHighlighting(HWND hWnd) {
 			}
 			break;
 
-			case 5: {
+			case 6: {
 				while (pos < size && (text[pos] != TEXT('*') || text[pos + 1] != TEXT('/'))) {
 					rCount += text[pos] == TEXT('\r');
 					pos++;
@@ -4357,7 +4452,7 @@ void updateHighlighting(HWND hWnd) {
 		to = from > to ? from : to;
 
 		cf2.crTextColor = colors[mode];
-		cf2.dwEffects = mode == 1 || mode == 2 ? CFM_BOLD : 0;
+		cf2.dwEffects = mode == 1 || mode == 2 || mode == 3 ? CFM_BOLD : 0;
 
 		SendMessage(hWnd, EM_SETSEL, from, to);
 		SendMessage(hWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf2);
@@ -4385,16 +4480,6 @@ void updateParenthesisHighlighting(HWND hWnd) {
 		SendMessage(hWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf);
 	};
 
-	auto isText = [hWnd](int pos) {
-		CHARFORMAT cf = {0};
-		cf.cbSize = sizeof(CHARFORMAT);
-		cf.dwMask = CFM_COLOR;
-
-		SendMessage(hWnd, EM_SETSEL, pos, pos + 1);
-		SendMessage(hWnd, EM_GETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf);
-		return cf.crTextColor == 0;
-	};
-
 	for (int i = 0;  i < 2 && currParenthesisPos[i] != -1; i++) {
 		setChar(currParenthesisPos[i], false);
 		currParenthesisPos[i] = -1;
@@ -4413,7 +4498,7 @@ void updateParenthesisHighlighting(HWND hWnd) {
 	TCHAR parentheses[] = TEXT("[]{}()");
 	TCHAR* chr = _tcschr(parentheses, crLine[pos]);
 
-	if (chr && chr[0] && isText(crLineIdx + pos)) {
+	if (chr && chr[0] && !RichEdit_GetTextColor(hWnd, crLineIdx + pos)) {
 		int dir = chr[0] == TEXT('[') || chr[0] == TEXT('{') || chr[0] == TEXT('(') ? +1 : -1;
 
 		setChar(crLineIdx + pos, true);
@@ -4431,7 +4516,7 @@ void updateParenthesisHighlighting(HWND hWnd) {
 			pos = currLineNo == crLineNo ? pos + dir : dir > 0 ? 0 : currLineSize - 1;
 			while (pos >= 0 && pos < currLineSize && currParenthesisPos[1] == -1) {
 				TCHAR* chr2 = _tcschr(parentheses, currLine[pos]);
-				if (chr2 && chr2[0] && isText(currLineIdx + pos)) {
+				if (chr2 && chr2[0] && !RichEdit_GetTextColor(hWnd, currLineIdx + pos)) {
 					counter += chr == chr2 ? +1 : chr + dir == chr2 ? -1 : 0;
 					if (counter == 0) {
 						setChar(currLineIdx + pos, true);
@@ -4541,7 +4626,7 @@ void processHighlight(HWND hWnd, bool isRequireHighligth, bool isRequireParenthe
 
 	SendMessage(hWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
 	InvalidateRect(hWnd, 0, TRUE);
-	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS);
+	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 }
 
 int ListView_Sort(HWND hListWnd, int colNo) {
@@ -4716,6 +4801,13 @@ bool processEditorEvents(MSGFILTER* pF) {
 
 		if ((key == 0x46 || key == 0x52) && isControl) { // Ctrl + F or Ctrl + R
 			SendMessage(GetAncestor(hWnd, GA_ROOT), WM_COMMAND, IDM_EDITOR_FIND, 0);
+			pF->wParam = 0;
+			return true;
+		}
+
+		if (key == 0x54 && isControl) { // Ctrl + T
+			if (isKeyDown)
+				SendMessage(GetAncestor(hWnd, GA_ROOT), WM_COMMAND, IDM_EDITOR_FORMAT, 0);
 			pF->wParam = 0;
 			return true;
 		}
@@ -4927,13 +5019,6 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		GetWindowText(hEditorWnd, text, tLen + 1);
 		_tcslwr(text);
 
-		auto isStartBy = [](const TCHAR* text, const TCHAR* test) {
-			for (size_t i = 0; i < _tcslen(test); i++)
-				if (text[i] != test[i])
-					return false;
-			return true;
-		};
-
 		int cPos = crPos;
 		// fix new line \r \n
 		for (int i = 0; (i < cPos) && (i < tLen + 1); i++)
@@ -4954,18 +5039,20 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		while (tPos > 0 && _istgraph(text[tPos - 1]) == 0)
 			tPos--;
 
-		if (wLen || (cPos > 6 && _tcschr(TEXT(" \r\n"), text[cPos]) != NULL && _tcschr(breakers, text[tPos]) != 0 && tPos != cPos && (
-			isStartBy(text + tPos - 1, TEXT(",")) ||
-			isStartBy(text + tPos - 1, TEXT("(")) ||
-			isStartBy(text + tPos - 1, TEXT(">")) ||
-			isStartBy(text + tPos - 1, TEXT("<")) ||
-			isStartBy(text + tPos - 1, TEXT("=")) ||
-			(isStartBy(text + tPos - 3, TEXT("and")) && _tcschr(breakers, text[tPos - 4]) != 0) ||
-			(isStartBy(text + tPos - 2, TEXT("or")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
-			(isStartBy(text + tPos - 2, TEXT("on")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
-			(isStartBy(text + tPos - 6, TEXT("select")) && (tPos < 7 || _tcschr(breakers, text[tPos - 7]) != 0)) ||
-			(isStartBy(text + tPos - 5, TEXT("where")) && _tcschr(breakers, text[tPos - 6]) != 0) ||
-			(isStartBy(text + tPos - 8, TEXT("order by"))&& _tcschr(breakers, text[tPos - 9]) != 0)
+		if (wLen || (cPos > 6 && _tcschr(TEXT(" \r\n;"), text[cPos]) != NULL && _tcschr(breakers, text[tPos]) != 0 && tPos != cPos && (
+			utils::isStartBy(text, tPos - 1, TEXT(",")) ||
+			utils::isStartBy(text, tPos - 1, TEXT("(")) ||
+			utils::isStartBy(text, tPos - 1, TEXT(">")) ||
+			utils::isStartBy(text, tPos - 1, TEXT("<")) ||
+			utils::isStartBy(text, tPos - 1, TEXT("=")) ||
+			(utils::isStartBy(text, tPos - 3, TEXT("and")) && _tcschr(breakers, text[tPos - 4]) != 0) ||
+			(utils::isStartBy(text, tPos - 2, TEXT("or")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
+			(utils::isStartBy(text, tPos - 2, TEXT("on")) && _tcschr(breakers, text[tPos - 3]) != 0) ||
+			(utils::isStartBy(text, tPos - 6, TEXT("select")) && (tPos < 7 || _tcschr(breakers, text[tPos - 7]) != 0)) ||
+			(utils::isStartBy(text, tPos - 5, TEXT("where")) && _tcschr(breakers, text[tPos - 6]) != 0) ||
+			(utils::isStartBy(text, tPos - 8, TEXT("order by"))&& _tcschr(breakers, text[tPos - 9]) != 0) ||
+			(utils::isStartBy(text, tPos - 8, TEXT("group by"))&& _tcschr(breakers, text[tPos - 9]) != 0) ||
+			(utils::isStartBy(text, tPos - 6, TEXT("having"))&& _tcschr(breakers, text[tPos - 7]) != 0)
 		))) {
 			int nParentheses = 0;
 			int qStart = cPos;
@@ -4975,7 +5062,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				if (text[qStart] == TEXT('(') && nParentheses > 0)
 					nParentheses--;
 
-				if (nParentheses >= 0 && (isStartBy(text + qStart, TEXT("select")) || text[qStart - 1] == TEXT(';')))
+				if (nParentheses >= 0 && (utils::isStartBy(text, qStart, TEXT("select")) || text[qStart - 1] == TEXT(';')))
 					break;
 
 				qStart--;
@@ -4989,7 +5076,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				if (text[qEnd] == TEXT(')') && nParentheses > 0)
 					nParentheses--;
 
-				if (nParentheses >= 0 && (isStartBy(text + qEnd, TEXT("select")) || text[qEnd] == TEXT(';')))
+				if (nParentheses >= 0 && (utils::isStartBy(text, qEnd, TEXT("select")) || text[qEnd] == TEXT(';')))
 					break;
 
 				qEnd++;
@@ -5024,13 +5111,14 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		for (int i = 0; PRAGMAS[i]; i++)
 			isExact += addString(PRAGMAS[i]);
 	} else if (
-		(start > 2 && !_tcsnicmp(currLine + start - 3, TEXT("on "), 3)) ||
+		((wLen == 0 && _tcschr(TEXT("\r\n\t ("), currLine[start]) != 0) || wLen > 0) &&
+		((start > 2 && !_tcsnicmp(currLine + start - 3, TEXT("on "), 3)) ||
 		(start > 4 && (
 			!_tcsnicmp(currLine + start - 5, TEXT("from "), 5) ||
 			!_tcsnicmp(currLine + start - 5, TEXT("join "), 5) ||
 			!_tcsnicmp(currLine + start - 5, TEXT("into "), 5)
 		)) ||
-		(start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("update "), 7))) {
+		(start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("update "), 7)))) {
 		bool isNoCheck = wLen == 1 && word[0] == TEXT(' ');
 		for (int i = 0; TABLES[i]; i++)
 			isExact += addString(TABLES[i], isNoCheck);
@@ -5869,7 +5957,7 @@ bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 unsigned int __stdcall checkUpdate (void* data) {
 	time_t t = time(0);
 	tm* now = localtime(&t);
-	int date = (now->tm_year + 1900) * 10000 + (now->tm_mon + 1 )* 100 + now->tm_mday;
+	int date = (now->tm_year + 1900) * 10000 + (now->tm_mon + 1) * 100 + now->tm_mday;
 	if (date != prefs::get("last-update-check")) {
 		DWORD read;
 		char buf8[1001]{0};
@@ -6078,4 +6166,294 @@ void showTooltip(int x, int y, TCHAR* text16) {
 
 void hideTooltip() {
 	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+}
+
+/* Simple query formatter */
+//  0 - casual, 1 - -- comment, 2 - / * comment * /, 3 - 'quoted', 4 - "quoted", 5 - `quoted`
+int getTextMode(TCHAR c, TCHAR cn, TCHAR cp, int mode, int len) {
+	return c == TEXT('\'') && mode == 0 ? 3 :
+		c == TEXT('\'') && c != cn  && mode == 3 ? 0 :
+		c == TEXT('"') && mode == 0 ? 4 :
+		c == TEXT('"') && c != cp && mode == 4 && len > 1 ? 0 :
+		c == TEXT('"') && c == cp && mode == 4 && len == 1 ? 0 :
+		c == TEXT('`') && mode == 0 ? 5 :
+		c == TEXT('`') && mode == 5 ? 0 :
+		c == TEXT('-') && cn == TEXT('-') && mode == 0 ? 1 :
+		c == TEXT('\n') && mode == 1 ? 0 :
+		c == TEXT('/') && cn == TEXT('*') && mode == 0 ? 2 :
+		c == TEXT('*') && cn == TEXT('/') && mode == 2 ? 0 :
+		mode;
+}
+
+int processBlock (int startPos, int startIndent, const TCHAR* input, int* indents, bool* newlines) {
+	int pos = startPos;
+	int currIndent = startIndent;
+	int mode = 0;
+	int len = 0;
+
+	bool isStatement =
+		utils::isStartBy(input, pos, TEXT("select")) ||
+		utils::isStartBy(input, pos, TEXT("insert into")) ||
+		utils::isStartBy(input, pos, TEXT("delete from"));
+
+	bool isWith = utils::isStartBy(input, pos, TEXT("with"));
+
+	while (pos < (int)_tcslen(input)) {
+		if (mode == 0) {
+			if (input[pos] == TEXT('(')) {
+				if (isWith) {
+					newlines[pos] = true;
+					indents[pos] = startIndent - 1;
+					currIndent = startIndent - 1;
+				}
+				pos += processBlock(pos + 1, currIndent + 2, input, indents, newlines) + 1;
+				currIndent = startIndent;
+				continue;
+			}
+
+			if (input[pos] == TEXT(')')) {
+				break;
+			}
+
+			if (isWith && (input[pos - 2] == ',' || utils::isStartBy(input, pos, TEXT("select")))) {
+				newlines[pos] = true;
+				indents[pos] = startIndent;
+				currIndent = startIndent;
+			}
+
+			// 6 - strlen + 1
+			bool isValues = pos > 6 && utils::isStartBy(input, pos - 6, TEXT("values"));
+			int indent =
+				utils::isStartBy(input, pos, TEXT("delete from")) ? 1 :
+				utils::isStartBy(input, pos, TEXT("values")) ? 1 :
+				isValues ? 7 :
+				!utils::isPrecedeBy(input, pos, TEXT("delete")) && utils::isStartBy(input, pos, TEXT("from")) ? 3 :
+				utils::isStartBy(input, pos, TEXT("inner join")) ? 3 :
+				utils::isStartBy(input, pos, TEXT("left join")) ? 3 :
+				!utils::isPrecedeBy(input, pos, TEXT("left")) && !utils::isPrecedeBy(input, pos, TEXT("inner")) && utils::isStartBy(input, pos, TEXT("join")) ? 3 :
+				utils::isStartBy(input, pos, TEXT("where")) ? 2 :
+				utils::isStartBy(input, pos, TEXT("order by")) ? 2 :
+				utils::isStartBy(input, pos, TEXT("group by")) ? 2 :
+				utils::isStartBy(input, pos, TEXT("having")) ? 1 :
+				utils::isStartBy(input, pos, TEXT("limit")) ? 2 :
+				utils::isStartBy(input, pos, TEXT("set")) ? 4 :
+				pos > 0 && input[pos - 1] == TEXT(',') && isStatement ? (utils::isStartBy(input, pos + 1, TEXT("--")) || utils::isStartBy(input, pos + 1, TEXT("/*")) ? 1 : 7) :
+				pos > 0 && input[pos - 1] == TEXT(';') ? 1 :
+				0;
+
+			if (indent > 0) {
+				indent--;
+				isStatement = (pos > 0 && input[pos - 1] == TEXT(',')) || isValues;
+				indents[pos] = pos > 0 && input[pos - 1] == TEXT(';') ? 0 : indent + startIndent;
+				newlines[pos] = pos > 0 && input[pos - 1] != TEXT('\n') && !utils::isStartBy(input, pos + 1, TEXT("--")) && !utils::isStartBy(input, pos + 1, TEXT("/*"));
+			}
+			currIndent = indent > 0 ? startIndent + indent : currIndent + 1;
+		} else {
+			currIndent++;
+		}
+
+		int pmode = mode;
+		mode = getTextMode(input[pos], input[pos + 1], pos > 0 ? input[pos - 1] : 0, mode, len);
+		len = mode == pmode ? len + 1 : 1;
+
+		pos++;
+	}
+
+	return pos - startPos + 1;
+}
+
+bool formatQuery (HWND hEditorWnd) {
+	CHARRANGE range;
+	SendMessage(hEditorWnd, EM_EXGETSEL, 0, (LPARAM)&range);
+
+	bool isSelection = range.cpMin != range.cpMax;
+	int size =  isSelection ? range.cpMax - range.cpMin + 1 : GetWindowTextLength(hEditorWnd);
+	if (size <= 0)
+		return false;
+
+	TCHAR sql[size + 1]{0};
+	if (!SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)sql))
+		return false;
+
+	TCHAR buf[size + 1]{0};
+	int mode = 0;
+	int pos = 0;
+	int bPos = 0;
+	int len = 0;
+
+	// Minify
+	while (pos < (int)_tcslen(sql)) {
+		TCHAR c = sql[pos];
+		TCHAR cn = sql[pos + 1];
+		TCHAR cp = bPos > 0 ? buf[bPos - 1] : 0;
+
+		if (mode == 0) {
+			if (_tcschr(TEXT(" \t\r\n"), c) == 0) {
+				buf[bPos] = c;
+				bPos++;
+			}
+
+			if (_tcschr(TEXT("\t\r\n"), c) != 0 && _istalpha(cn) && _istalnum(cp)) {
+				buf[bPos] = ' ';
+				bPos++;
+			}
+
+			if (c == ' ' && _istalnum(cn) && _istalnum(cp)) {
+				buf[bPos] = TEXT(' ');
+				bPos++;
+			}
+		} else {
+			buf[bPos] = c;
+			bPos++;
+		}
+
+		int pmode = mode;
+		mode = getTextMode(c, cn, cp, mode, len);
+		len = mode == pmode ? len + 1 : 1;
+		pos++;
+	}
+
+	// Add spaces
+	pos = 0;
+	bPos = 0;
+	mode = 0;
+	TCHAR buf2[MAX_TEXT_LENGTH]{0};
+	while (pos < (int)_tcslen(buf)) {
+		TCHAR c = buf[pos];
+		TCHAR cn = buf[pos + 1];
+		TCHAR cp = bPos > 0 ? buf2[bPos - 1] : 0;
+
+		if (mode == 0 && cp != TEXT(' ') && c != cp && c != TEXT(';') && (
+			_tcschr(TEXT("(<!*+"), c) != 0 ||
+			(_tcschr(TEXT("'\"`"), c) != 0 && cp != TEXT('(')) ||
+			(c == TEXT('>') && cp != TEXT('<')) ||
+			(c == TEXT('=') && cp != TEXT('!')) ||
+			(c == TEXT('/') && cp != TEXT('*')) ||
+			(c == TEXT('-') && cp != TEXT('-'))
+			)) {
+
+			bool isFunc = false;
+			if (c == TEXT('(')) {
+				int spos = pos - 1;
+				while (spos > 0 && _istalnum(buf[spos]))
+					spos--;
+				TCHAR fname[pos - 1 - spos + 1]{0};
+				_tcsncpy(fname, buf + spos + 1, pos - spos - 1);
+				_tcslwr(fname);
+				for (int i = 0; !isFunc && FUNCTIONS[i]; i++)
+					isFunc = _tcscmp(fname, FUNCTIONS[i]) == 0;
+			}
+
+			if (!isFunc) {
+				buf2[bPos] = ' ';
+				bPos++;
+			}
+		}
+
+		buf2[bPos] = c;
+		bPos++;
+
+		if ((mode == 0 && strchr("=>,*+", c) != 0) ||
+			(mode == 0 && c == TEXT(')') && cn != TEXT(',')) ||
+			(mode == 0 && c == TEXT('<') && cn != TEXT('>')) ||
+			(mode == 0 && c == TEXT('!') && cn != TEXT('=')) ||
+			(mode == 0 && c == TEXT('/') && cn != TEXT('*')) ||
+			(mode == 0 && c == TEXT('-') && cn != TEXT('-')) ||
+			(c != cn && _tcschr(TEXT("),;"), cn) == 0 &&
+				((mode == 3 && c == TEXT('\'')) ||
+				(mode == 4 && c == TEXT('"')) ||
+				(mode == 5 && c == TEXT('`'))))
+			) {
+			buf2[bPos] = TEXT(' ');
+			bPos++;
+		}
+
+		pos++;
+
+		int pmode = mode;
+		mode = getTextMode(c, cn, cp, mode, len);
+		len = mode == pmode ? len + 1 : 1;
+	}
+
+	// change keyword/function case
+	int keywordCase = prefs::get("format-keyword-case");
+	int functionCase = prefs::get("format-function-case");
+	if (keywordCase || functionCase) {
+		pos = 0;
+		mode = 0;
+		len = 0;
+		while (pos < (int)_tcslen(buf2)) {
+			TCHAR c = buf2[pos];
+			TCHAR cn = buf2[pos + 1];
+			TCHAR cp = pos > 0 ? buf2[pos - 1] : 0;
+
+			if (mode == 0 && (pos == 0 || (pos > 0 && !_istalpha(cp)))) {
+				int epos = pos;
+				while (epos < (int)_tcslen(buf2) && _istalnum(buf2[epos]))
+					epos++;
+
+				if (epos != pos) {
+					TCHAR word[epos - pos + 1]{0};
+					_tcsncpy(word, buf2 + pos, epos - pos);
+					_tcslwr(word);
+
+					for (int i = 0; keywordCase && SQL_KEYWORDS[i]; i++) {
+						if ((int)_tcscmp(word, SQL_KEYWORDS[i]) == 0) {
+							for (int j = 0; j < (int)_tcslen(word); j++)
+								buf2[pos + j] = keywordCase == 1 ? _totlower(buf2[pos + j]) : _totupper(buf2[pos + j]);
+							break;
+						}
+					}
+
+					for (int i = 0; functionCase && FUNCTIONS[i]; i++) {
+						if (_tcscmp(word, FUNCTIONS[i]) == 0) {
+							for (int j = 0; j < (int)_tcslen(word); j++)
+								buf2[pos + j] = keywordCase == 1 ? _totlower(buf2[pos + j]) : _totupper(buf2[pos + j]);
+							break;
+						}
+					}
+				}
+			}
+
+			pos++;
+			int pmode = mode;
+			mode = getTextMode(c, cn, cp, mode, len);
+			len = mode == pmode ? len + 1 : 1;
+		}
+	}
+
+	// Format
+	pos = 0;
+	bPos = 0;
+
+	// calculate indents
+	int indents[_tcslen(buf2)]{0};
+	bool newlines[_tcslen(buf2)]{0};
+	processBlock(0, 0, buf2, indents, newlines);
+
+	TCHAR buf3[_tcslen(buf2) * 10 + 1]{0};
+	for (int pos = 0; pos < (int)_tcslen(buf2); pos++) {
+		if (newlines[pos]) {
+			buf3[bPos] = TEXT('\n');
+			bPos++;
+		}
+
+		for (int i = 0; i < indents[pos]; i++) {
+			buf3[bPos] = TEXT(' ');
+			bPos++;
+		}
+
+		buf3[bPos] = buf2[pos];
+		bPos++;
+	}
+
+	SetWindowRedraw(hEditorWnd, false);
+	if (!isSelection)
+		SendMessage(hEditorWnd, EM_SETSEL, 0, -1);
+
+	SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)buf3);
+	SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMin);
+	SetWindowRedraw(hEditorWnd, true);
+
+	return true;
 }

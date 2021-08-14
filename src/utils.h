@@ -36,5 +36,11 @@ namespace utils {
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
 	BYTE sqlite3_type(const char* type8);
 	void urlDecode (char *dst, const char *src);
+
+	bool isStartBy(const TCHAR* text, int pos, const TCHAR* test);
+	bool isPrecedeBy(const TCHAR* text, int pos, const TCHAR* test);
+
+	extern const UINT crc32_tab[];
+	UINT crc32(const BYTE* data, int size);
 }
 #endif
