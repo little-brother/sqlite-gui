@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.6.1"
-#define GUI_VERSION2               1, 6, 1, 0
+#define GUI_VERSION                "1.6.2"
+#define GUI_VERSION2               1, 6, 2, 0
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -20,21 +20,20 @@
 #define IDD_TABLENAME              26
 #define IDD_RESULTS_COMPARISON     27
 #define IDD_SHORTCUTS              28
+#define IDD_ADD_INDEX              29
 
-#define IDD_TOOL_IMPORT_CSV        30
-#define IDD_TOOL_IMPORT_JSON       31
-#define IDD_TOOL_EXPORT_CSV        32
-#define IDD_TOOL_EXPORT_JSON       33
-#define IDD_TOOL_EXPORT_SQL        34
-#define IDD_TOOL_EXPORT_IMPORT_ODBC 35
-#define IDD_TOOL_GENERATE_DATA     36
-#define IDD_TOOL_DATABASE_DIAGRAM  37
-#define IDD_TOOL_COMPARE_DATABASE  38
-#define IDD_TOOL_DATABASE_SEARCH   39
-#define IDD_TOOL_STATISTICS        40
-
-#define IDA_ACCEL                  49
-#define IDA_ACCEL2                 50
+#define IDD_TOOL_IMPORT_CSV        35
+#define IDD_TOOL_IMPORT_JSON       36
+#define IDD_TOOL_EXPORT_CSV        37
+#define IDD_TOOL_EXPORT_JSON       38
+#define IDD_TOOL_EXPORT_SQL        39
+#define IDD_TOOL_EXPORT_IMPORT_ODBC 40
+#define IDD_TOOL_GENERATE_DATA     41
+#define IDD_TOOL_DATABASE_DIAGRAM  42
+#define IDD_TOOL_COMPARE_DATABASE  43
+#define IDD_TOOL_DATABASE_SEARCH   44
+#define IDD_TOOL_STATISTICS        45
+#define IDD_TOOL_FOREIGN_KEY_CHECK 46
 
 #define IDC_DLG_OK                 51
 #define IDC_DLG_CANCEL             52
@@ -81,10 +80,14 @@
 #define IDC_DLG_HTTP_SERVER_PORT   125
 #define IDC_DLG_STARTUP            126
 
-#define IDC_DLG_QUERYADD           136
-#define IDC_DLG_QUERYFILTER        137
-#define IDC_DLG_QUERYLIST          138
-#define IDC_DLG_USERDATA           139
+#define IDC_DLG_QUERYADD           130
+#define IDC_DLG_QUERYFILTER        131
+#define IDC_DLG_QUERYLIST          132
+#define IDC_DLG_USERDATA           133
+
+#define IDC_DLG_IDXNAME            135
+#define IDC_DLG_IDXWHERE           136
+#define IDC_DLG_INDEXED_COLUMNS    137
 
 #define IDC_DLG_COLNAME            140
 #define IDC_DLG_COLTYPE            141
@@ -127,6 +130,10 @@
 #define IDC_DLG_SEARCH             182
 #define IDC_DLG_PATTERN            183
 #define IDC_DLG_TABLENAMES         184
+#define IDC_DLG_ISTRUNCATE         186
+#define IDC_DLG_ISREPLACE          187
+#define IDC_DLG_IMPORT_ACTION      188
+#define IDC_DLG_IMPORT_ACTION2     189
 #define IDC_DLG_TABLES             190
 #define IDC_DLG_SEARCH_QUERY       191
 #define IDC_DLG_SEARCH_QUERY_TEXT  192
@@ -142,6 +149,7 @@
 #define IDC_DLG_GRID_COLOR_EDIT    215
 #define IDC_DLG_VALUE_SELECTOR     216
 #define IDC_DLG_TYPE               217
+#define IDC_DLG_FOREIGN_KEY_CHECK  218
 
 #define IDC_DLG_FIND_STRING        220
 #define IDC_DLG_REPLACE_STRING     221
@@ -204,22 +212,23 @@
 #define IDC_MENU_MAIN              500
 #define IDC_MENU_EDITOR            501
 #define IDC_MENU_RESULT            502
-#define IDC_MENU_EDIT_DATA         503
-#define IDC_MENU_VIEW_DATA         504
-#define IDC_MENU_BLOB              505
-#define IDC_MENU_DIAGRAM           506
-#define IDC_MENU_QUERYLIST         507
-#define IDC_MENU_CHART             508
-#define IDC_MENU_CLI               509
+#define IDC_MENU_TAB_RESULT        503
+#define IDC_MENU_EDIT_DATA         504
+#define IDC_MENU_VIEW_DATA         505
+#define IDC_MENU_BLOB              506
+#define IDC_MENU_DIAGRAM           507
+#define IDC_MENU_QUERYLIST         508
+#define IDC_MENU_CHART             509
+#define IDC_MENU_CLI               510
 
-#define IDC_MENU_TABLEVIEW         510
-#define IDC_MENU_INDEXTRIGGER      511
-#define IDC_MENU_TABLE             512
-#define IDC_MENU_VIEW              513
-#define IDC_MENU_INDEX             514
-#define IDC_MENU_TRIGGER           515
-#define IDC_MENU_COLUMN            516
-#define IDC_MENU_DISABLED          517
+#define IDC_MENU_TABLEVIEW         511
+#define IDC_MENU_INDEXTRIGGER      512
+#define IDC_MENU_TABLE             513
+#define IDC_MENU_VIEW              514
+#define IDC_MENU_INDEX             515
+#define IDC_MENU_TRIGGER           516
+#define IDC_MENU_COLUMN            517
+#define IDC_MENU_DISABLED          518
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
@@ -244,20 +253,20 @@
 #define IDM_IMPORT_CSV             1521
 #define IDM_IMPORT_JSON            1522
 #define IDM_IMPORT_ODBC            1523
-#define IDM_EXPORT_SQL             1524
-#define IDM_EXPORT_CSV             1525
-#define IDM_EXPORT_JSON            1526
-#define IDM_EXPORT_EXCEL           1527
-#define IDM_EXPORT_ODBC            1528
-#define IDM_CHECK_INTEGRITY        1529
-#define IDM_CHECK_FOREIGN_KEY      1530
-#define IDM_VACUUM                 1533
-#define IDM_REINDEX                1534
-#define IDM_STATISTICS             1535
-#define IDM_GENERATE_DATA          1536
-#define IDM_DATABASE_DIAGRAM       1537
-#define IDM_COMPARE_DATABASE       1538
-#define IDM_DATABASE_SEARCH        1539
+#define IDM_EXPORT_SQL             1525
+#define IDM_EXPORT_CSV             1526
+#define IDM_EXPORT_JSON            1527
+#define IDM_EXPORT_EXCEL           1528
+#define IDM_EXPORT_ODBC            1529
+#define IDM_CHECK_INTEGRITY        1530
+#define IDM_FOREIGN_KEY_CHECK      1531
+#define IDM_VACUUM                 1532
+#define IDM_REINDEX                1533
+#define IDM_STATISTICS             1534
+#define IDM_GENERATE_DATA          1535
+#define IDM_DATABASE_DIAGRAM       1536
+#define IDM_COMPARE_DATABASE       1537
+#define IDM_DATABASE_SEARCH        1538
 
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541
@@ -312,17 +321,20 @@
 #define IDM_QUERY_ADD_OLD          1692
 #define IDM_QUERY_DELETE           1693
 
+#define IDM_TAB_RESULT_COPY_QUERY  1695
+
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
 #define IDM_EDIT                   1703
 #define IDM_DELETE                 1704
 #define IDM_RENAME                 1705
 #define IDM_ADD_COLUMN             1706
-#define IDM_ERASE_DATA             1707
-#define IDM_DDL                    1708
-#define IDM_ENABLE                 1709
-#define IDM_DISABLE                1710
-#define IDM_VIEW                   1711
+#define IDM_ADD_INDEX              1707
+#define IDM_ERASE_DATA             1708
+#define IDM_DDL                    1709
+#define IDM_ENABLE                 1710
+#define IDM_DISABLE                1711
+#define IDM_VIEW                   1712
 
 #define IDM_ADD                    1715
 #define IDM_REFRESH                1716
@@ -368,6 +380,9 @@
 #define IDB_TOOLBAR                6003
 #define IDB_DIAGRAM_TOOLBAR        6006
 #define IDB_TOOLBAR_DATA           6010
+
+#define IDA_ACCEL                  6100
+#define IDA_ACCEL2                 6101
 
 #define IDT_EDIT_DATA              7000 // timer
 

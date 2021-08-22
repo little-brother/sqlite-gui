@@ -167,12 +167,11 @@ namespace dialogs {
 						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
 						isRequireParenthesisHighligth = true;
 					}
-
-					fixQuoteSelection(pHdr->hwndFrom, pSc);
 				}
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
 					return processEditorEvents((MSGFILTER*)lParam);
+
 			}
 			break;
 
@@ -2215,15 +2214,17 @@ namespace dialogs {
 		return false;
 	}
 
+	// lParam - table16
 	BOOL CALLBACK cbDlgAddColumn (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				TCHAR* table16 = (TCHAR*)lParam;
 				TCHAR buf[256];
-				_stprintf(buf, TEXT("Add column to \"%ls\""), editTableData16);
+				_stprintf(buf, TEXT("Add column to \"%ls\""), table16);
 				SetWindowText(hWnd, buf);
 
-				TCHAR* schema16 = utils::getName(editTableData16, true);
-				TCHAR* tablename16 = utils::getName(editTableData16);
+				TCHAR* schema16 = utils::getName(table16, true);
+				TCHAR* tablename16 = utils::getName(table16);
 				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
 				SetProp(hWnd, TEXT("SCHEMA16"), (HANDLE)schema16);
 
@@ -2248,7 +2249,8 @@ namespace dialogs {
 
 					TCHAR _defValue16[255] = {0}, defValue16[300] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_DEFVALUE, _defValue16, 255);
-					_stprintf(defValue16, _tcslen(_defValue16) > 0 ? TEXT("default \"%ls\"") : TEXT("%ls"), _defValue16);
+					if (_tcslen(_defValue16))
+						_stprintf(defValue16, utils::isNumber(_defValue16, 0) ? TEXT("default %ls") : TEXT("default \"%ls\""), _defValue16);
 
 					bool isNotNull = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISNOTNULL));
 					bool isUnique = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISUNIQUE));
@@ -2272,7 +2274,7 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_CLOSE:
+			case WM_CLOSE: {
 				TCHAR* tablename16 = (TCHAR*)GetProp(hWnd, TEXT("TABLENAME16"));
 				delete [] tablename16;
 				RemoveProp(hWnd, TEXT("TABLENAME16"));
@@ -2280,9 +2282,151 @@ namespace dialogs {
 				TCHAR* schema16 = (TCHAR*)GetProp(hWnd, TEXT("SCHEMA16"));
 				delete [] schema16;
 				RemoveProp(hWnd, TEXT("SCHEMA16"));
+			}
+			break;
+		}
 
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
+		return false;
+	}
+
+	// lParam - table16
+	BOOL CALLBACK cbDlgAddIndex (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				TCHAR* table16 = (TCHAR*)lParam;
+				TCHAR buf[256];
+				_stprintf(buf, TEXT("Add index to \"%ls\""), table16);
+				SetWindowText(hWnd, buf);
+
+				TCHAR* schema16 = utils::getName(table16, true);
+				TCHAR* tablename16 = utils::getName(table16);
+
+				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
+				SetProp(hWnd, TEXT("SCHEMA16"), (HANDLE)schema16);
+
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
+				TCHAR query16[255];
+				_stprintf(query16, TEXT("select name 'Column name', 'asc' 'Order' from pragma_table_info('%ls')"), tablename16);
+				char* sql8 = utils::utf16to8(query16);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						ListBox_AddString(hListWnd, name16);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				delete [] sql8;
+
+				TCHAR idxName16[_tcslen(table16) + 10];
+				_stprintf(idxName16, TEXT("idx_%s_"), tablename16);
+				SetDlgItemText(hWnd, IDC_DLG_IDXNAME, idxName16);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == IDC_DLG_INDEXED_COLUMNS && HIWORD(GetKeyState(VK_CONTROL))) {
+					HWND hListWnd = (HWND)lParam;
+					int rowNo = ListBox_GetCurSel(hListWnd);
+					int size = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[size + 10]{0};
+					ListBox_GetText(hListWnd, rowNo, name16);
+					int isDesc = ListBox_GetItemData(hListWnd, rowNo);
+					if (isDesc)
+						name16[_tcslen(name16) - 5] = 0;
+					else
+						_tcscat(name16, TEXT(" desc"));
+
+					ListBox_DeleteString(hListWnd, rowNo);
+					ListBox_InsertString(hListWnd, rowNo, name16);
+					ListBox_SetItemData(hListWnd, rowNo, !isDesc);
+				}
+
+				if (HIWORD(wParam) == LBN_DBLCLK) {
+					HWND hListWnd = (HWND)lParam;
+					int rowNo = ListBox_GetCurSel(hListWnd);
+
+					int size = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[size + 1]{0};
+					ListBox_GetText(hListWnd, rowNo, name16);
+					ListBox_DeleteString(hListWnd, rowNo);
+					_tcstok(name16, TEXT(" "));
+
+					hListWnd = GetDlgItem(hWnd, LOWORD(wParam) == IDC_DLG_COLUMNS ? IDC_DLG_INDEXED_COLUMNS : IDC_DLG_COLUMNS);
+					ListBox_AddString(hListWnd, name16);
+				}
+
+				if (wParam == IDC_DLG_OK) {
+					TCHAR* schema16 = (TCHAR*)GetProp(hWnd, TEXT("SCHEMA16"));
+					TCHAR* tablename16 = (TCHAR*)GetProp(hWnd, TEXT("TABLENAME16"));
+
+					TCHAR idxName16[256] = {0};
+					GetDlgItemText(hWnd, IDC_DLG_IDXNAME, idxName16, 255);
+					bool isUnique = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISUNIQUE));
+
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_INDEXED_COLUMNS);
+					int colCount = ListBox_GetCount(hListWnd);
+
+					if (_tcslen(idxName16) == 0) {
+						MessageBox(hWnd, TEXT("The index name can't be empty"), NULL, MB_OK);
+						return 0;
+					}
+
+					if (colCount == 0) {
+						MessageBox(hWnd, TEXT("You should specify at least one indexed column"), NULL, MB_OK);
+						return 0;
+					}
+
+					HWND hWhereWnd = GetDlgItem(hWnd, IDC_DLG_IDXWHERE);
+					int wsize = GetWindowTextLength(hWhereWnd);
+
+					TCHAR query16[colCount * 255 + wsize + _tcslen(tablename16) + 200]{0};
+					_stprintf(query16, TEXT("create%ls index \"%ls\".\"%ls\" on \"%ls\" ("), isUnique ? TEXT(" unique") : TEXT(""), schema16, idxName16, tablename16);
+
+					for (int colNo = 0; colNo < colCount; colNo++) {
+						int size = ListBox_GetTextLen(hListWnd, colNo);
+						TCHAR name16[size + 1]{0};
+						ListBox_GetText(hListWnd, colNo, name16);
+						int isDesc = ListBox_GetItemData(hListWnd, colNo);
+						if (isDesc)
+							name16[_tcslen(name16) - 5] = 0;
+
+						TCHAR buf16[size + 10];
+						_stprintf(buf16, TEXT("\"%ls\"%ls%ls"), name16, isDesc ? TEXT(" desc") : TEXT(""), colNo != colCount - 1 ? TEXT(", ") : TEXT(")"));
+						_tcscat(query16, buf16);
+					}
+
+					if (wsize > 0) {
+						TCHAR where16[wsize + 1];
+						GetWindowText(hWhereWnd, where16, wsize + 1);
+						_tcscat(query16, TEXT(" where "));
+						_tcscat(query16, where16);
+					}
+
+					char* query8 = utils::utf16to8(query16);
+					if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL))
+						showDbError(hWnd);
+					else
+						EndDialog(hWnd, 0);
+					delete [] query8;
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				TCHAR* tablename16 = (TCHAR*)GetProp(hWnd, TEXT("TABLENAME16"));
+				delete [] tablename16;
+				RemoveProp(hWnd, TEXT("TABLENAME16"));
+
+				TCHAR* schema16 = (TCHAR*)GetProp(hWnd, TEXT("SCHEMA16"));
+				delete [] schema16;
+				RemoveProp(hWnd, TEXT("SCHEMA16"));
+			}
+			break;
 		}
 
 		return false;
@@ -2623,8 +2767,6 @@ namespace dialogs {
 						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
 						isRequireParenthesisHighligth = true;
 					}
-
-					fixQuoteSelection(pHdr->hwndFrom, pSc);
 				}
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)

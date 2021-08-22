@@ -287,13 +287,16 @@ namespace tools {
 				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
 				SetWindowLong(hWnd, GWL_USERDATA, lParam);
 
-				SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
+				SendMessage(hWnd, WMU_SOURCE_UPDATED, 1, 0);
 				SetFocus(GetDlgItem(hWnd, IDC_DLG_TABLENAME));
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION), BST_CHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE), BST_CHECKED);
 			}
 			break;
 
+			// wParam = init flag to auto-detect separator
 			case WMU_SOURCE_UPDATED: {
-				const TCHAR* delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
+				const TCHAR* delimiter; // is defined on first line
 				int isUTF8 = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING)) == 0;
 				bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
 				HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
@@ -345,6 +348,29 @@ namespace tools {
 					TCHAR* line = csvReadLine(f);
 					int colNo = 0;
 
+					if (lineNo == 0) {
+						// delimiter auto-detection
+						if (wParam == 1) {
+							int dCount[4]{0};
+							int maxCount = 0;
+							for (int pos = 0; pos < (int)_tcslen(line); pos++) {
+								for (int i = 0; i < 4; i++) {
+									dCount[i] += line[pos] == DELIMITERS[i][0];
+									maxCount = maxCount < dCount[i] ? dCount[i] : maxCount;
+								}
+							}
+
+							for (int i = 0; i < 4; i++) {
+								if (dCount[i] == maxCount) {
+									ComboBox_SetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER), i);
+									break;
+								}
+							}
+						}
+
+						delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
+					}
+
 					TCHAR value[_tcslen(line)];
 					bool inQuotes = false;
 					int valuePos = 0;
@@ -374,18 +400,80 @@ namespace tools {
 
 				fclose(f);
 				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
+
+				if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION2)) == BST_CHECKED) {
+					HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAMES);
+					TCHAR tblname16[256];
+					GetWindowText(hTablesWnd, tblname16, 255);
+
+					ComboBox_ResetContent(hTablesWnd);
+					int colCount = Header_GetItemCount(ListView_GetHeader(hPreviewWnd));
+					char sql8[] = "select sm.name from sqlite_master sm, pragma_table_info(sm.name) ti " \
+						"where sm.type = 'table' and sm.name not like 'sqlite_%' " \
+						"group by sm.name having count(1) = ?1 order by 1";
+					sqlite3_stmt *stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+						sqlite3_bind_int(stmt, 1, colCount);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+							ComboBox_AddString(hTablesWnd, name16);
+							delete [] name16;
+						}
+					}
+					sqlite3_finalize(stmt);
+
+					int pos = MAX(ComboBox_FindStringExact(hTablesWnd, 0, tblname16), 0);
+					ComboBox_SetCurSel(hTablesWnd, pos);
+					GetWindowText(hTablesWnd, tblname16, 255);
+
+					HWND hHeader = ListView_GetHeader(hPreviewWnd);
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?1)", -1, &stmt, 0)) {
+						char* tblname8 = utils::utf16to8(tblname16);
+						sqlite3_bind_text(stmt, 1, tblname8, strlen(tblname8),  SQLITE_TRANSIENT);
+						delete [] tblname8;
+
+						int colNo = 0;
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+							Header_SetItemText(hHeader, colNo, name16);
+							delete [] name16;
+							colNo++;
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
 			}
 			break;
 
 			case WM_COMMAND: {
 				WORD id = LOWORD(wParam);
 				WORD cmd = HIWORD(wParam);
+				if (cmd == BN_CLICKED && id == IDC_DLG_IMPORT_ACTION) {
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLENAME), SW_SHOW);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLENAMES), SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISTRUNCATE), SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISREPLACE), SW_HIDE);
+					SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
+				}
+
+				if (cmd == BN_CLICKED && id == IDC_DLG_IMPORT_ACTION2) {
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLENAME), SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_TABLENAMES), SW_SHOW);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISTRUNCATE), SW_SHOW);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ISREPLACE), SW_SHOW);
+					SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
+				}
+
 				if ((cmd == CBN_SELCHANGE && id == IDC_DLG_ENCODING) ||
 					(cmd == CBN_SELCHANGE && id == IDC_DLG_DELIMITER) ||
 					(cmd == BN_CLICKED && id == IDC_DLG_ISCOLUMNS))
 					SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
 
 				if (wParam == IDC_DLG_OK) {
+					bool isNewTable = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION)) == BST_CHECKED;
+					bool isTruncate = !isNewTable && Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTRUNCATE)) == BST_CHECKED;
+					bool isReplace = !isNewTable && Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE)) == BST_CHECKED;
 					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
 					const TCHAR* delimiter = DELIMITERS[iDelimiter];
 					int iEncoding = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING));
@@ -398,13 +486,21 @@ namespace tools {
 					TCHAR tblname16[256]{0};
 					TCHAR create16[MAX_TEXT_LENGTH]{0};
 					TCHAR insert16[MAX_TEXT_LENGTH]{0};
-					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, tblname16, 255);
+					TCHAR delete16[MAX_TEXT_LENGTH]{0};
+					GetDlgItemText(hWnd, isNewTable ? IDC_DLG_TABLENAME : IDC_DLG_TABLENAMES, tblname16, 255);
+
+					if (_tcslen(tblname16) == 0)
+						return MessageBox(hWnd, TEXT("The table name is empty"), NULL, MB_OK);
+
+					if (isTruncate && MessageBox(hWnd, TEXT("All data from table will be erased. Continue?"), TEXT("Confirmation"), MB_OKCANCEL | MB_ICONASTERISK) != IDOK)
+						return true;
 
 					TCHAR* schema16 = utils::getName(tblname16, true);
 					TCHAR* tablename16 = utils::getName(tblname16);
 
 					_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
-					_stprintf(insert16, TEXT("insert into \"%ls\".\"%ls\" ("), schema16, tablename16);
+					_stprintf(insert16, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
+					_stprintf(delete16, TEXT("delete from \"%ls\".\"%ls\""), schema16, tablename16);
 
 					delete [] tablename16;
 					delete [] schema16;
@@ -448,7 +544,13 @@ namespace tools {
 
 					char* create8 = utils::utf16to8(create16);
 					char* insert8 = utils::utf16to8(insert16);
-					sqlite3_exec(db, create8, NULL, 0, NULL);
+					char* delete8 = utils::utf16to8(delete16);
+
+					if (isNewTable)
+						sqlite3_exec(db, create8, NULL, 0, NULL);
+
+					if (isTruncate)
+						sqlite3_exec(db, delete8, NULL, 0, NULL);
 
 					int lineNo = 0;
 					sqlite3_stmt *stmt;
@@ -505,11 +607,12 @@ namespace tools {
 							delete [] line16;
 						}
 					}
+					sqlite3_finalize(stmt);
+					fclose(f);
 
 					delete [] create8;
 					delete [] insert8;
-					sqlite3_finalize(stmt);
-					fclose(f);
+					delete [] delete8;
 
 					if (!rc)
 						showDbError(hWnd);
@@ -1964,6 +2067,58 @@ namespace tools {
 						DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
 						SetFocus(pHdr->hwndFrom);
 					}
+				}
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgForeignKeyCheck (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				char sql8[] = "with idx as ( " \
+					"select sm.name tbl_name, group_concat(ii.name, ', ') columns, count(1) cnt " \
+					"from sqlite_master sm, pragma_index_list(sm.name) i, pragma_index_info(i.name) ii " \
+					"group by sm.name, i.name) " \
+					"select sm.name || '.' || fk.\"from\" 'Foreign key', " \
+					"fk.\"table\" || '.' || fk.\"to\" 'Reference to', " \
+					"coalesce(ck.cnt, 0) 'Wrong refs', " \
+					"iif((select count(1) from idx where sm.\"name\" = idx.tbl_name and fk.\"from\" = idx.columns) > 0, 'Yes', 'No') 'Has index' " \
+					"from sqlite_master sm, pragma_foreign_key_list (sm.name) fk " \
+					"left join (select \"table\", parent, fkid, count(1) cnt from pragma_foreign_key_check () group by 1, 2, 3) ck " \
+					"on fk.id = ck.fkid and sm.\"name\" = ck.\"table\" and fk.\"table\" = ck.parent";
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0))
+					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_FOREIGN_KEY_CHECK), stmt);
+
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (pHdr->code == LVN_COLUMNCLICK && pHdr->idFrom == IDC_DLG_FOREIGN_KEY_CHECK) {
+					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
+					return ListView_Sort(pHdr->hwndFrom, pLV->iSubItem);
 				}
 			}
 			break;
