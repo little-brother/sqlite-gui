@@ -437,7 +437,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_TOOL_EXPORT_SQL DIALOGEX 50, 50, 174, 120
+IDD_TOOL_EXPORT_SQL DIALOGEX 50, 50, 174, 135
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Export structure and data to SQL file"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -447,9 +447,10 @@ BEGIN
 	AUTORADIOBUTTON "Structure and data", IDC_DLG_DATADDL, 5, 85, 80, 10, WS_TABSTOP
 	AUTORADIOBUTTON "Data", IDC_DLG_DATAONLY, 85, 85, 30, 10, WS_TABSTOP
 	AUTORADIOBUTTON "Structure", IDC_DLG_DDLONLY, 125, 85, 50, 10, WS_TABSTOP
+	AUTOCHECKBOX "Multiple rows per INSERT statement", IDC_DLG_MULTIPLE_INSERT, 5, 95, 170, 16, BS_NOTIFY
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 65, 102, 50, 14, 0
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 120, 102, 50, 14, 0
+	PUSHBUTTON "OK", IDC_DLG_OK, 65, 117, 50, 14, 0
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 120, 117, 50, 14, 0
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -492,7 +493,7 @@ BEGIN
 	LTEXT "", IDC_DLG_GEN_COLUMNS, 5, 45, 255, 230, SS_LEFT | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT
 
 	PUSHBUTTON "Generate rows", IDC_DLG_OK, 5, 282, 100, 14, 0
-	PUSHBUTTON "Close", IDC_DLG_CANCEL, 206, 282, 50, 14, 0
+	PUSHBUTTON "Close", IDC_DLG_CANCEL, 210, 282, 50, 14, 0
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -1043,10 +1044,12 @@ BEGIN
 
 	IDS_CLI_HELP "Terminal help\n" \
 		".help - Show help\n" \
-		".clear - Clear terminal\n"	\
+		".clear - Clear the terminal\n"	\
 		".last N - Load last N results\n" \
-		".get <name> - Get prefs value\n" \
-		".set <name> <value> - Set prefs value" \
+		".get <name> - Get the prefs value\n" \
+		".set <name> <value> - Set the prefs value\n" \
+		".import-csv <path> <table> - Import the csv file with default settings\n" \
+		".export-csv <path> <query> - Export an query result to the csv file with default settings" \
 
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"

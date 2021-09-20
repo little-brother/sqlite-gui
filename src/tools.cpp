@@ -68,14 +68,15 @@ namespace tools {
 					TCHAR query16[_tcslen(table16) + 128] = {0};
 					_stprintf(query16, TEXT("select * from \"%ls\""), table16);
 
-					if (exportCSV(path16, query16)) {
+					TCHAR err16[1024]{0};
+					if (exportCSV(path16, query16, err16) != -1) {
 						char* table8 = utils::utf16to8(table16);
 						prefs::set("csv-export-last-table", table8);
 						delete [] table8;
 
 						EndDialog(hWnd, DLG_OK);
 					} else {
-						MessageBox(hWnd, TEXT("Error occurred while export to file"), NULL, MB_OK);
+						MessageBox(hWnd, err16, NULL, MB_OK);
 					}
 				}
 
@@ -114,6 +115,8 @@ namespace tools {
 				}
 				sqlite3_finalize(stmt);
 
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_MULTIPLE_INSERT), prefs::get("sql-export-multiple-insert") ? BST_CHECKED : BST_UNCHECKED);
+
 				SetFocus(hListWnd);
 			}
 			break;
@@ -139,6 +142,7 @@ namespace tools {
 
 					bool isDDL = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DDLONLY));
 					bool isData = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATAONLY));
+					bool isMultipleInsert = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_MULTIPLE_INSERT));
 					bool rc = true;
 
 					if (isDDL) {
@@ -180,10 +184,13 @@ namespace tools {
 							sqlite3_stmt *stmt;
 							char* table8 = utils::utf16to8(table16);
 							char sql8[] = "select 'select ' || quote('insert into \"' || ?1 || '\" (\"' || group_concat(name, '\", \"') || '\") values (') || '||' || " \
-								"group_concat('quote(\"' || name || '\")', '|| '', '' || ') || '|| '');'' || char(10) from \"' || ?1 || '\"'" \
+								"group_concat('quote(\"' || name || '\")', '|| '', '' || ') || '|| '');'' || char(10) from \"' || ?1 || '\"' " \
+								"from pragma_table_info(?1) order by cid";
+							char sql8m[] = "select 'select ' || quote('insert into \"' || ?1 || '\" (\"' || group_concat(name, '\", \"') || '\") values ') || ' || group_concat(char(10) || ''(''||' ||  " \
+								"group_concat('quote(\"' || name || '\")', '|| '', '' || ') || '|| '')'', '', '') || '';'' || char(10) from \"' || ?1 || '\"' " \
 								"from pragma_table_info(?1) order by cid";
 
-							rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
+							rc = SQLITE_OK == sqlite3_prepare_v2(db, isMultipleInsert ? sql8m : sql8, -1, &stmt, 0);
 							if (rc) {
 								sqlite3_bind_text(stmt, 1, table8, strlen(table8),  SQLITE_TRANSIENT);
 
@@ -198,7 +205,11 @@ namespace tools {
 										fprintf(f, (const char*)sqlite3_column_text(stmt2, 0));
 										rowNo++;
 									}
-									fprintf(f, "-- %i rows\n\n", rowNo);
+
+									if (!isMultipleInsert)
+										fprintf(f, "-- %i rows\n\n", rowNo);
+									else
+										fprintf(f, "\n\n");
 
 									sqlite3_finalize(stmt2);
 								}
@@ -209,10 +220,12 @@ namespace tools {
 					}
 					fclose(f);
 
-					if (rc)
+					if (rc) {
+						prefs::set("sql-export-multiple-insert", isMultipleInsert);
 						EndDialog(hWnd, DLG_OK);
-					else
+					} else {
 						showDbError(hWnd);
+					}
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -351,18 +364,25 @@ namespace tools {
 					if (lineNo == 0) {
 						// delimiter auto-detection
 						if (wParam == 1) {
-							int dCount[4]{0};
+							int delimCount = 4;
+							int dCount[delimCount]{0};
 							int maxCount = 0;
+							bool inQuote = false;
 							for (int pos = 0; pos < (int)_tcslen(line); pos++) {
-								for (int i = 0; i < 4; i++) {
-									dCount[i] += line[pos] == DELIMITERS[i][0];
-									maxCount = maxCount < dCount[i] ? dCount[i] : maxCount;
+								TCHAR c = line[pos];
+
+								if (c == TEXT('"'))
+									inQuote = !inQuote;
+
+								for (int delimNo = 0; delimNo < delimCount && !inQuote; delimNo++) {
+									dCount[delimNo] += line[pos] == DELIMITERS[delimNo][0];
+									maxCount = maxCount < dCount[delimNo] ? dCount[delimNo] : maxCount;
 								}
 							}
 
-							for (int i = 0; i < 4; i++) {
-								if (dCount[i] == maxCount) {
-									ComboBox_SetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER), i);
+							for (int delimNo = 0; delimNo < delimCount; delimNo++) {
+								if (dCount[delimNo] == maxCount) {
+									ComboBox_SetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER), delimNo);
 									break;
 								}
 							}
@@ -471,161 +491,28 @@ namespace tools {
 					SendMessage(hWnd, WMU_SOURCE_UPDATED, 0, 0);
 
 				if (wParam == IDC_DLG_OK) {
-					bool isNewTable = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION)) == BST_CHECKED;
-					bool isTruncate = !isNewTable && Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTRUNCATE)) == BST_CHECKED;
-					bool isReplace = !isNewTable && Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE)) == BST_CHECKED;
-					int iDelimiter = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER));
-					const TCHAR* delimiter = DELIMITERS[iDelimiter];
-					int iEncoding = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING));
-					int isUTF8 = iEncoding == 0;
-					bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
-					HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
-					HWND hHeader = ListView_GetHeader(hPreviewWnd);
-					int colCount = Header_GetItemCount(hHeader);
-
-					TCHAR tblname16[256]{0};
-					TCHAR create16[MAX_TEXT_LENGTH]{0};
-					TCHAR insert16[MAX_TEXT_LENGTH]{0};
-					TCHAR delete16[MAX_TEXT_LENGTH]{0};
-					GetDlgItemText(hWnd, isNewTable ? IDC_DLG_TABLENAME : IDC_DLG_TABLENAMES, tblname16, 255);
-
-					if (_tcslen(tblname16) == 0)
-						return MessageBox(hWnd, TEXT("The table name is empty"), NULL, MB_OK);
-
+					bool isCreateTable = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION)) == BST_CHECKED;
+					bool isTruncate = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISTRUNCATE)) == BST_CHECKED;
 					if (isTruncate && MessageBox(hWnd, TEXT("All data from table will be erased. Continue?"), TEXT("Confirmation"), MB_OKCANCEL | MB_ICONASTERISK) != IDOK)
 						return true;
 
-					TCHAR* schema16 = utils::getName(tblname16, true);
-					TCHAR* tablename16 = utils::getName(tblname16);
+					TCHAR tblname16[256]{0};
+					GetDlgItemText(hWnd, isCreateTable ? IDC_DLG_TABLENAME : IDC_DLG_TABLENAMES, tblname16, 255);
 
-					_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
-					_stprintf(insert16, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
-					_stprintf(delete16, TEXT("delete from \"%ls\".\"%ls\""), schema16, tablename16);
+					prefs::set("csv-import-encoding", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_ENCODING)));
+					prefs::set("csv-import-delimiter", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER)));
+					prefs::set("csv-import-is-columns", +Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS)));
+					prefs::set("csv-import-is-create-table", isCreateTable);
+					prefs::set("csv-import-is-truncate", isTruncate);
+					prefs::set("csv-import-is-replace", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE)) == BST_CHECKED);
 
-					delete [] tablename16;
-					delete [] schema16;
-
-					auto catQuotted = [](TCHAR* a, TCHAR* b) {
-						_tcscat(a, TEXT("\""));
-						TCHAR* tb = utils::trim(b);
-						TCHAR* qb = utils::replaceAll(tb, TEXT("\""), TEXT("\\\""));
-						_tcscat(a, qb);
-						_tcscat(a, TEXT("\""));
-						delete [] qb;
-						delete [] tb;
-					};
-
-					for (int i = 0; i < colCount; i++) {
-						if (i != 0) {
-							_tcscat(create16, TEXT(", "));
-							_tcscat(insert16, TEXT(", "));
-						}
-
-						TCHAR buf16[256];
-						Header_GetItemText(hHeader, i, buf16, 255);
-						catQuotted(create16, buf16);
-						catQuotted(insert16, buf16);
-					}
-					_tcscat(create16, TEXT(");"));
-					_tcscat(insert16, TEXT(") values ("));
-					for (int i = 0; i < colCount; i++)
-						_tcscat(insert16, i != colCount - 1 ? TEXT("?, ") : TEXT("?);"));
-
-					TCHAR* path16 = (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA);
-					FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
-					if (f == NULL) {
-						MessageBox(hWnd, TEXT("Error to open file"), NULL, MB_OK);
-						return true;
-					}
-
-					bool isAutoTransaction = sqlite3_get_autocommit(db) > 0;
-					if (isAutoTransaction)
-						sqlite3_exec(db, "begin", NULL, 0, NULL);
-
-					char* create8 = utils::utf16to8(create16);
-					char* insert8 = utils::utf16to8(insert16);
-					char* delete8 = utils::utf16to8(delete16);
-
-					if (isNewTable)
-						sqlite3_exec(db, create8, NULL, 0, NULL);
-
-					if (isTruncate)
-						sqlite3_exec(db, delete8, NULL, 0, NULL);
-
-					int lineNo = 0;
-					sqlite3_stmt *stmt;
-					bool rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
-					if (rc) {
-						while(!feof (f)) {
-							TCHAR* line16 = csvReadLine(f);
-							if (lineNo == 0 && isColumns) {
-								lineNo++;
-								continue;
-							}
-
-							if (_tcslen(line16) == 0)
-								continue;
-
-							int colNo = 0;
-
-							TCHAR value[_tcslen(line16) + 1];
-							bool inQuotes = false;
-							int valuePos = 0;
-							int i = 0;
-							do {
-								value[valuePos++] = line16[i];
-
-								if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
-									value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
-									valuePos = 0;
-
-									TCHAR* tvalue16 = utils::trim(value);
-									char* value8 = utils::utf16to8(tvalue16);
-									utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
-									delete [] value8;
-									delete [] tvalue16;
-
-									colNo++;
-								}
-
-								if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
-									valuePos--;
-									inQuotes = !inQuotes;
-								}
-
-								if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
-									i++;
-
-							} while (line16[++i]);
-
-							for (int i = colNo; i < colCount; i++)
-								sqlite3_bind_null(stmt, i + 1);
-
-							rc = sqlite3_step(stmt) == SQLITE_DONE;
-							sqlite3_reset(stmt);
-							lineNo++;
-							delete [] line16;
-						}
-					}
-					sqlite3_finalize(stmt);
-					fclose(f);
-
-					delete [] create8;
-					delete [] insert8;
-					delete [] delete8;
-
-					if (!rc)
-						showDbError(hWnd);
-
-					if (isAutoTransaction)
-						sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
-
-					if (rc) {
-						prefs::set("csv-import-encoding", iEncoding);
-						prefs::set("csv-import-delimiter", iDelimiter);
-						prefs::set("csv-import-is-columns", +isColumns);
+					TCHAR err[1024]{0};
+					int rowCount = importCSV((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), tblname16, err);
+					if (rowCount != -1) {
 						_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), TEXT("%ls"), tblname16);
-						EndDialog(hWnd, lineNo - isColumns);
+						EndDialog(hWnd, rowCount);
+					} else {
+						MessageBox(hWnd, err, NULL, 0);
 					}
 				}
 
@@ -1765,6 +1652,7 @@ namespace tools {
 						ComboBox_AddString(hTypeWnd, TEXT("number"));
 						ComboBox_AddString(hTypeWnd, TEXT("date"));
 						ComboBox_AddString(hTypeWnd, TEXT("reference to"));
+						ComboBox_AddString(hTypeWnd, TEXT("expression"));
 
 						if (GENERATOR_TYPE[0])
 							ComboBox_AddString(hTypeWnd, TEXT(""));
@@ -1826,6 +1714,10 @@ namespace tools {
 					CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 90, 0, 86, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_COLUMN, GetModuleHandle(0), 0);
 					ComboBox_SetCurSel(hRefTableWnd, 0);
 					SendMessage(hWnd, WMU_REFTABLE_CHANGED, (WPARAM)hOptionWnd, (LPARAM)hRefTableWnd);
+				}
+
+				if (_tcscmp(buf16, TEXT("expression")) == 0) {
+					CreateWindow(WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | ES_LEFT | WS_TABSTOP, 0, 1, 195, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_EXPR, GetModuleHandle(0), 0);
 				}
 
 				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
@@ -1899,84 +1791,97 @@ namespace tools {
 						"insert into temp.data_generator (rownum) select val from series", rowCount);
 					execute(query8);
 
-					HWND hColumnWnd = GetWindow(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GW_CHILD);
+
 					char columns8[MAX_TEXT_LENGTH]{0};
 
 					bool rc = true;
-					while(IsWindow(hColumnWnd) && rc){
-						TCHAR name16[128]{0};
-						GetDlgItemText(hColumnWnd, IDC_DLG_GEN_COLUMN_NAME, name16, 127);
-						char* name8 = utils::utf16to8(name16);
-						if (strlen(columns8) > 0)
-							strcat(columns8, ", ");
-						strcat(columns8, name8);
-						delete [] name8;
+					for (int isExpr = 0; isExpr < 2; isExpr++) {
+						HWND hColumnWnd = GetWindow(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GW_CHILD);
 
-						HWND hTypeWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_COLUMN_TYPE);
-						HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
-						TCHAR type16[128]{0};
-						GetWindowText(hTypeWnd, type16, 127);
-						TCHAR query16[MAX_TEXT_LENGTH]{0};
+						while(IsWindow(hColumnWnd) && rc){
+							TCHAR name16[128]{0};
+							GetDlgItemText(hColumnWnd, IDC_DLG_GEN_COLUMN_NAME, name16, 127);
+							char* name8 = utils::utf16to8(name16);
+							if (strlen(columns8) > 0)
+								strcat(columns8, ", ");
+							strcat(columns8, name8);
+							delete [] name8;
 
-						if (_tcscmp(type16, TEXT("sequence")) == 0) {
-							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
-							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = rownum + %i - 1"), name16, start);
+							HWND hTypeWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_COLUMN_TYPE);
+							HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
+							TCHAR type16[128]{0};
+							GetWindowText(hTypeWnd, type16, 127);
+							TCHAR query16[MAX_TEXT_LENGTH]{0};
+
+							if (!isExpr && _tcscmp(type16, TEXT("sequence")) == 0) {
+								int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
+								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = rownum + %i - 1"), name16, start);
+							}
+
+							if (!isExpr && _tcscmp(type16, TEXT("number")) == 0) {
+								int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
+								int end = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_END);
+								TCHAR multi[32]{0};
+								GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER, multi, 31);
+								TCHAR* multi2 = utils::replace(multi, TEXT(","), TEXT("."));
+
+								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %ls"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
+								delete [] multi2;
+							}
+
+							if (!isExpr && _tcscmp(type16, TEXT("reference to")) == 0) {
+								TCHAR reftable16[256]{0};
+								GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_TABLE, reftable16, 255);
+
+								TCHAR refcolumn16[256]{0};
+								GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
+
+								_stprintf(query16, TEXT("with t as (select %ls value from \"%ls\" order by random()), " \
+									"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
+									"t2 as (select t.value FROM t, series order by random()), " \
+									"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
+									"update temp.data_generator set \"%ls\" = t3.value from t3 where t3.rownum = temp.data_generator.rownum"),
+									refcolumn16, reftable16, rowCount, rowCount, name16);
+							}
+
+							if (!isExpr && _tcscmp(type16, TEXT("date")) == 0) {
+								SYSTEMTIME start = {0}, end = {0};
+								DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_START), &start);
+								DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_END), &end);
+
+								TCHAR start16[32] = {0};
+								_stprintf(start16, TEXT("%i-%0*i-%0*i"), start.wYear, 2, start.wMonth, 2, start.wDay);
+
+								TCHAR end16[32] = {0};
+								_stprintf(end16, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
+
+								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = date('%ls', '+' || ((strftime('%%s', '%ls', '+1 day', '-1 second') - strftime('%%s', '%ls')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
+									name16, start16, end16, start16);
+							}
+
+							if (isExpr && _tcscmp(type16, TEXT("expression")) == 0) {
+								HWND hExpressionWnd = GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_EXPR);
+								int size = GetWindowTextLength(hExpressionWnd);
+								TCHAR expr16[size + 1]{0};
+								GetWindowText(hExpressionWnd, expr16, size + 1);
+
+								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = %ls"), name16, expr16);
+							}
+
+							if (!isExpr && ComboBox_GetCurSel(hTypeWnd) > 5) {
+								_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
+									"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
+									"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
+									"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
+									type16, rowCount, rowCount, name16);
+							}
+
+							char* query8 = utils::utf16to8(query16);
+							rc = execute(query8);
+							delete [] query8;
+
+							hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
 						}
-
-						if (_tcscmp(type16, TEXT("number")) == 0) {
-							int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
-							int end = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_END);
-							TCHAR multi[32]{0};
-							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER, multi, 31);
-							TCHAR* multi2 = utils::replace(multi, TEXT(","), TEXT("."));
-
-							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %ls"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
-							delete [] multi2;
-						}
-
-						if (_tcscmp(type16, TEXT("reference to")) == 0) {
-							TCHAR reftable16[256]{0};
-							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_TABLE, reftable16, 255);
-
-							TCHAR refcolumn16[256]{0};
-							GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
-
-							_stprintf(query16, TEXT("with t as (select %ls value from \"%ls\" order by random()), " \
-								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
-								"t2 as (select t.value FROM t, series order by random()), " \
-								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
-								"update temp.data_generator set \"%ls\" = t3.value from t3 where t3.rownum = temp.data_generator.rownum"),
-								refcolumn16, reftable16, rowCount, rowCount, name16);
-						}
-
-						if (_tcscmp(type16, TEXT("date")) == 0) {
-							SYSTEMTIME start = {0}, end = {0};
-							DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_START), &start);
-							DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_END), &end);
-
-							TCHAR start16[32] = {0};
-							_stprintf(start16, TEXT("%i-%0*i-%0*i"), start.wYear, 2, start.wMonth, 2, start.wDay);
-
-							TCHAR end16[32] = {0};
-							_stprintf(end16, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
-
-							_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = date('%ls', '+' || ((strftime('%%s', '%ls', '+1 day', '-1 second') - strftime('%%s', '%ls')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
-								name16, start16, end16, start16);
-						}
-
-						if (ComboBox_GetCurSel(hTypeWnd) > 4) {
-							_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
-								"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
-								"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
-								"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
-								type16, rowCount, rowCount, name16);
-						}
-
-						char* query8 = utils::utf16to8(query16);
-						rc = execute(query8);
-						delete [] query8;
-
-						hColumnWnd = GetWindow(hColumnWnd, GW_HWNDNEXT);
 					}
 
 					if (!rc) {
@@ -2063,8 +1968,7 @@ namespace tools {
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 1, name16, 255);
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 2, type16, 255);
 					if (_tcscmp(type16, TEXT("table")) == 0) {
-						_stprintf(editTableData16, TEXT("%ls"), name16);
-						DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
+						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)name16);
 						SetFocus(pHdr->hwndFrom);
 					}
 				}
@@ -2299,7 +2203,156 @@ namespace tools {
 		return true;
 	}
 
-	bool exportCSV(TCHAR* path16, TCHAR* query16) {
+	int importCSV(TCHAR* path16, TCHAR* tblname16, TCHAR* err16) {
+		if (_tcslen(tblname16) == 0) {
+			_stprintf(err16, TEXT("The table name is empty"));
+			return -1;
+		}
+
+		bool isColumns = prefs::get("csv-import-is-columns");
+		bool isUTF8 = prefs::get("csv-import-encoding") == 0;
+		bool isCreateTable = prefs::get("csv-import-is-create-table");
+		bool isTruncate = !isCreateTable && prefs::get("csv-import-is-truncate");
+		bool isReplace = !isCreateTable && prefs::get("csv-import-is-replace");
+		int iDelimiter = prefs::get("csv-import-delimiter");
+		const TCHAR* delimiter = DELIMITERS[iDelimiter];
+
+		FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
+		if (f == NULL) {
+			_stprintf(err16, TEXT("Error to open file: %s"), path16);
+			return -1;
+		}
+
+		TCHAR create16[MAX_TEXT_LENGTH]{0};
+		TCHAR insert16[MAX_TEXT_LENGTH]{0};
+		TCHAR delete16[MAX_TEXT_LENGTH]{0};
+
+		TCHAR* schema16 = utils::getName(tblname16, true);
+		TCHAR* tablename16 = utils::getName(tblname16);
+
+		_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
+		_stprintf(insert16, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
+		_stprintf(delete16, TEXT("delete from \"%ls\".\"%ls\""), schema16, tablename16);
+
+		delete [] tablename16;
+		delete [] schema16;
+
+		auto catQuotted = [](TCHAR* a, TCHAR* b) {
+			_tcscat(a, TEXT("\""));
+			TCHAR* tb = utils::trim(b);
+			TCHAR* qb = utils::replaceAll(tb, TEXT("\""), TEXT("\\\""));
+			_tcscat(a, qb);
+			_tcscat(a, TEXT("\""));
+			delete [] qb;
+			delete [] tb;
+		};
+
+		int colCount = 1;
+		TCHAR* header16 = csvReadLine(f);
+		TCHAR* colname16 = _tcstok(header16, delimiter);
+		while (colname16 != NULL) {
+			if (colCount != 1) {
+				_tcscat(create16, TEXT(", "));
+				_tcscat(insert16, TEXT(", "));
+			}
+
+			catQuotted(create16, colname16);
+			catQuotted(insert16, colname16);
+
+			colname16 = _tcstok(NULL, delimiter);
+			colCount++;
+		}
+		delete [] header16;
+		rewind(f);
+
+		_tcscat(create16, TEXT(");"));
+		_tcscat(insert16, TEXT(") values ("));
+		for (int i = 1; i < colCount; i++)
+			_tcscat(insert16, i != colCount - 1 ? TEXT("?, ") : TEXT("?);"));
+
+		bool isAutoTransaction = sqlite3_get_autocommit(db) > 0;
+		if (isAutoTransaction)
+			sqlite3_exec(db, "begin", NULL, 0, NULL);
+
+		char* create8 = utils::utf16to8(create16);
+		char* insert8 = utils::utf16to8(insert16);
+		char* delete8 = utils::utf16to8(delete16);
+
+		if (isCreateTable)
+			sqlite3_exec(db, create8, NULL, 0, NULL);
+
+		if (isTruncate)
+			sqlite3_exec(db, delete8, NULL, 0, NULL);
+
+		int lineNo = 0;
+		sqlite3_stmt *stmt;
+		bool rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
+		if (rc) {
+			while(!feof (f)) {
+				TCHAR* line16 = csvReadLine(f);
+				if (lineNo == 0 && isColumns) {
+					lineNo++;
+					continue;
+				}
+
+				if (_tcslen(line16) == 0)
+					continue;
+
+				int colNo = 0;
+
+				TCHAR value[_tcslen(line16) + 1];
+				bool inQuotes = false;
+				int valuePos = 0;
+				int i = 0;
+				do {
+					value[valuePos++] = line16[i];
+
+					if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
+						value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
+						valuePos = 0;
+
+						TCHAR* tvalue16 = utils::trim(value);
+						char* value8 = utils::utf16to8(tvalue16);
+						utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+						delete [] value8;
+						delete [] tvalue16;
+
+						colNo++;
+					}
+
+					if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
+						valuePos--;
+						inQuotes = !inQuotes;
+					}
+
+					if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
+						i++;
+
+				} while (line16[++i]);
+
+				for (int i = colNo; i < colCount; i++)
+					sqlite3_bind_null(stmt, i + 1);
+
+				rc = sqlite3_step(stmt) == SQLITE_DONE;
+				sqlite3_reset(stmt);
+				lineNo++;
+				delete [] line16;
+			}
+		}
+		sqlite3_finalize(stmt);
+		fclose(f);
+
+		delete [] create8;
+		delete [] insert8;
+		delete [] delete8;
+
+		if (isAutoTransaction)
+			sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
+
+		return lineNo - isColumns;
+	}
+
+	int exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16) {
 		bool isColumns = prefs::get("csv-export-is-columns");
 		int iDelimiter = prefs::get("csv-export-delimiter");
 		int isUnixNewLine = prefs::get("csv-export-is-unix-line");
@@ -2309,9 +2362,12 @@ namespace tools {
 		// Use binary mode
 		// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
 		FILE* f = _tfopen(path16, TEXT("wb"));
-		if (f == NULL)
-			return false;
+		if (f == NULL) {
+			_stprintf(err16, TEXT("Error to open file: %s"), path16);
+			return -1;
+		}
 
+		int rowCount = 0;
 		char* sql8 = utils::utf16to8(query16);
 		sqlite3_stmt *stmt;
 		if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
@@ -2347,14 +2403,21 @@ namespace tools {
 				char* line8 = utils::utf16to8(line16);
 				fprintf(f, line8);
 				delete [] line8;
+				rowCount += !isColumns;
 				isColumns = false;
 			}
+		} else {
+			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
+			_stprintf(err16, _err16);
+			delete [] _err16;
+			rowCount = -1;
 		}
+
 		sqlite3_finalize(stmt);
 		fclose(f);
 		delete [] sql8;
 
-		return true;
+		return rowCount;
 	}
 
 	bool importSqlFile(TCHAR *path16){
@@ -2423,10 +2486,8 @@ namespace tools {
 			TCHAR table16[255]{0};
 			GetWindowText(hWnd, table16, 255);
 
-			if (wParam == IDM_EDIT_DATA) {
-				_tcscpy(editTableData16, table16);
-				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData);
-			}
+			if (wParam == IDM_EDIT_DATA)
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)table16);
 
 			if (wParam == IDM_DDL) {
 				TCHAR* DDL = getDDL(table16, TABLE, false);

@@ -49,7 +49,6 @@ HTREEITEM treeItems[5]; // 0 - current
 TCHAR treeEditName[255];
 HMENU treeMenus[IDC_MENU_DISABLED]{0};
 
-TCHAR editTableData16[255]; // filled on DataEdit Dialog; app buffer
 TCHAR searchString[255]{0};
 DWORD doubleClickTick = 0; // issue #68
 
@@ -183,15 +182,39 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	if (strlen(lpCmdLine)) {
 		int nArgs = 0;
 		TCHAR** args = CommandLineToArgvW(GetCommandLine(), &nArgs);
-		if (nArgs == 3) {
+		// 1. sqlite-gui dbpath tblname
+		// 2. sqlite-gui dbpath import-csv csv-path tblname
+		if (nArgs == 3 || (nArgs == 5 && _tcscmp(args[2], TEXT("import-csv")) == 0) || (nArgs == 5 && _tcscmp(args[2], TEXT("export-csv")) == 0)) {
 			if (openDb(args[1])) {
-				_stprintf(editTableData16, TEXT("%ls"), args[2]);
-				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData);
+				if (nArgs == 3)
+					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hMainWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)args[2]);
+
+				if (nArgs == 5 && _tcscmp(args[2], TEXT("import-csv")) == 0) {
+					TCHAR err16[1024];
+					int rowCount = tools::importCSV(args[3], args[4], err16);
+					if (rowCount != -1)
+						_tprintf(TEXT("Done. Imported %i rows."), rowCount);
+					else
+						_tprintf(TEXT("%s"), err16);
+				}
+
+				if (nArgs == 5 && _tcscmp(args[2], TEXT("export-csv")) == 0) {
+					TCHAR err16[1024];
+					int rowCount = tools::exportCSV(args[3], args[4], err16);
+					if (rowCount != -1)
+						_tprintf(TEXT("Done. Exported %i rows."), rowCount);
+					else
+						_tprintf(TEXT("%s"), err16);
+				}
+			} else {
+				_tprintf(TEXT("Error to open database: %s\n"), args[1]);
 			}
+
 			closeDb();
 			sqlite3_shutdown();
 			return 0;
 		}
+		LocalFree(args);
 	}
 
 	MSG msg;
@@ -1030,8 +1053,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, tabNo, 0);
 					SendMessage(hMainTabWnd, WMU_TAB_SET_TEXT, tabNo, (WPARAM)name16);
 
-					bool isQ = false;
-					for (int i = 0; i < (int)_tcslen(name16); i++)
+					bool isQ = !_istalpha(name16[0]);
+					for (int i = 0; !isQ && (i < (int)_tcslen(name16)); i++)
 						isQ = isQ || !(_istalnum(name16[i]) || name16[i] == TEXT('_'));
 
 					_stprintf(query, TEXT("select * from %ls%ls%ls;\n"), isQ ? TEXT("\"") : TEXT(""), name16, isQ ? TEXT("\"") : TEXT(""));
@@ -1041,17 +1064,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					SetFocus(hEditorWnd);
 
 					executeEditorQuery();
-					SendMessage(hMainWnd, WM_SIZE, 0, 0);
 					TabCtrl_SetCurFocus(hTabWnd, TabCtrl_GetItemCount(hTabWnd) - 1);
-
-					SetFocus(hEditorWnd);
 					return 1;
 				}
 
-				if (cmd == IDM_EDIT_DATA) {
-					_stprintf(editTableData16, (_tcschr(name16, TEXT('.')) == NULL) ? TEXT("%ls") : TEXT("\"%ls\""), name16);
-					openDialog(IDD_EDITDATA, (DLGPROC)&dialogs::cbDlgEditData);
-				}
+				if (cmd == IDM_EDIT_DATA)
+					openDialog(IDD_EDITDATA, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)name16);
 
 				if (cmd == IDM_ERASE_DATA) {
 					TCHAR query16[256 + _tcslen(name16)];
@@ -1110,7 +1128,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						if (DLG_OK != DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable, (LPARAM)name16))
 							return false;
 					} else {
-						openDialog(IDD_ADDEDIT, (DLGPROC)&dialogs::cbDlgAddEdit, MAKELPARAM(IDM_ADD, type));
+						TCHAR buf16[2]{MAKEWORD(0, type), 0};
+						openDialog(IDD_ADDEDIT, (DLGPROC)&dialogs::cbDlgAddEdit, (LPARAM)buf16);
 						return true;
 					}
 				}
@@ -1184,8 +1203,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if(!TreeView_GetItem(hTreeWnd, &tv) || !tv.lParam || tv.lParam == COLUMN)
 						return 0;
 
-					_stprintf(editTableData16, TEXT("%ls"), name16);
-					openDialog(IDD_ADDEDIT, (DLGPROC)&dialogs::cbDlgAddEdit, MAKELPARAM(IDM_EDIT, type));
+					TCHAR buf16[_tcslen(name16) + 2];
+					_stprintf(buf16, TEXT(" %ls"), name16);
+					buf16[0] = MAKEWORD(1, type);
+					openDialog(IDD_ADDEDIT, (DLGPROC)&dialogs::cbDlgAddEdit, (LPARAM)buf16);
 					return true;
 				}
 
@@ -1683,13 +1704,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				rewind(f);
 
 				if (size > 0) {
-					TCHAR* data16 = new TCHAR[size]{0};
+					TCHAR data16[size + 1]{0};
 					fread(data16, size, sizeof(TCHAR), f);
 
 					int pos = ((ENDROPFILES*)lParam)->cp;
 					SendMessage(pHdr->hwndFrom, EM_SETSEL, pos, pos);
 					SendMessage(pHdr->hwndFrom, EM_REPLACESEL, true, (LPARAM)data16);
-					delete [] data16;
 				} else {
 					MessageBox(0, TEXT("Only text files are supported"), 0, MB_OK);
 				}
@@ -2140,8 +2160,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 						if (!isHint && sqlite3_column_int(stmt, 0) > 0) {
 							result16[0] = 0;
-							_sntprintf(editTableData16, 255, TEXT("%ls"), text);
-							openDialog(IDD_EDITDATA, dialogs::cbDlgEditData);
+							openDialog(IDD_EDITDATA, dialogs::cbDlgEditData, (LPARAM)text);
 						}
 					}
 				}
@@ -2395,6 +2414,43 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 	return (order ? 1 : -1) * (isNum ? (num > num2 ? 1 : -1) : _tcscoll(buf, buf2));
 }
 
+void onCLIQueryEnd(TCHAR* sql16, TCHAR* result16, bool isSave, int elapsed) {
+	if (_tcslen(result16) > 0) {
+		_tcscat(result16, TEXT("\n\n============================================================\n\n"));
+		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
+
+		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n\n"));
+		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
+	}
+	SetWindowText(cli.hEditorWnd, 0);
+
+	if (isSave) {
+		sqlite3_stmt* stmt;
+		if(SQLITE_OK == sqlite3_prepare_v2(prefs::db, "insert into cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
+			char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+			sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+			delete [] dbname8;
+
+			char* sql8 = utils::utf16to8(sql16);
+			sqlite3_bind_text(stmt, 2, sql8, strlen(sql8), SQLITE_TRANSIENT);
+			delete [] sql8;
+
+			sqlite3_bind_int(stmt, 3, elapsed);
+
+			char* result8 = utils::utf16to8(result16);
+			sqlite3_bind_text(stmt, 4, result8, strlen(result8), SQLITE_TRANSIENT);
+			delete [] result8;
+
+			if (SQLITE_DONE != sqlite3_step(stmt))
+				showDbError(hMainWnd);
+		}
+		sqlite3_finalize(stmt);
+	}
+}
+
 unsigned int __stdcall processCliQuery (void* data) {
 	updateExecuteMenu(false);
 	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_ENABLED);
@@ -2530,46 +2586,13 @@ unsigned int __stdcall processCliQuery (void* data) {
 	sqlite3_finalize(stmt);
 
 	if (rc != SQLITE_OK) {
-		const char* msg8 = sqlite3_errmsg(db);
+		const char* msg8 = sqlite3_errmsg(cli.db);
 		TCHAR* msg16 = utils::utf8to16(msg8);
 		_stprintf(result16, TEXT("Error: %ls"), msg16);
 		delete [] msg16;
 	}
 
-	if (_tcslen(result16)) {
-		_tcscat(result16, TEXT("\n\n============================================================\n\n"));
-		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
-
-		if (rc == SQLITE_OK) {
-			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n"));
-			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
-			SetWindowText(cli.hEditorWnd, 0);
-
-			if(SQLITE_OK == sqlite3_prepare_v2(prefs::db, "insert into cli (time, dbname, query, elapsed, result) values (strftime('%s', 'now'), ?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
-				char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
-				sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
-				delete [] dbname8;
-
-				char* sql8 = utils::utf16to8(sql16);
-				sqlite3_bind_text(stmt, 2, sql8, strlen(sql8), SQLITE_TRANSIENT);
-				delete [] sql8;
-
-				sqlite3_bind_int(stmt, 3, elapsed);
-
-				char* result8 = utils::utf16to8(result16);
-				sqlite3_bind_text(stmt, 4, result8, strlen(result8), SQLITE_TRANSIENT);
-				delete [] result8;
-
-				if (SQLITE_DONE != sqlite3_step(stmt))
-					showDbError(hMainWnd);
-			}
-			sqlite3_finalize(stmt);
-		}
-	}
-
+	onCLIQueryEnd(sql16, result16, rc == SQLITE_OK, elapsed);
 	delete [] sql8;
 
 	RedrawWindow(cli.hResultWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME);
@@ -2595,86 +2618,91 @@ int executeCLIQuery(bool isPlan) {
 	TCHAR sql16[size + 1] = {0};
 	GetWindowText(cli.hEditorWnd, sql16, size + 1);
 	if (sql16[0] == TEXT('.')) {
-		if (_tcscmp(sql16, TEXT(".clear")) == 0) {
+		int nArgs = 0;
+		TCHAR** args = CommandLineToArgvW(sql16, &nArgs);
+		bool isSave = true;
+		TCHAR result16[MAX_TEXT_LENGTH]{0};
+		if (_tcscmp(args[0], TEXT(".clear")) == 0) {
 			SetWindowText(cli.hResultWnd, NULL);
-		} else if (_tcsstr(sql16, TEXT(".last ")) != NULL) {
-			int cnt = _ttoi(sql16 + 6);
-			SetWindowText(cli.hResultWnd, NULL);
+		} else if (_tcscmp(args[0], TEXT(".last")) == 0) {
+			int cnt = _ttoi(args[1]);
 			loadCLIResults(cnt);
-		} else if (_tcsstr(sql16, TEXT(".set ")) == sql16) {
-			TCHAR result16[MAX_TEXT_LENGTH];
-			_stprintf(result16, TEXT("%ls\n\n"), sql16);
+			isSave = false;
+		} else if (_tcscmp(args[0], TEXT(".set")) == 0 && nArgs >= 3) {
+			TCHAR* name16 = args[1];
+			TCHAR* value16 = args[2];
+			char* name8 = utils::utf16to8(name16);
+			char* value8 = utils::utf16to8(value16);
 
-			int len = _tcslen(sql16);
-			if (len > 5) {
-				int npos = 5;
-				while (npos < len && sql16[npos] == TEXT(' '))
-					npos++;
+			_stprintf(result16, prefs::set(name8, _ttoi(value16)) || prefs::set(name8, value8, true) ? TEXT("Done: %ls = %ls") : TEXT("Error: invalid name %ls for value %ls"), name16, value16);
 
-				int vpos = npos;
-				while (vpos < len && sql16[vpos] != TEXT(' '))
-					vpos++;
-				vpos++;
-
-				TCHAR name16[len]{0}, value16[len]{0};
-				_tcsncpy(name16, sql16 + npos, vpos - npos - 1);
-				_tcsncpy(value16, sql16 + vpos, len - vpos + 1);
-
-				char* name8 = utils::utf16to8(name16);
-				char* value8 = utils::utf16to8(value16);
-
-				_stprintf(result16, prefs::set(name8, _ttoi(value16)) || prefs::set(name8, value8, true) ? TEXT("%ls\n\nDone: %ls = %ls") : TEXT("%ls\n\nError: invalid name %ls for value %ls"), sql16, name16, value16);
-
-				delete [] name8;
-				delete [] value8;
-			} else {
-				_tcscat(result16, TEXT("Usage: .set <name> <value>"));
-			}
-
-			_tcscat(result16, TEXT("\n\n============================================================\n\n"));
-			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
-		} else if (_tcsstr(sql16, TEXT(".get ")) == sql16 || _tcscmp(sql16, TEXT(".get")) == 0) {
-			TCHAR result16[MAX_TEXT_LENGTH];
-			_stprintf(result16, TEXT("%ls\n\n"), sql16);
-
+			delete [] name8;
+			delete [] value8;
+		} else if (_tcscmp(args[0], TEXT(".set")) == 0 && nArgs < 3) {
+			isSave = false;
+			_tcscat(result16, TEXT("Error: incorrect input\nUsage: .set <name> <value>"));
+		} else if (_tcscmp(args[0], TEXT(".get")) == 0) {
 			sqlite3_stmt* stmt;
 			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name, value from prefs where name = coalesce(trim(?1), name) and name not like 'editor-%' order by 1", -1, &stmt, 0)) {
-				if (_tcslen(sql16) > 5) {
-					char* name8 = utils::utf16to8(sql16 + 5);
+				if (nArgs > 1) {
+					char* name8 = utils::utf16to8(args[1]);
 					sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
 					delete [] name8;
 				}
 
+				int paramNo = 0;
 				while(SQLITE_ROW == sqlite3_step(stmt)) {
 					const char* name8 = (const char*)sqlite3_column_text(stmt, 0);
 					const char* value8 = (const char*)sqlite3_column_text(stmt, 1);
 					int value = prefs::get(name8);
 					char buf8[strlen(name8) + strlen(value8) + 10];
 					if (value == -1)
-						sprintf(buf8, "%s: %s\n", name8, value8);
+						sprintf(buf8, "%s: %s", name8, value8);
 					else
-						sprintf(buf8, "%s: %i\n", name8, value);
+						sprintf(buf8, "%s: %i", name8, value);
+
 					TCHAR* buf16 = utils::utf8to16(buf8);
+					if (paramNo > 0)
+						_tcscat(result16, TEXT("\n"));
 					_tcscat(result16, buf16);
 					delete [] buf16;
+
+					paramNo++;
 				}
 			}
 			sqlite3_finalize(stmt);
-
-			_tcscat(result16, TEXT("\n\n============================================================\n\n"));
-			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
+			isSave = _tcslen(sql16) > 5;
+		} else if (_tcscmp(args[0], TEXT(".import-csv")) == 0 && nArgs == 3) {
+			TCHAR err16[1024];
+			int rowCount = tools::importCSV(args[1], args[2], err16);
+			if (rowCount != -1)	{
+				_stprintf(result16, TEXT("Done. Imported %i rows."), rowCount);
+			} else {
+				isSave = false;
+				_stprintf(result16, err16);
+			}
+		} else if (_tcscmp(args[0], TEXT(".import-csv")) == 0 && nArgs != 3) {
+			isSave = false;
+			_tcscat(result16, TEXT("Error: incorrect input\nUsage: .import-csv <path> <table>\nUse quotes to mask spaces e.g.\n.import-csv \"D:\\my data\\my file.csv\" \"my table\""));
+		} else if (_tcscmp(args[0], TEXT(".export-csv")) == 0 && nArgs == 3) {
+			TCHAR err16[1024];
+			int rowCount = tools::exportCSV(args[1], args[2], err16);
+			if (rowCount != -1)	{
+				_stprintf(result16, TEXT("Done. Exported %i rows."), rowCount);
+			} else {
+				isSave = false;
+				_stprintf(result16, err16);
+			}
+		} else if (_tcscmp(args[0], TEXT(".export-csv")) == 0 && nArgs != 3) {
+			isSave = false;
+			_tcscat(result16, TEXT("Error: incorrect input\nUsage: .export-csv <path> <query>\nUse quotes to mask spaces e.g.\n.export-csv \"D:\\my data\\my file.csv\" \"select * from t\""));
 		} else {
-			TCHAR buf[MAX_TEXT_LENGTH];
-			LoadString(GetModuleHandle(NULL), IDS_CLI_HELP, buf, MAX_TEXT_LENGTH);
-			_tcscat(buf, TEXT("\n\n============================================================\n\n"));
-			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)buf);
+			isSave = false;
+			LoadString(GetModuleHandle(NULL), IDS_CLI_HELP, result16, MAX_TEXT_LENGTH);
 		}
 
-		SetWindowText(cli.hEditorWnd, NULL);
-		SetFocus(cli.hEditorWnd);
+		onCLIQueryEnd(sql16, result16, isSave, 0);
+		LocalFree(args);
 		return 0;
 	}
 
@@ -2822,8 +2850,10 @@ unsigned int __stdcall processEditorQuery (void* data) {
 				rc = sqlite3_errcode(_tab.db);
 				if (rc != SQLITE_OK && rc != SQLITE_DONE && rowCount == 0)
 					hResultWnd = 0;
-				else
+				else {
+					// ListView_SetExtendedListViewStyle(hResultWnd, ListView_GetExtendedListViewStyle(hResultWnd) | LVS_EX_HEADERDRAGDROP);
 					ListView_SetItemState (hResultWnd, 0, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+				}
 			}
 
 			if (hResultWnd == 0) {
@@ -3162,7 +3192,7 @@ void loadCLIResults(int cnt) {
 	sqlite3_stmt *stmt;
 	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
 		"with t as ("\
-		"select query || char(10) || result a from cli order by time desc limit ?2) " \
+		"select query || char(10) || char(10) || result a from cli order by time desc limit ?2) " \
 		"select group_concat(a, '') from t", -1, &stmt, 0)) {
 		char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
 		sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
@@ -4228,6 +4258,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	}
 
 	ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_LABELTIP);
+
 	for (int i = 1; i <= colCount; i++) {
 		ListView_SetColumnWidth(hListWnd, i, LVSCW_AUTOSIZE_USEHEADER);
 		int w = ListView_GetColumnWidth(hListWnd, i);
@@ -4335,8 +4366,9 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 
 		if (rowCount == prefs::get("row-limit")) {
 			int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
-			if (!tools::exportCSV(path16, *tabs[tabNo].tabTooltips))
-				MessageBox(hMainWnd, TEXT("Error occurred while export to file"), NULL, MB_OK);
+			TCHAR err16[1024];
+			if (tools::exportCSV(path16, *tabs[tabNo].tabTooltips, err16) == -1)
+				MessageBox(hMainWnd, err16, NULL, MB_OK);
 			else
 				MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
 			return true;
@@ -5981,19 +6013,33 @@ bool pasteText (HWND hEditorWnd) {
 	// Is clipboard contain tab-table?
 	bool isTableData = false;
 	if (hParentWnd == hMainWnd) {
-		int colCount1[4]{0};
-		int colCount2[4]{0};
-		int pos;
-		for (pos = 0; pos < len && clipboard[pos] != TEXT('\n'); pos++)
-			for (int i = 0; i < 4; i++)
-				colCount1[i] += clipboard[pos] == tools::DELIMITERS[i][0];
+		int rowCount = 2;
+		int delimCount = 4;
+		int colCount[rowCount][delimCount];
+		memset(colCount, 0, sizeof(int) * (size_t)(rowCount * delimCount));
+		int pos = 0;
+		bool inQuote = false;
 
-		for (pos = pos + 1; pos < len && clipboard[pos] != TEXT('\n'); pos++)
-			for (int i = 0; i < 4; i++)
-				colCount2[i] += clipboard[pos] == tools::DELIMITERS[i][0];
+		for (int rowNo = 0; rowNo < rowCount && pos < len; rowNo++) {
+			for (; pos < len; pos++) {
+				TCHAR c = clipboard[pos];
+				if (!inQuote && c == TEXT('\n'))
+					break;
 
-		for (int i = 0; i < 4; i++)
-			isTableData = isTableData || (colCount1[i] > 0 && colCount1[i] == colCount2[i]);
+				if (c == TEXT('"'))
+					inQuote = !inQuote;
+
+				for (int delimNo = 0; delimNo < delimCount && !inQuote; delimNo++)
+					colCount[rowNo][delimNo] += clipboard[pos] == tools::DELIMITERS[delimNo][0];
+			}
+			pos++;
+		}
+
+		for (int delimNo = 0; delimNo < delimCount && !isTableData; delimNo++) {
+			isTableData = colCount[0][delimNo] > 0;
+			for (int rowNo = 1; rowNo < rowCount; rowNo++)
+				isTableData = isTableData && colCount[0][delimNo] == colCount[rowNo][delimNo];
+		}
 	}
 
 	if (isTableData) {
@@ -6498,7 +6544,7 @@ bool formatQuery (HWND hEditorWnd) {
 
 		if (mode == 0 && pos > 0 && cp != TEXT(' ') && c != cp && c != TEXT(';') && (
 			_tcschr(TEXT("(<!*+"), c) != 0 ||
-			(_tcschr(TEXT("'\"`"), cp) != 0 && _tcschr(TEXT(".),;"), c) == 0) ||
+			(_tcschr(TEXT("'\"`"), cp) != 0 && _tcschr(TEXT(".),;"), c) == 0 && pmode == 0) ||
 			(c == TEXT('>') && cp != TEXT('<')) ||
 			(c == TEXT('=') && cp != TEXT('!')) ||
 			(c == TEXT('/') && cp != TEXT('*')) ||
@@ -6536,7 +6582,7 @@ bool formatQuery (HWND hEditorWnd) {
 			(c == TEXT('/') && cn != TEXT('*')) ||
 			(c == TEXT('-') && cn != TEXT('-')) ||
 			(c == TEXT('|') && cp == TEXT('|')) ||
-			(_tcschr(TEXT("(."), c) == 0 && _tcschr(TEXT("\"'`"), cn))
+			(_tcschr(TEXT("(."), c) == 0 && _tcschr(TEXT("\"'`"), cn) && pmode == 0)
 			)) {
 			buf2[bPos] = TEXT(' ');
 			bPos++;

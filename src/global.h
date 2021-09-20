@@ -53,7 +53,6 @@ extern sqlite3 *db;
 extern HWND  hMainWnd;
 extern HMENU hBlobMenu, hEditorMenu;
 
-extern TCHAR editTableData16[255]; // filled on DataEdit Dialog
 extern TCHAR searchString[255];
 
 extern const char *TYPES8[6];

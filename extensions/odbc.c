@@ -145,7 +145,7 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 
 	if (res) {
 		int len  = sqlite3_value_bytes(argv[0]);
-		unsigned char connectionString8[len + 1];
+		char connectionString8[len + 1];
 		strcpy((char*)connectionString8, (char*)sqlite3_value_text(argv[0]));
 		TCHAR* connectionString16 = utf8to16(connectionString8);	
 		rc = SQLDriverConnect(hConn, NULL, connectionString16, _tcslen(connectionString16), 0, 0, NULL, SQL_DRIVER_NOPROMPT);
@@ -158,7 +158,7 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		res = res && (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO);
 
 		len  = sqlite3_value_bytes(argv[1]);
-		unsigned char query8[len + 1];
+		char query8[len + 1];
 		strcpy((char*)query8, (char*)sqlite3_value_text(argv[1]));
 		if (strcmp(query8, "TABLES") == 0) {
 			rc = SQLTables(hStmt, NULL, 0, NULL, 0, NULL, 0, NULL, 0);
@@ -180,7 +180,7 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 			free(err8);
 		}
 
-		const unsigned char* target8 = sqlite3_value_text(argv[2]);
+		const char* target8 = (const char*)sqlite3_value_text(argv[2]);
 		char* tablename8 = getName(target8, FALSE);
 		TCHAR* tablename16 = utf8to16(tablename8);
 		free(tablename8);
@@ -189,11 +189,12 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		SQLNumResultCols(hStmt, &colCount);
 
 		int colTypes[colCount];
-		TCHAR create16[colCount * MAX_COLUMN_LENGTH + 512];
-		TCHAR insert16[colCount * MAX_COLUMN_LENGTH + 512];
-	
-		_stprintf(create16, TEXT("create table if not exists temp.\"%ls%i\" (\""), tablename16, sid);
-		_stprintf(insert16, TEXT("insert into temp.\"%ls%i\" (\""), tablename16, sid);
+		int maxLength = colCount * MAX_COLUMN_LENGTH + 512; 
+		TCHAR create16[maxLength];
+		TCHAR insert16[maxLength];
+		
+		_sntprintf(create16, maxLength, TEXT("create table if not exists temp.\"%ls%i\" (\""), tablename16, sid);
+		_sntprintf(insert16, maxLength, TEXT("insert into temp.\"%ls%i\" (\""), tablename16, sid);
 
 		for (int colNo = 1; colNo <= colCount; colNo++) {
 			TCHAR colName[MAX_COLUMN_LENGTH + 1];
@@ -239,7 +240,7 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 			int insertedRows = 0;
 			int rejectedRows = 0;
 			SQLLEN res = 0;	
-			while(rc && (SQLFetch(hStmt) == SQL_SUCCESS)) {
+			while (rc && (SQLFetch(hStmt) == SQL_SUCCESS)) {
 				for (int colNo = 1; colNo <= colCount; colNo++) {
 					int colType = colTypes[colNo];
 					if (colType == SQL_DECIMAL || colType == SQL_NUMERIC || colType == SQL_REAL || colType == SQL_FLOAT || colType == SQL_DOUBLE) {
@@ -313,7 +314,7 @@ static void odbc_read(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 	sqlite3* db = sqlite3_context_db_handle(ctx);
 	sqlite3_stmt* stmt;
-	if (SQLITE_OK != sqlite3_prepare_v2(db, sqlite3_value_text(argv[0]), -1, &stmt, 0)) {
+	if (SQLITE_OK != sqlite3_prepare_v2(db, (const char*)sqlite3_value_text(argv[0]), -1, &stmt, 0)) {
 		onError(ctx, sqlite3_errmsg(db));
 		return;
 	}
@@ -334,7 +335,7 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 
 	if (res) {
 		int len  = sqlite3_value_bytes(argv[1]);
-		unsigned char connectionString8[len + 1];
+		char connectionString8[len + 1];
 		strcpy((char*)connectionString8, (char*)sqlite3_value_text(argv[1]));
 		TCHAR* connectionString16 = utf8to16(connectionString8);	
 		rc = SQLDriverConnect(hConn, NULL, connectionString16, _tcslen(connectionString16), 0, 0, NULL, SQL_DRIVER_NOPROMPT);
@@ -347,26 +348,29 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		SQLGetInfo(hConn, SQL_DBMS_NAME, driverName16, 255, NULL);
 		SQLSetConnectAttr(hConn, SQL_ATTR_AUTOCOMMIT, SQL_AUTOCOMMIT_OFF,  SQL_IS_UINTEGER);
 
-		char* target8 = getName(sqlite3_value_text(argv[2]), FALSE);
+		char* target8 = getName((const char*)sqlite3_value_text(argv[2]), FALSE);
 		TCHAR* target16 = utf8to16(target8);
 		int colCount = sqlite3_column_count(stmt);
 		SQLSMALLINT colTypes[colCount + 1];
 		BOOL isTargetMissing = FALSE; 
 		
 		SQLAllocHandle(SQL_HANDLE_STMT, hConn, &hStmt);
-		TCHAR check16[_tcslen(target16) + 255];
-		_stprintf(check16, TEXT("select * from \"%ls\" where 1 = 2"), target16);
+		int maxLength = _tcslen(target16) + 255;
+		TCHAR check16[maxLength];
+		_sntprintf(check16, maxLength, TEXT("select * from \"%ls\" where 1 = 2"), target16);
 		rc = SQLExecDirect(hStmt, (SQLWCHAR*)check16, SQL_NTS);
 		SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 
 		if (rc == SQL_ERROR) {
-			TCHAR create16[colCount * MAX_COLUMN_LENGTH + 512];
-			_stprintf(create16, TEXT("create table \"%ls\" ("), target16);
+			int maxLength = colCount * MAX_COLUMN_LENGTH + 512;
+			TCHAR create16[maxLength];
+			_sntprintf(create16, maxLength, TEXT("create table \"%ls\" ("), target16);
 					
 			for (int colNo = 0; colNo < colCount; colNo++) {
 				TCHAR* colName16 = utf8to16((const char*)sqlite3_column_name(stmt, colNo));			
 				TCHAR* colType16 = utf8to16((const char*)sqlite3_column_decltype(stmt, colNo));
-				TCHAR field16[MAX_COLUMN_LENGTH + 255];
+				int maxLength = MAX_COLUMN_LENGTH + 255;
+				TCHAR field16[maxLength];
 				
 				if (colType16) 
 					_tcslwr(colType16);
@@ -378,7 +382,7 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 					_tcscmp(colType16, TEXT("numeric")) == 0
 				);	
 								
-				_stprintf(field16, TEXT("\"%ls\" %ls%ls"), 
+				_sntprintf(field16, maxLength, TEXT("\"%ls\" %ls%ls"), 
 					colName16, 
 					isNumeric ? TEXT("numeric") : TEXT("text"),
 					colNo != colCount - 1 ? TEXT(", ") : TEXT(""));
@@ -395,20 +399,22 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		}		
 
 		SQLAllocHandle(SQL_HANDLE_STMT, hConn, &hStmt);
-		TCHAR _target16[_tcslen(target16) + 2];
-		_stprintf(_target16, TEXT("%ls%ls"), target16, _tcscmp(driverName16, TEXT("EXCEL")) == 0 ? TEXT("$") : TEXT(""));
+		maxLength = _tcslen(target16) + 2;
+		TCHAR _target16[maxLength];
+		_sntprintf(_target16, maxLength, TEXT("%ls%ls"), target16, _tcscmp(driverName16, TEXT("EXCEL")) == 0 ? TEXT("$") : TEXT(""));
 		rc = SQLColumns(hStmt, NULL, 0, NULL, 0, (SQLWCHAR*)_target16, SQL_NTS, NULL, 0);
 		
-		TCHAR insert16[colCount * MAX_COLUMN_LENGTH + 512];
-		_stprintf(insert16, TEXT("insert into \"%ls\" (\""), _target16);	
+		maxLength = colCount * MAX_COLUMN_LENGTH + 512;
+		TCHAR insert16[maxLength];
+		_sntprintf(insert16, maxLength, TEXT("insert into \"%ls\" (\""), _target16);	
 		
 		int colCount2 = 0;
 		if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO) {			
 			SQLSMALLINT dataType;
 			SQLWCHAR colName[MAX_COLUMN_LENGTH];  
 
-			SQLINTEGER cbDataType;
-			SQLINTEGER cbColName;
+			SQLLEN cbDataType;
+			SQLLEN cbColName;
 			
 			SQLBindCol(hStmt, 4, SQL_C_WCHAR, colName, MAX_COLUMN_LENGTH, &cbColName); 			
 			SQLBindCol(hStmt, 5, SQL_C_SSHORT, &dataType, 0, &cbDataType); 
@@ -432,9 +438,9 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 				_tcscat(insert16, TEXT("?, "));
 			_tcscat(insert16, TEXT("?)")); // last placeholder here
 		}		
-		SQLFreeHandle(SQL_HANDLE_STMT, hStmt);      
+		SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 		free(target16);
-		      							
+		
 		if (colCount == colCount2) {
 			SQLAllocHandle(SQL_HANDLE_STMT, hConn, &hStmt);
 			if(SQLPrepare (hStmt, insert16, SQL_NTS) != SQL_ERROR) {
@@ -443,24 +449,24 @@ static void odbc_write(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 				int rowNo = 0;	
 					
 				while(SQLITE_ROW == sqlite3_step(stmt)) {
-					SQLPOINTER* data[colCount + 1];
+					SQLPOINTER data[colCount + 1];
 					
 					rowNo++;
 					for (int colNo = 1; colNo <= colCount; colNo++) {											
 						BOOL isNULL = sqlite3_column_type(stmt, colNo - 1) == SQLITE_NULL;
 						SQLLEN cbData = SQL_NTS;
-						SQLINTEGER cbNull = SQL_NULL_DATA;
+						SQLLEN cbNull = SQL_NULL_DATA;
 
 						int type = colTypes[colNo];
 						BOOL isNumeric = type == SQL_DECIMAL || type == SQL_NUMERIC || type == SQL_FLOAT || type == SQL_REAL || type == SQL_DOUBLE;								
 						isNumeric = isNumeric && !isNULL;
 							
 						if (isNumeric) {
-							double* d = calloc(1, sizeof(double));
+							double* d = (double*)calloc(1, sizeof(double));
 							*d = sqlite3_column_double(stmt, colNo - 1);
 							data[colNo] = (SQLPOINTER)d;
 						} else {							
-							const char* val8 = sqlite3_column_text(stmt, colNo - 1);
+							const char* val8 = (const char*)sqlite3_column_text(stmt, colNo - 1);
 							data[colNo] = (SQLPOINTER)utf8to16(val8);
 						}
 						
@@ -531,7 +537,7 @@ static void odbc_query(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 
 	if (res) {
 		int len  = sqlite3_value_bytes(argv[0]);
-		unsigned char connectionString8[len + 1];
+		char connectionString8[len + 1];
 		strcpy((char*)connectionString8, (char*)sqlite3_value_text(argv[0]));
 		TCHAR* connectionString16 = utf8to16(connectionString8);	
 		rc = SQLDriverConnect(hConn, NULL, connectionString16, _tcslen(connectionString16), 0, 0, NULL, SQL_DRIVER_NOPROMPT);
@@ -543,7 +549,7 @@ static void odbc_query(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 			res = res && (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO);
 	
 			len  = sqlite3_value_bytes(argv[1]);
-			unsigned char query8[len + 1];
+			char query8[len + 1];
 			strcpy((char*)query8, (char*)sqlite3_value_text(argv[1]));
 			TCHAR* query16 = utf8to16(query8);
 			rc = SQLExecDirect(hStmt, query16, SQL_NTS);
@@ -611,7 +617,7 @@ static void odbc_dsn(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 				}
 
 				if (SQLITE_ROW == sqlite3_step(stmt)) {
-					sqlite3_result_text(ctx, sqlite3_column_text(stmt, 0), -1, SQLITE_TRANSIENT);
+					sqlite3_result_text(ctx, (const char*)sqlite3_column_text(stmt, 0), -1, SQLITE_TRANSIENT);
 				} else {
 					onError(ctx, sqlite3_errmsg(db));
 				}

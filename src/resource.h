@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.6.2"
-#define GUI_VERSION2               1, 6, 2, 0
+#define GUI_VERSION                "1.6.3"
+#define GUI_VERSION2               1, 6, 3, 0
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -79,6 +79,7 @@
 #define IDC_DLG_HTTP_SERVER        124
 #define IDC_DLG_HTTP_SERVER_PORT   125
 #define IDC_DLG_STARTUP            126
+#define IDC_DLG_MULTIPLE_INSERT    127
 
 #define IDC_DLG_QUERYADD           130
 #define IDC_DLG_QUERYFILTER        131
@@ -199,6 +200,7 @@
 #define IDC_DLG_GEN_OPTION_TABLE   283
 #define IDC_DLG_GEN_OPTION_COLUMN  284
 #define IDC_DLG_GEN_OPTION_MULTIPLIER  285
+#define IDC_DLG_GEN_OPTION_EXPR    286
 
 #define IDC_DLG_CHART              295
 #define IDC_DLG_CHART_OPTIONS      296

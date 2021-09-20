@@ -20,7 +20,8 @@ namespace tools {
 	BOOL CALLBACK cbDlgStatistics (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgForeignKeyCheck (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-	bool exportCSV(TCHAR* path16, TCHAR* query16);
+	int  importCSV(TCHAR* path16, TCHAR* tblname16, TCHAR* err16);
+	int  exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16);
 	bool exportExcel(TCHAR* path16, TCHAR* query16);
 	bool importSqlFile(TCHAR* path16);
 	bool reindexDatabase();

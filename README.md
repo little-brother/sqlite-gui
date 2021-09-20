@@ -30,4 +30,4 @@ Small, simple, powerfull, fast, free.
 
 
 If you like the project, press the like-button on [AlternativeTo](https://alternativeto.net/software/sqlite-gui/about) or rate the app on [Softpedia](https://www.softpedia.com/get/Internet/Servers/Database-Utils/SQLite-GUI-LB.shtml) to support it.<br>
-If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki), create a [Discussion](https://github.com/little-brother/sqlite-gui/discussions) topic or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>. And welcome to [Telegram channel](https://t.me/sqlitegui).
+If you have any problems, comments or suggestions, check [Wiki](https://github.com/little-brother/sqlite-gui/wiki), create [issue](https://github.com/little-brother/sqlite-gui/issues) or just let me know <a href="mailto:lb.im@yandex.ru?subject=sqlite-gui">lb.im@yandex.ru</a>. And welcome to [Telegram channel](https://t.me/sqlitegui).

@@ -44,15 +44,21 @@ namespace dialogs {
 	HMENU hEditDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_EDIT_DATA)), 0);
 	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
 
+	// lParam = (TEXT)[isEdit, type][table16:etc]
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				bool isEdit = LOWORD(lParam) == IDM_EDIT;
-				int type = HIWORD(lParam);
-				SetWindowLong(hWnd, GWL_USERDATA, type);
 
-				TCHAR buf[64 + _tcslen(editTableData16)];
-				_stprintf(buf, isEdit ? TEXT("Edit %ls \"%ls\"") : TEXT("Add %ls"), TYPES16[type], editTableData16);
+				TCHAR* params = (TCHAR*)lParam;
+				bool isEdit = LOBYTE(params[0]) == 1;
+				int type = HIBYTE(params[0]);
+				TCHAR* table16 = params + 1;
+				SetWindowLong(hWnd, GWL_USERDATA, type);
+				printf("%i %i %i\n", isEdit, type, params[0]);
+//MessageBox(0, isEdit ? L"Y" : L"N", 0, 0);
+
+				TCHAR buf[64 + _tcslen(table16)];
+				_stprintf(buf, isEdit ? TEXT("Edit %ls \"%ls\"") : TEXT("Add %ls"), TYPES16[type], table16);
 				SetWindowText(hWnd, buf);
 
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
@@ -61,7 +67,7 @@ namespace dialogs {
 
 				if (isEdit) {
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
-					TCHAR* sql16 = getDDL(editTableData16, type, true);
+					TCHAR* sql16 = getDDL(table16, type, true);
 					if (sql16) {
 						SetWindowText(hEditorWnd, sql16);
 						delete [] sql16;
@@ -686,11 +692,12 @@ namespace dialogs {
 		return false;
 	}
 
+	// lParam - table16
 	BOOL CALLBACK cbDlgEditData (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				TCHAR* schema16 = utils::getName(editTableData16, true);
-				TCHAR* tablename16 = utils::getName(editTableData16);
+				TCHAR* schema16 = utils::getName((TCHAR*)lParam, true);
+				TCHAR* tablename16 = utils::getName((TCHAR*)lParam);
 
 				char* tablename8 = utils::utf16to8(tablename16);
 				SetProp(hWnd, TEXT("TABLENAME8"), (HANDLE)tablename8);
@@ -1459,6 +1466,7 @@ namespace dialogs {
 								ListView_DeleteItem(hListWnd, pos);
 							ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
 							InvalidateRect(hListWnd, 0, 0);
+							PostMessage(hWnd, WMU_SET_CURRENT_CELL, 0, 0);
 						} else {
 							showDbError(hWnd);
 						}
