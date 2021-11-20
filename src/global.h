@@ -39,6 +39,7 @@
 #include <commctrl.h>
 #include <richedit.h>
 #include <shlwapi.h>
+#include <gdiplus.h>
 #include <stdio.h>
 #include <tchar.h>
 #include <ctime>
@@ -63,7 +64,6 @@ extern const TCHAR *TYPES16p[6];
 extern COLORREF GRIDCOLORS[8];
 
 extern HFONT hDefFont;
-extern WNDPROC cbOldListView, cbOldEdit;
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
@@ -98,6 +98,7 @@ int ListView_Reset(HWND hListWnd);
 int ListView_GetColumnCount(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 int Header_SetItemText(HWND hWnd, int i, TCHAR* pszText);
+void Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState);
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);

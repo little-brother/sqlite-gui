@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.6.3"
-#define GUI_VERSION2               1, 6, 3, 0
+#define GUI_VERSION                "1.6.4"
+#define GUI_VERSION2               1, 6, 4, 0
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -50,6 +50,8 @@
 #define IDC_CLI_RAWDATA            68
 #define IDC_QUERYLIST              69
 #define IDC_REFLIST                70
+#define IDC_PREVIEW_TEXT           71
+#define IDC_PREVIEW_IMAGE          72
 
 #define IDC_DLG_EDITOR             100
 #define IDC_DLG_LABEL              101
@@ -222,15 +224,17 @@
 #define IDC_MENU_QUERYLIST         508
 #define IDC_MENU_CHART             509
 #define IDC_MENU_CLI               510
+#define IDC_MENU_PREVIEW_TEXT      511
+#define IDC_MENU_PREVIEW_IMAGE     512
 
-#define IDC_MENU_TABLEVIEW         511
-#define IDC_MENU_INDEXTRIGGER      512
-#define IDC_MENU_TABLE             513
-#define IDC_MENU_VIEW              514
-#define IDC_MENU_INDEX             515
-#define IDC_MENU_TRIGGER           516
-#define IDC_MENU_COLUMN            517
-#define IDC_MENU_DISABLED          518
+#define IDC_MENU_TABLEVIEW         521
+#define IDC_MENU_INDEXTRIGGER      522
+#define IDC_MENU_TABLE             523
+#define IDC_MENU_VIEW              524
+#define IDC_MENU_INDEX             525
+#define IDC_MENU_TRIGGER           526
+#define IDC_MENU_COLUMN            527
+#define IDC_MENU_DISABLED          528
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
@@ -301,12 +305,13 @@
 #define IDM_EDITOR_COMMENT         1608
 #define IDM_EDITOR_FORMAT          1609
 
-#define IDM_RESULT_CHART           1610
-#define IDM_RESULT_COPY_CELL       1611
-#define IDM_RESULT_COPY_ROW        1612
-#define IDM_RESULT_AS_TABLE        1613
-#define IDM_RESULT_EXPORT          1614
-#define IDM_RESULT_EXCEL           1615
+#define IDM_RESULT_PREVIEW         1610
+#define IDM_RESULT_CHART           1611
+#define IDM_RESULT_COPY_CELL       1612
+#define IDM_RESULT_COPY_ROW        1613
+#define IDM_RESULT_AS_TABLE        1614
+#define IDM_RESULT_EXPORT          1615
+#define IDM_RESULT_EXCEL           1616
 #define IDM_RESULT_COMPARE         1620 // iterable, 50
 
 #define IDM_BLOB_NULL              1680
@@ -352,10 +357,11 @@
 #define IDM_LAST_SEPARATOR         1727
 #define IDM_EXPORT_PNG             1729
 #define IDM_EXPORT_CLIPBOARD       1730
+#define IDM_EXPORT_FILE            1731
 
-#define IDM_LINK_FK                1731
-#define IDM_LINK_VIEW              1732
-#define IDM_LINK_TRIGGER           1733
+#define IDM_LINK_FK                1735
+#define IDM_LINK_VIEW              1736
+#define IDM_LINK_TRIGGER           1737
 
 #define IDM_CLI_COPY               1740
 #define IDM_CLI_CUT                1741
@@ -366,9 +372,10 @@
 
 // Iterable. Should have a gap.
 #define IDC_HEADER_EDIT            2000
-#define IDC_HEADER_STATIC          2400
-#define IDC_TAB_ROWS               2800
-#define IDC_TAB_MESSAGE            2900
+#define IDC_HEADER_STATIC          2300
+#define IDC_TAB_ROWS               2600
+#define IDC_TAB_MESSAGE            2700
+#define IDC_TAB_PREVIEW            2800
 
 #define IDC_ROW_LABEL              3000
 #define IDC_ROW_EDIT               3500
@@ -442,6 +449,9 @@
 #define WMU_CREATE_VALUE_SELECTOR  WM_USER + 30
 #define WMU_CTLCOLOREDIT           WM_USER + 31
 #define WMU_GET_CURRENT_RESULT     WM_USER + 32
+#define WMU_UPDATE_SIZES           WM_USER + 33
+#define WMU_UPDATE_PREVIEW         WM_USER + 34
+#define WMU_RESET_CACHE            WM_USER + 35
 
 #define WMU_TAB_ADD                WM_USER + 40
 #define WMU_TAB_DELETE             WM_USER + 41

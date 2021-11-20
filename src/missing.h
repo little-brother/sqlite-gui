@@ -27,6 +27,7 @@ typedef struct tagTVKEYDOWN {
 #define HDM_CLEARFILTER                 (HDM_FIRST + 24)
 #define LVN_INCREMENTALSEARCH           (LVN_FIRST - 63)
 
-#define LVS_EX_AUTOSIZECOLUMNS 0x10000000
+#define LVS_EX_AUTOSIZECOLUMNS           0x10000000
+#define SS_REALSIZECONTROL               0x00000040L
 
 #endif

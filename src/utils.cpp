@@ -401,7 +401,7 @@ namespace utils {
 		d = strtold(str, &endptr);
 		bool rc = !(errno != 0 || *endptr != '\0');
 		if (rc && out != NULL)
-				*out = d;
+			*out = d;
 
 		if (rc)
 			return true;

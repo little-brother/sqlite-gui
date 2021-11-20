@@ -1,6 +1,5 @@
 #define ULONG_PTR ULONG
 #include <windows.h>
-#include <gdiplus.h>
 #include "resource.h"
 #include "global.h"
 #include "prefs.h"
@@ -48,14 +47,11 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-
 				TCHAR* params = (TCHAR*)lParam;
 				bool isEdit = LOBYTE(params[0]) == 1;
 				int type = HIBYTE(params[0]);
 				TCHAR* table16 = params + 1;
 				SetWindowLong(hWnd, GWL_USERDATA, type);
-				printf("%i %i %i\n", isEdit, type, params[0]);
-//MessageBox(0, isEdit ? L"Y" : L"N", 0, 0);
 
 				TCHAR buf[64 + _tcslen(table16)];
 				_stprintf(buf, isEdit ? TEXT("Edit %ls \"%ls\"") : TEXT("Add %ls"), TYPES16[type], table16);
@@ -527,7 +523,7 @@ namespace dialogs {
 				SendMessage(hWnd, WM_SIZE, 0, 0);
 
 				SetProp(hWnd, TEXT("MENU"), (HANDLE)LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_QUERYLIST)));
-				cbOldEdit = (WNDPROC)SetWindowLong(GetDlgItem(hWnd, IDC_DLG_QUERYFILTER), GWL_WNDPROC, (LONG)cbNewEdit);
+				SetProp(hWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEdit));
 			}
 			break;
 
@@ -927,11 +923,11 @@ namespace dialogs {
 						TCHAR buf16[2]{0};
 						GetWindowText(hEdit, buf16, 2);
 						_tcscat(where16,
-							buf16[0] == TCHAR('=') ? TEXT("\" = ? ") :
-							buf16[0] == TCHAR('/') ? TEXT("\" regexp ? ") :
-							buf16[0] == TCHAR('!') ? TEXT("\" not like '%' || ? || '%' ") :
-							buf16[0] == TCHAR('>') ? TEXT("\" > ? ") :
-							buf16[0] == TCHAR('<') ? TEXT("\" < ? ") :
+							buf16[0] == TEXT('=') ? TEXT("\" = ? ") :
+							buf16[0] == TEXT('/') ? TEXT("\" regexp ? ") :
+							buf16[0] == TEXT('!') ? TEXT("\" not like '%' || ? || '%' ") :
+							buf16[0] == TEXT('>') ? TEXT("\" > ? ") :
+							buf16[0] == TEXT('<') ? TEXT("\" < ? ") :
 							TEXT("\" like '%' || ? || '%' "));
 					}
 				}
@@ -1202,24 +1198,21 @@ namespace dialogs {
 						}
 					}
 
-					if (canUpdate && (pCustomDraw->nmcd.dwDrawStage == CDDS_POSTPAINT) | CDDS_ITEM) {
+					if (canUpdate && (pCustomDraw->nmcd.dwDrawStage == (CDDS_POSTPAINT | CDDS_ITEM))) {
 						int currRow = (int)GetProp(hWnd, TEXT("CURRENTROW"));
 						int currCol = (int)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 						if (pCustomDraw->nmcd.dwItemSpec == (DWORD)currRow && (GetFocus() == hListWnd) && currCol > 0) {
-							RECT rect;
-							ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
-
 							HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 255, 0));
-							HDC hdc = pCustomDraw->nmcd.hdc;
-							SelectObject(hdc, hPen);
+							HDC hDC = pCustomDraw->nmcd.hdc;
+							SelectObject(hDC, hPen);
 
 							RECT rc {0};
 							ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rc);
-							MoveToEx(hdc, rc.left - 2, rc.top, 0);
-							LineTo(hdc, rc.right - 1, rc.top);
-							LineTo(hdc, rc.right - 1, rc.bottom - 2);
-							LineTo(hdc, rc.left + 1, rc.bottom - 2);
-							LineTo(hdc, rc.left + 1, rc.top);
+							MoveToEx(hDC, rc.left - 2, rc.top, 0);
+							LineTo(hDC, rc.right - 1, rc.top);
+							LineTo(hDC, rc.right - 1, rc.bottom - 2);
+							LineTo(hDC, rc.left + 1, rc.bottom - 2);
+							LineTo(hDC, rc.left + 1, rc.top);
 							DeleteObject(hPen);
 						}
 					}
@@ -1243,7 +1236,7 @@ namespace dialogs {
 						return true;
 					}
 
-					if ((kd->wVKey == VK_LEFT || kd->wVKey == VK_RIGHT) && isControl && isAlt) {
+					if ((kd->wVKey == VK_LEFT || kd->wVKey == VK_RIGHT) && isControl && isAlt) { // Toggle dialogs
 						return true;
 					}
 
@@ -1569,7 +1562,8 @@ namespace dialogs {
 					}
 
 					if (rc && (cmd == IDM_BLOB_IMPORT)) {
-						FILE *fp = fopen (path8 , "rb");
+						TCHAR* path16 = utils::utf8to16(path8);
+						FILE *fp = _tfopen (path16, TEXT("rb"));
 						if (!fp)
 							MessageBox(hWnd, TEXT("Opening the file for reading failed."), TEXT("Info"), MB_OK);
 
@@ -1590,17 +1584,21 @@ namespace dialogs {
 							ListView_SetItemText(hListWnd, rowNo, colNo, bsize);
 							delete [] bsize;
 						}
+						delete [] path16;
 					}
 
 					if (rc && (cmd == IDM_BLOB_EXPORT)) {
 						rc = SQLITE_ROW == sqlite3_step(stmt);
-						FILE *fp = fopen (path8 , "wb");
+						TCHAR* path16 = utils::utf8to16(path8);
+						FILE *fp = _tfopen (path16, TEXT("wb"));
 						if (!fp)
 							MessageBox(hWnd, TEXT("Opening the file for writing failed."), TEXT("Info"), MB_OK);
+
 						if (rc && fp) {
 							fwrite(sqlite3_column_blob(stmt, 0), sqlite3_column_bytes(stmt, 0), 1, fp);
 							fclose(fp);
 						}
+						delete [] path16;
 					}
 
 					sqlite3_finalize(stmt);
@@ -2454,9 +2452,10 @@ namespace dialogs {
 				SetWindowLong(hWnd, GWL_USERDATA, (LPARAM)hEditorWnd);
 
 				EnableWindow(GetAncestor(hEditorWnd, GA_ROOT), false);
-
-				cbOldEdit = (WNDPROC)SetWindowLong(GetDlgItem(hWnd, IDC_DLG_FIND_STRING), GWL_WNDPROC, (LONG)cbNewEdit);
-				SetWindowLong(GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING), GWL_WNDPROC, (LONG)cbNewEdit);
+				HWND hEdit = GetDlgItem(hWnd, IDC_DLG_FIND_STRING);
+				SetProp(hEdit, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)&cbNewEdit));
+				hEdit = GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING);
+				SetProp(hEdit, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)&cbNewEdit));
 			}
 			break;
 
@@ -4849,14 +4848,9 @@ namespace dialogs {
 					if (wParam == IDM_EXPORT_PNG && utils::saveFile(path, TEXT("PNG files\0*.png\0All\0*.*\0"), TEXT("png"), hWnd)) {
 						const CLSID pngClsid = { 0x557cf406, 0x1a04, 0x11d3, {0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
 
-						Gdiplus::GdiplusStartupInput gdiplusStartupInput{0};
-						ULONG_PTR gdiplusToken = 0;
-						Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-
 						Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(hBitmap, NULL);
 						bitmap->Save(path, &pngClsid, NULL);
 						delete bitmap;
-						Gdiplus::GdiplusShutdown(gdiplusToken);
 					}
 
 					if (wParam == IDM_EXPORT_CLIPBOARD) {
