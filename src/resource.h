@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.6.4"
-#define GUI_VERSION2               1, 6, 4, 0
+#define GUI_VERSION                "1.6.5"
+#define GUI_VERSION2               1, 6, 5, 0
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -109,6 +109,7 @@
 #define IDC_DLG_ROW_DOWN           153
 #define IDC_DLG_ISWITHOUT_ROWID    154
 #define IDC_DLG_MORE               155
+#define IDC_DLG_STRICT             156
 
 #define IDC_DLG_REFRESH            157
 #define IDC_DLG_CONNECTION_STRING  158
@@ -371,8 +372,7 @@
 #define IDM_NEXT_DIALOG            1751
 
 // Iterable. Should have a gap.
-#define IDC_HEADER_EDIT            2000
-#define IDC_HEADER_STATIC          2300
+#define IDC_HEADER_EDIT            2500
 #define IDC_TAB_ROWS               2600
 #define IDC_TAB_MESSAGE            2700
 #define IDC_TAB_PREVIEW            2800
@@ -448,7 +448,7 @@
 #define WMU_RESORT_DATA            WM_USER + 29
 #define WMU_CREATE_VALUE_SELECTOR  WM_USER + 30
 #define WMU_CTLCOLOREDIT           WM_USER + 31
-#define WMU_GET_CURRENT_RESULT     WM_USER + 32
+#define WMU_GET_CURRENT_RESULTSET  WM_USER + 32
 #define WMU_UPDATE_SIZES           WM_USER + 33
 #define WMU_UPDATE_PREVIEW         WM_USER + 34
 #define WMU_RESET_CACHE            WM_USER + 35

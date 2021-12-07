@@ -48,7 +48,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_ADD_TABLE DIALOGEX 50, 50, 230, 200
+IDD_ADD_TABLE DIALOGEX 50, 50, 230, 205
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION "Add table"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -66,8 +66,10 @@ BEGIN
 	PUSHBUTTON "Up", IDC_DLG_ROW_UP, 160, 150, 30, 14, WS_TABSTOP
 	PUSHBUTTON "Down", IDC_DLG_ROW_DOWN, 195, 150, 30, 14, WS_TABSTOP
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 100, 181, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 165, 181, 60, 14, WS_TABSTOP
+	AUTOCHECKBOX "Strict match of value type to column type", IDC_DLG_STRICT, 5, 167, 200, 16, BS_NOTIFY
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 100, 186, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 165, 186, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -560,7 +562,7 @@ IDC_MENU_MAIN MENU
 BEGIN
 	POPUP "Database"
 	BEGIN
-		MENUITEM "Open", IDM_OPEN
+		MENUITEM "New / Open", IDM_OPEN
 		MENUITEM "Save as", IDM_SAVE_AS, GRAYED
 		MENUITEM "Close", IDM_CLOSE, GRAYED
 		MENUITEM SEPARATOR
@@ -984,8 +986,7 @@ BEGIN
 		"Ctrl + Tab - Open a multiline editor for a current field\n" \
 		"Shift + Tab - Return to a previous field\n\n"
 
-	IDS_TIPS "* To create a new database, go to ""Database"" > ""Open"" and enter the\n   desired name.\n\n" \
-		"* Hold Control while opening the database to open it read-only.\n\n" \
+	IDS_TIPS "* Hold Control while opening the database to open it read-only.\n\n" \
 		"* Hold Shift while opening the database to open empty in-memory database.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
 		"* Hold Ctrl on dropping a tree item to an editor to append a statement.\n\n" \
@@ -1040,8 +1041,7 @@ BEGIN
 		"Adds support for reading VSV (Variably Separated Values), e.g. csv files." \
 		"\n\n                         >>>   Check Wiki to get details  <<<"
 
-	IDS_WELCOME "-- Welcome! Thanks for choosing sqlite-gui.\n" \
-		"-- bookstore.sqlite is a demo database for beginners.\n" \
+	IDS_WELCOME "-- bookstore.sqlite is a demo database for beginners\n" \
 		"-- Push ""Execute"" to get all rows from ""books"" table\n" \
 		"select * from books;"
 

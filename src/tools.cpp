@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include "global.h"
-#include "missing.h"
 #include "resource.h"
 #include "tools.h"
 #include "utils.h"
@@ -52,8 +51,8 @@ namespace tools {
 					TCHAR table16[256] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
 
-					TCHAR path16[MAX_PATH];
-					_stprintf(path16, table16);
+					TCHAR path16[MAX_PATH + 1];
+					_sntprintf(path16, MAX_PATH, table16);
 					if (!utils::saveFile(path16, TEXT("CSV files\0*.csv\0All\0*.*\0"), TEXT("csv"), hWnd))
 						return true;
 
@@ -65,8 +64,9 @@ namespace tools {
 					prefs::set("csv-export-delimiter", iDelimiter);
 					prefs::set("csv-export-is-unix-line", +isUnixNewLine);
 
-					TCHAR query16[_tcslen(table16) + 128] = {0};
-					_stprintf(query16, TEXT("select * from \"%ls\""), table16);
+					int len = _tcslen(table16) + 128;
+					TCHAR query16[len + 1] = {0};
+					_sntprintf(query16, len, TEXT("select * from \"%ls\""), table16);
 
 					TCHAR err16[1024]{0};
 					if (exportCSV(path16, query16, err16) != -1) {
@@ -129,8 +129,8 @@ namespace tools {
 						return true;
 					}
 
-					TCHAR path16[MAX_PATH];
-					_stprintf(path16, TEXT("script.sql"));
+					TCHAR path16[MAX_PATH + 1];
+					_sntprintf(path16, MAX_PATH, TEXT("script.sql"));
 					if (!utils::saveFile(path16, TEXT("SQL files\0*.sql\0All\0*.*\0"), TEXT("sql"), hWnd))
 						return true;
 
@@ -298,7 +298,7 @@ namespace tools {
 
 				_tcscat(name16, TEXT("_tmp"));
 				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
-				SetWindowLong(hWnd, GWL_USERDATA, lParam);
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
 
 				SendMessage(hWnd, WMU_SOURCE_UPDATED, 1, 0);
 				SetFocus(GetDlgItem(hWnd, IDC_DLG_TABLENAME));
@@ -314,7 +314,7 @@ namespace tools {
 				bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
 				HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
 
-				TCHAR* path16 = (TCHAR*)GetWindowLong(hWnd, GWL_USERDATA);
+				TCHAR* path16 = (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
 
 				FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
 				if (f == NULL) {
@@ -334,7 +334,7 @@ namespace tools {
 							lvc.cchTextMax = _tcslen(column) + 1;
 						} else {
 							TCHAR name[64];
-							_stprintf(name, TEXT("Column%i"), colNo);
+							_sntprintf(name, 63, TEXT("Column%i"), colNo);
 							lvc.pszText = name;
 							lvc.cchTextMax = 64;
 						}
@@ -507,9 +507,9 @@ namespace tools {
 					prefs::set("csv-import-is-replace", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE)) == BST_CHECKED);
 
 					TCHAR err[1024]{0};
-					int rowCount = importCSV((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), tblname16, err);
+					int rowCount = importCSV((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), tblname16, err);
 					if (rowCount != -1) {
-						_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), TEXT("%ls"), tblname16);
+						_sntprintf((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), MAX_PATH, TEXT("%ls"), tblname16);
 						EndDialog(hWnd, rowCount);
 					} else {
 						MessageBox(hWnd, err, NULL, 0);
@@ -540,7 +540,7 @@ namespace tools {
 	BOOL CALLBACK cbDlgImportJSON (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				SetWindowLong(hWnd, GWL_USERDATA, lParam);
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
 
 				TCHAR* name16 = utils::getFileName((TCHAR*)lParam, true);
 				SetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16);
@@ -553,7 +553,7 @@ namespace tools {
 					TCHAR table16[256];
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 255);
 
-					char* path8 = utils::utf16to8((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA));
+					char* path8 = utils::utf16to8((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA));
 					char* data8 = utils::readFile(path8);
 					delete [] path8;
 					if (data8 == 0) {
@@ -599,7 +599,7 @@ namespace tools {
 					sqlite3_finalize(stmt);
 
 					if (rc) {
-						_stprintf((TCHAR*)GetWindowLong(hWnd, GWL_USERDATA), table16);
+						_sntprintf((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), MAX_PATH, table16);
 						EndDialog(hWnd, DLG_OK);
 					}
 				}
@@ -646,8 +646,8 @@ namespace tools {
 					TCHAR table16[256] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
 
-					TCHAR path16[MAX_PATH];
-					_stprintf(path16, table16);
+					TCHAR path16[MAX_PATH + 1];
+					_sntprintf(path16, MAX_PATH, table16);
 					if (!utils::saveFile(path16, TEXT("JSON files\0*.json\0All\0*.*\0"), TEXT("json"), hWnd))
 						return true;
 
@@ -733,13 +733,14 @@ namespace tools {
 					TCHAR table16[256] = {0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 256);
 
-					TCHAR path16[MAX_PATH];
-					_stprintf(path16, table16);
+					TCHAR path16[MAX_PATH + 1];
+					_sntprintf(path16, MAX_PATH, table16);
 					if (!utils::saveFile(path16, TEXT("Excel files\0*.xlsx\0All\0*.*\0"), TEXT("xlsx"), hWnd))
 						return true;
 
-					TCHAR query16[_tcslen(table16) + 128] = {0};
-					_stprintf(query16, TEXT("select * from \"%ls\""), table16);
+					int len = _tcslen(table16) + 128;
+					TCHAR query16[len + 1] = {0};
+					_sntprintf(query16, len, TEXT("select * from \"%ls\""), table16);
 
 					if (exportExcel(path16, query16))
 						EndDialog(hWnd, DLG_OK);
@@ -770,7 +771,7 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				bool isExport = lParam;
-				SetWindowLong(hWnd, GWL_USERDATA, isExport);
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, isExport);
 				SetWindowText(hWnd, isExport ? TEXT("Export data via ODBC") : TEXT("Import data via ODBC"));
 				SetDlgItemText(hWnd, IDC_DLG_ODBC_SCHEMA_LABEL, isExport ? TEXT("Source schema") : TEXT("Import to schema"));
 				SetDlgItemText(hWnd, IDC_DLG_OK, isExport ? TEXT("Export table(s)") : TEXT("Import table(s)"));
@@ -800,7 +801,7 @@ namespace tools {
 			break;
 
 			case WM_COMMAND: {
-				bool isExport = GetWindowLong(hWnd, GWL_USERDATA);
+				bool isExport = GetWindowLongPtr(hWnd, GWLP_USERDATA);
 
 				if (LOWORD(wParam) == IDC_DLG_CONNECTION_STRING && HIWORD(wParam) == CBN_SELCHANGE)
 					PostMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CONNECTION_STRING, CBN_EDITCHANGE), (LPARAM)GetDlgItem(hWnd, IDC_DLG_CONNECTION_STRING));
@@ -827,9 +828,9 @@ namespace tools {
 					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 
 				if (LOWORD(wParam) == IDC_DLG_ODBC_MANAGER) {
-					TCHAR winPath[MAX_PATH], appPath[MAX_PATH];
+					TCHAR winPath[MAX_PATH + 1], appPath[MAX_PATH + 1];
 					GetWindowsDirectory(winPath, MAX_PATH);
-					_stprintf(appPath, TEXT("%ls/SysWOW64/odbcad32.exe"), winPath);
+					_sntprintf(appPath, MAX_PATH, TEXT("%ls/SysWOW64/odbcad32.exe"), winPath);
 					ShellExecute(0, 0, appPath, 0, 0, SW_SHOW);
 					SetFocus(0);
 					return 0;
@@ -901,7 +902,8 @@ namespace tools {
 						GetDlgItemText(hWnd, IDC_DLG_ODBC_SCHEMA, schema16, 255);
 						char* schema8 = utils::utf16to8(schema16);
 
-						TCHAR res16[_tcslen(table16) + 1024]{0};
+						int len = _tcslen(table16) + 1024;
+						TCHAR res16[len + 1]{0};
 
 						if (strategy && !isExport) {
 							bool isExists = false;
@@ -914,7 +916,7 @@ namespace tools {
 
 							if (isExists) {
 								if (strategy == 1) {
-									_stprintf(res16, TEXT("%ls - skipped\n"), table16);
+									_sntprintf(res16, len, TEXT("%ls - skipped\n"), table16);
 									_tcscat(result16, res16);
 									continue;
 								}
@@ -941,7 +943,7 @@ namespace tools {
 
 							if (isExists) {
 								if (strategy == 1) {
-									_stprintf(res16, TEXT("%ls - skipped\n"), table16);
+									_sntprintf(res16, len, TEXT("%ls - skipped\n"), table16);
 									_tcscat(result16, res16);
 									continue;
 								}
@@ -958,7 +960,7 @@ namespace tools {
 										if (err8 && strlen(err8)) {
 											TCHAR res16[1024];
 											TCHAR* err16 = utils::utf8to16(err8);
-											_stprintf(res16, TEXT("Couldn't %ls table %ls. Perhaps the driver doesn't support this operation.\n%ls"), strategy == 3 ? TEXT("drop") : TEXT("clear"), table16, err16);
+											_sntprintf(res16, 1023, TEXT("Couldn't %ls table %ls. Perhaps the driver doesn't support this operation.\n%ls"), strategy == 3 ? TEXT("drop") : TEXT("clear"), table16, err16);
 											MessageBox(hWnd, res16, TEXT("Error"), MB_OK);
 											delete [] err16;
 											isError = true;
@@ -1002,13 +1004,13 @@ namespace tools {
 							}
 
 							TCHAR* _res16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-							_stprintf(res16, TEXT("%ls - %ls\n"), table16, _res16);
+							_sntprintf(res16, len, TEXT("%ls - %ls\n"), table16, _res16);
 							_tcscat(result16, res16);
 							delete [] _res16;
 
 							sqlite3_finalize(stmt);
 						} else {
-							_stprintf(res16, TEXT("%ls - error\n"), table16);
+							_sntprintf(res16, len, TEXT("%ls - error\n"), table16);
 							_tcscat(result16, res16);
 						}
 
@@ -1278,9 +1280,9 @@ namespace tools {
 				ComboBox_SetCurSel(hColTypeWnd, 0);
 
 				HWND hNamesWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAMES);
-				LONG style = GetWindowLong(hNamesWnd, GWL_EXSTYLE);
+				LONG style = GetWindowLongPtr(hNamesWnd, GWL_EXSTYLE);
 				style &= ~WS_EX_NOPARENTNOTIFY;
-				SetWindowLong(hNamesWnd, GWL_EXSTYLE, style);
+				SetWindowLongPtr(hNamesWnd, GWL_EXSTYLE, style);
 
 				HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLES);
 				ListView_SetExtendedListViewStyle(hTablesWnd, LVS_EX_CHECKBOXES);
@@ -1524,7 +1526,7 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
-				cbOldCombobox = (WNDPROC)GetWindowLong(hTable, GWL_WNDPROC);
+				cbOldCombobox = (WNDPROC)GetWindowLongPtr(hTable, GWLP_WNDPROC);
 
 				int rowCount = prefs::get("data-generator-row-count");
 				TCHAR rowCount16[32]{0};
@@ -1614,7 +1616,7 @@ namespace tools {
 					sqlite3_finalize(istmt);
 				}
 
-				SetWindowLong(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GWL_WNDPROC, (LONG)&dialogs::cbNewScroll);
+				SetWindowLongPtr(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GWLP_WNDPROC, (LONG_PTR)&dialogs::cbNewScroll);
 				SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 				SetFocus(hTable);
 			}
@@ -1629,8 +1631,8 @@ namespace tools {
 				TCHAR* schema16 = utils::getName(name16, true);
 				TCHAR* tablename16 = utils::getName(name16);
 
-				TCHAR query16[MAX_TEXT_LENGTH]{0};
-				_stprintf(query16, TEXT("select name from pragma_table_info(\"%ls\") where schema = \"%ls\" order by cid"), tablename16, schema16);
+				TCHAR query16[MAX_TEXT_LENGTH + 1]{0};
+				_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("select name from pragma_table_info(\"%ls\") where schema = \"%ls\" order by cid"), tablename16, schema16);
 				delete [] tablename16;
 				delete [] schema16;
 
@@ -1660,7 +1662,7 @@ namespace tools {
 						for (int i = 0; GENERATOR_TYPE[i]; i++)
 							ComboBox_AddString(hTypeWnd, GENERATOR_TYPE[i]);
 						ComboBox_SetCurSel(hTypeWnd, 0);
-						SetWindowLong(hTypeWnd, GWL_WNDPROC, (LONG)cbNewType);
+						SetWindowLongPtr(hTypeWnd, GWLP_WNDPROC, (LONG_PTR)cbNewType);
 
 						CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 180, 0, 210, 23, hColumnWnd, (HMENU)IDC_DLG_GEN_OPTION, GetModuleHandle(0), 0);
 
@@ -1709,7 +1711,7 @@ namespace tools {
 					HWND hRefTableWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0, 90, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_TABLE, GetModuleHandle(0), 0);
 					for (int i = 0; SOURCES[i]; i++)
 						ComboBox_AddString(hRefTableWnd, SOURCES[i]);
-					SetWindowLong(hRefTableWnd, GWL_WNDPROC, (LONG)cbNewRefTable);
+					SetWindowLongPtr(hRefTableWnd, GWLP_WNDPROC, (LONG_PTR)cbNewRefTable);
 
 					CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 90, 0, 86, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_COLUMN, GetModuleHandle(0), 0);
 					ComboBox_SetCurSel(hRefTableWnd, 0);
@@ -1731,10 +1733,10 @@ namespace tools {
 				ComboBox_ResetContent(hRefColumnWnd);
 
 				TCHAR buf16[255]{0};
-				TCHAR query16[MAX_TEXT_LENGTH]{0};
+				TCHAR query16[MAX_TEXT_LENGTH + 1]{0};
 				GetWindowText(hRefTableWnd, buf16, 255);
 
-				_stprintf(query16, TEXT("select name from pragma_table_info(\"%ls\") order by cid"), buf16);
+				_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("select name from pragma_table_info(\"%ls\") order by cid"), buf16);
 				char* query8 = utils::utf16to8(query16);
 
 				sqlite3_stmt *stmt;
@@ -1759,7 +1761,7 @@ namespace tools {
 					SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL) {
-					EndDialog(hWnd, GetWindowLong(hWnd, GWL_USERDATA) ? DLG_OK : DLG_CANCEL);
+					EndDialog(hWnd, GetWindowLongPtr(hWnd, GWLP_USERDATA) ? DLG_OK : DLG_CANCEL);
 				}
 
 
@@ -1811,11 +1813,11 @@ namespace tools {
 							HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
 							TCHAR type16[128]{0};
 							GetWindowText(hTypeWnd, type16, 127);
-							TCHAR query16[MAX_TEXT_LENGTH]{0};
+							TCHAR query16[MAX_TEXT_LENGTH + 1]{0};
 
 							if (!isExpr && _tcscmp(type16, TEXT("sequence")) == 0) {
 								int start = getDlgItemTextAsNumber(hOptionWnd, IDC_DLG_GEN_OPTION_START);
-								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = rownum + %i - 1"), name16, start);
+								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("update temp.data_generator set \"%ls\" = rownum + %i - 1"), name16, start);
 							}
 
 							if (!isExpr && _tcscmp(type16, TEXT("number")) == 0) {
@@ -1825,7 +1827,7 @@ namespace tools {
 								GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_MULTIPLIER, multi, 31);
 								TCHAR* multi2 = utils::replace(multi, TEXT(","), TEXT("."));
 
-								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %ls"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
+								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("update temp.data_generator set \"%ls\" = cast((%i + (%i - %i + 1) * (random()  / 18446744073709551616 + 0.5)) as integer) * %ls"), name16, start, end, start, utils::isNumber(multi2, NULL) ? multi2 : TEXT("0"));
 								delete [] multi2;
 							}
 
@@ -1836,7 +1838,7 @@ namespace tools {
 								TCHAR refcolumn16[256]{0};
 								GetDlgItemText(hOptionWnd, IDC_DLG_GEN_OPTION_COLUMN, refcolumn16, 255);
 
-								_stprintf(query16, TEXT("with t as (select %ls value from \"%ls\" order by random()), " \
+								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("with t as (select %ls value from \"%ls\" order by random()), " \
 									"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
 									"t2 as (select t.value FROM t, series order by random()), " \
 									"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)"
@@ -1850,12 +1852,12 @@ namespace tools {
 								DateTime_GetSystemtime(GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_END), &end);
 
 								TCHAR start16[32] = {0};
-								_stprintf(start16, TEXT("%i-%0*i-%0*i"), start.wYear, 2, start.wMonth, 2, start.wDay);
+								_sntprintf(start16, 31, TEXT("%i-%0*i-%0*i"), start.wYear, 2, start.wMonth, 2, start.wDay);
 
 								TCHAR end16[32] = {0};
-								_stprintf(end16, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
+								_sntprintf(end16, 31, TEXT("%i-%0*i-%0*i"), end.wYear, 2, end.wMonth, 2, end.wDay);
 
-								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = date('%ls', '+' || ((strftime('%%s', '%ls', '+1 day', '-1 second') - strftime('%%s', '%ls')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
+								_sntprintf(query16, MAX_TEXT_LENGTH,TEXT("update temp.data_generator set \"%ls\" = date('%ls', '+' || ((strftime('%%s', '%ls', '+1 day', '-1 second') - strftime('%%s', '%ls')) * (random()  / 18446744073709551616 + 0.5)) || ' second')"),
 									name16, start16, end16, start16);
 							}
 
@@ -1865,11 +1867,11 @@ namespace tools {
 								TCHAR expr16[size + 1]{0};
 								GetWindowText(hExpressionWnd, expr16, size + 1);
 
-								_stprintf(query16, TEXT("update temp.data_generator set \"%ls\" = %ls"), name16, expr16);
+								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("update temp.data_generator set \"%ls\" = %ls"), name16, expr16);
 							}
 
 							if (!isExpr && ComboBox_GetCurSel(hTypeWnd) > 5) {
-								_stprintf(query16, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
+								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
 									"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
 									"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
 									"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
@@ -1903,7 +1905,7 @@ namespace tools {
 						MessageBox(hWnd, TEXT("Done!"), TEXT("Info"), MB_OK);
 					else
 						showDbError(hWnd);
-					SetWindowLong(hWnd, GWL_USERDATA, rc);
+					SetWindowLongPtr(hWnd, GWLP_USERDATA, rc);
 
 					delete [] schema8;
 					delete [] tablename8;
@@ -2042,7 +2044,7 @@ namespace tools {
 		return false;
 	}
 
-	bool exportExcel(TCHAR* path16, TCHAR* query16) {
+	bool exportExcel(const TCHAR* path16, const TCHAR* query16) {
 		FILE* f = _tfopen(path16, TEXT("wb"));
 		if (f == NULL)
 			return false;
@@ -2099,7 +2101,7 @@ namespace tools {
 				for(int colNo = 0; colNo < colCount; colNo++)
 					size += (sqlite3_column_type(stmt, colNo) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, colNo) : 20) + 256;
 
-				char row[size]{0};
+				char row[size + 5]{0};
 				strcat(row, "<row>");
 
 				for (int colNo = 0; colNo < colCount; colNo++) {
@@ -2205,7 +2207,7 @@ namespace tools {
 
 	int importCSV(TCHAR* path16, TCHAR* tblname16, TCHAR* err16) {
 		if (_tcslen(tblname16) == 0) {
-			_stprintf(err16, TEXT("The table name is empty"));
+			_sntprintf(err16, 1023, TEXT("The table name is empty"));
 			return -1;
 		}
 
@@ -2219,20 +2221,20 @@ namespace tools {
 
 		FILE* f = _tfopen(path16, isUTF8 ? TEXT("r, ccs=UTF-8") : TEXT("r"));
 		if (f == NULL) {
-			_stprintf(err16, TEXT("Error to open file: %s"), path16);
+			_sntprintf(err16, 1023, TEXT("Error to open file: %s"), path16);
 			return -1;
 		}
 
-		TCHAR create16[MAX_TEXT_LENGTH]{0};
-		TCHAR insert16[MAX_TEXT_LENGTH]{0};
-		TCHAR delete16[MAX_TEXT_LENGTH]{0};
+		TCHAR create16[MAX_TEXT_LENGTH + 1]{0};
+		TCHAR insert16[MAX_TEXT_LENGTH + 1]{0};
+		TCHAR delete16[MAX_TEXT_LENGTH + 1]{0};
 
 		TCHAR* schema16 = utils::getName(tblname16, true);
 		TCHAR* tablename16 = utils::getName(tblname16);
 
-		_stprintf(create16, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
-		_stprintf(insert16, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
-		_stprintf(delete16, TEXT("delete from \"%ls\".\"%ls\""), schema16, tablename16);
+		_sntprintf(create16, MAX_TEXT_LENGTH, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
+		_sntprintf(insert16, MAX_TEXT_LENGTH, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
+		_sntprintf(delete16, MAX_TEXT_LENGTH, TEXT("delete from \"%ls\".\"%ls\""), schema16, tablename16);
 
 		delete [] tablename16;
 		delete [] schema16;
@@ -2363,7 +2365,7 @@ namespace tools {
 		// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
 		FILE* f = _tfopen(path16, TEXT("wb"));
 		if (f == NULL) {
-			_stprintf(err16, TEXT("Error to open file: %s"), path16);
+			_sntprintf(err16, 1023, TEXT("Error to open file: %s"), path16);
 			return -1;
 		}
 
@@ -2389,8 +2391,9 @@ namespace tools {
 						sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
 					TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
 					if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
-						TCHAR val16[_tcslen(qvalue16) + 3]{0};
-						_stprintf(val16, TEXT("\"%ls\""), qvalue16);
+						int len = _tcslen(qvalue16) + 3;
+						TCHAR val16[len + 1]{0};
+						_sntprintf(val16, len, TEXT("\"%ls\""), qvalue16);
 						_tcscat(line16, val16);
 					} else {
 						_tcscat(line16, qvalue16);
@@ -2408,7 +2411,7 @@ namespace tools {
 			}
 		} else {
 			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
-			_stprintf(err16, _err16);
+			_sntprintf(err16, 1023, _err16);
 			delete [] _err16;
 			rowCount = -1;
 		}
@@ -2531,7 +2534,7 @@ namespace tools {
 
 		if (msg == WM_LBUTTONDOWN) {
 			HWND hParentWnd = GetParent(hWnd);
-			SetWindowLong(hParentWnd, GWL_USERDATA, (LONG)hWnd);
+			SetWindowLongPtr(hParentWnd, GWLP_USERDATA, (LONG_PTR)hWnd);
 
 			int tblNo = 0;
 			while(HWND hTableWnd = GetDlgItem(hParentWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
@@ -2587,7 +2590,7 @@ namespace tools {
 				// Should be run before TB_SETIMAGELIST to get the correct delimiter position
 				RECT rc{0};
 				SendMessage(hToolbarWnd, TB_GETRECT, IDM_LAST_SEPARATOR, (LPARAM)&rc);
-				cbOldDatabaseDiagramToolbar = (WNDPROC)SetWindowLong(hToolbarWnd, GWL_WNDPROC, (LONG)cbNewDatabaseDiagramToolbar);
+				cbOldDatabaseDiagramToolbar = (WNDPROC)SetWindowLongPtr(hToolbarWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDatabaseDiagramToolbar);
 
 				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DIAGRAM_TOOLBAR), 32, 0, RGB(255, 255, 255));
 				SendMessage(hToolbarWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
@@ -2616,9 +2619,9 @@ namespace tools {
 
 					HWND hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
 						WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
-						rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
+						rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)IntToPtr(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
 
-					cbOldTable = (WNDPROC)SetWindowLong(hTableWnd, GWL_WNDPROC, (LONG)cbNewTable);
+					cbOldTable = (WNDPROC)SetWindowLongPtr(hTableWnd, GWLP_WNDPROC, (LONG_PTR)cbNewTable);
 					ShowWindow(hTableWnd, SW_SHOW);
 
 					delete [] tblname16;
@@ -2629,7 +2632,7 @@ namespace tools {
 					TCHAR* colname16 = utils::utf8to16(name8);
 					TCHAR* type16 = utils::utf8to16(type8);
 					TCHAR buf16[1024]{0};
-					_stprintf(buf16, TEXT("%ls: %ls"), colname16, type16);
+					_sntprintf(buf16, 1023, TEXT("%ls: %ls"), colname16, type16);
 					ListBox_AddString(hTableWnd, buf16);
 
 					delete [] type16;
@@ -2743,8 +2746,8 @@ namespace tools {
 				cursor = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 				isMove = wParam == MK_LBUTTON;
 				SetCapture(hWnd);
-				if (GetWindowLong(hWnd, GWL_USERDATA)) {
-					SetWindowLong(hWnd, GWL_USERDATA, 0);
+				if (GetWindowLongPtr(hWnd, GWLP_USERDATA)) {
+					SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
 					int tblNo = 0;
 					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
 						ShowWindow(hTableWnd, SW_SHOW);
@@ -2833,7 +2836,7 @@ namespace tools {
 				bool isFk = prefs::get("link-fk");
 				bool isView = prefs::get("link-view");
 				bool isTrigger = prefs::get("link-trigger");
-				HWND hCurrWnd = (HWND)GetWindowLong(hWnd, GWL_USERDATA);
+				HWND hCurrWnd = (HWND)GetWindowLongPtr(hWnd, GWLP_USERDATA);
 
 				int tblNo = 0;
 				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
@@ -2992,7 +2995,7 @@ namespace tools {
 					if (wParam == IDM_LINK_TRIGGER)
 						prefs::set("link-trigger", isChecked);
 
-					if (GetWindowLong(hWnd, GWL_USERDATA)) {
+					if (GetWindowLongPtr(hWnd, GWLP_USERDATA)) {
 						int tblNo = 0;
 						while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
 							ShowWindow(hTableWnd, SW_HIDE);

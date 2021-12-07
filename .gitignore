@@ -1,7 +1,9 @@
 bin/
 obj/
+out/
 extensions/*.dll
 extensions/*.bat
+include/*.bat
 http-debug.txt
 sqlite-gui.depend
 sqlite-gui.layout

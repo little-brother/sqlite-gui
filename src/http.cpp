@@ -1,6 +1,6 @@
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <process.h>
-#include <ws2tcpip.h>
 #include <shlwapi.h>
 #include <stdio.h>
 #include "utils.h"
@@ -286,7 +286,7 @@ namespace http {
 		}
 
 		char* response = (char *) calloc((strlen(header) + strlen(content) + strlen(status) + 200), sizeof(char));
-		sprintf(response, header, status, strlen(content), content);
+		sprintf(response, header, status, (int)strlen(content), content);
 		free(status);
 		free(content);
 

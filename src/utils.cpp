@@ -222,13 +222,13 @@ namespace utils {
 			return saveFile(path, filter, defExt, hWnd);
 
 		TCHAR ext[32]{0};
-		TCHAR path2[MAX_PATH]{0};
+		TCHAR path2[MAX_PATH + 1]{0};
 
 		_tsplitpath(path, NULL, NULL, NULL, ext);
 		if (_tcslen(ext) > 0)
 			_tcscpy(path2, path);
 		else
-			_stprintf(path2, TEXT("%ls%ls%ls"), path, _tcslen(defExt) > 0 ? TEXT(".") : TEXT(""), defExt);
+			_sntprintf(path2, MAX_PATH, TEXT("%ls%ls%ls"), path, _tcslen(defExt) > 0 ? TEXT(".") : TEXT(""), defExt);
 
 		bool isFileExists = utils::isFileExists(path2);
 		if (isFileExists && IDYES != MessageBox(hWnd, TEXT("Overwrite file?"), TEXT("Confirmation"), MB_YESNO))
@@ -280,9 +280,9 @@ namespace utils {
 		TCHAR name16[MAX_PATH], ext16[32], name_ext16[MAX_PATH + 32];
 		_tsplitpath(path16, NULL, NULL, name16, ext16);
 		if (noExt)
-			_stprintf(name_ext16, TEXT("%ls"), name16);
+			_sntprintf(name_ext16, MAX_PATH + 31, TEXT("%ls"), name16);
 		else
-			_stprintf(name_ext16, TEXT("%ls%ls"), name16, ext16);
+			_sntprintf(name_ext16, MAX_PATH + 31, TEXT("%ls%ls"), name16, ext16);
 		char* name8 = utils::utf16to8(name_ext16);
 		delete [] path16;
 		return name8;
@@ -293,9 +293,9 @@ namespace utils {
 		TCHAR ext16[32], name_ext16[MAX_PATH + 32];
 		_tsplitpath(path16, NULL, NULL, name16, ext16);
 		if (noExt)
-			_stprintf(name_ext16, TEXT("%ls"), name16);
+			_sntprintf(name_ext16, MAX_PATH + 31, TEXT("%ls"), name16);
 		else
-			_stprintf(name_ext16, TEXT("%ls%ls"), name16, ext16);
+			_sntprintf(name_ext16, MAX_PATH + 31, TEXT("%ls%ls"), name16, ext16);
 
 		return name16;
 	}
@@ -354,14 +354,14 @@ namespace utils {
 	TCHAR* toBlobSize(INT64 bSize) {
 		TCHAR* res = new TCHAR[64]{0};
         if (bSize == 0) {
-			_stprintf(res, TEXT("(BLOB: empty)"));
+			_sntprintf(res, 63, TEXT("(BLOB: empty)"));
 			return res;
         }
 
         int mag = floor(log10(bSize)/log10(1024));
         double size = (double) bSize / (1L << (mag * 10));
 
-        _stprintf(res, TEXT("(BLOB: %.2lf%ls)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
+        _sntprintf(res, 63, TEXT("(BLOB: %.2lf%ls)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
         return res;
 	}
 

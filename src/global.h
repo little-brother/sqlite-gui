@@ -1,6 +1,9 @@
 #ifndef __GLOBAL_H__
 #define __GLOBAL_H__
 
+// missing
+#define LVS_EX_AUTOSIZECOLUMNS      0x10000000
+
 #define MAX_TAB_COUNT               16
 #define MAX_RESULT_COUNT            32
 #define MAX_ENTITY_COUNT          1024
@@ -15,11 +18,12 @@
 #define DLG_CANCEL                 -1
 #define DLG_DELETE                  2
 
-#define ACTION_SETDEFFONT           1
-#define ACTION_DESTROY              2
-#define ACTION_RESIZETAB            3
-#define ACTION_UPDATETAB            4
-#define ACTION_REDRAW               5
+#define ACTION_SETFONT              1
+#define ACTION_SETDEFFONT           2
+#define ACTION_DESTROY              3
+#define ACTION_RESIZETAB            4
+#define ACTION_UPDATETAB            5
+#define ACTION_REDRAW               6
 
 #define ROW_VIEW                    0
 #define ROW_EDIT                    1
@@ -47,7 +51,6 @@
 #include <locale.h>
 #include <math.h>
 
-#include "missing.h"
 #include "sqlite3.h"
 
 extern sqlite3 *db;
@@ -64,6 +67,7 @@ extern const TCHAR *TYPES16p[6];
 extern COLORREF GRIDCOLORS[8];
 
 extern HFONT hDefFont;
+extern HFONT hFont;
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
@@ -71,7 +75,6 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 
 void setEditorFont(HWND hWnd);
 void setEditorColor(HWND hWnd, COLORREF color, bool noEffects = false);
-void setTreeFont(HWND hWnd);
 
 bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
 bool search(HWND hWnd);

@@ -15,8 +15,12 @@
 					<Add option="-std=c++11" />
 					<Add option="-g" />
 					<Add option="-U__STRICT_ANSI__" />
+					<Add option="-D_WIN32_WINNT=0x0501" />
 					<Add directory="include" />
 				</Compiler>
+				<Linker>
+					<Add library="lib/x32/libsqlite3.a" />
+				</Linker>
 			</Target>
 			<Target title="Release">
 				<Option output="bin/Release/sqlite-gui" prefix_auto="1" extension_auto="1" />
@@ -26,11 +30,58 @@
 				<Compiler>
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
+					<Add option="-m32" />
 					<Add option="-U__STRICT_ANSI__" />
+					<Add option="-D_WIN32_WINNT=0x0501" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
+					<Add option="-static-libstdc++" />
+					<Add option="-static" />
+					<Add option="-m32" />
+					<Add library="lib/x32/libsqlite3.a" />
+				</Linker>
+			</Target>
+			<Target title="Release x64">
+				<Option output="bin/Release64/sqlite-gui" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release64/" />
+				<Option type="0" />
+				<Option compiler="mingw64_x64" />
+				<Compiler>
+					<Add option="-Os" />
+					<Add option="-std=c++11" />
+					<Add option="-m64" />
+					<Add option="-U__STRICT_ANSI__" />
+					<Add option="-D_WIN32_WINNT=0x0501" />
+					<Add directory="include" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-static" />
+					<Add option="-m64" />
+					<Add library="lib/x64/libsqlite3.a" />
+				</Linker>
+			</Target>
+			<Target title="Release32">
+				<Option output="bin/Release32/sqlite-gui" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release32/" />
+				<Option type="0" />
+				<Option compiler="mingw64_x32" />
+				<Compiler>
+					<Add option="-Os" />
+					<Add option="-std=c++11" />
+					<Add option="-m32" />
+					<Add option="-U__STRICT_ANSI__" />
+					<Add option="-D_WIN32_WINNT=0x0501" />
+					<Add directory="include" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-static-libstdc++" />
+					<Add option="-static" />
+					<Add option="-m32" />
+					<Add library="lib/x32/libsqlite3.a" />
 				</Linker>
 			</Target>
 		</Build>
@@ -40,7 +91,6 @@
 			<Add option="-m32" />
 			<Add option="-DUNICODE" />
 			<Add option="-D_UNICODE" />
-			<Add option="-D_WIN32_WINNT=0x0501" />
 		</Compiler>
 		<Linker>
 			<Add option="-static" />
@@ -55,7 +105,6 @@
 			<Add library="libmsimg32" />
 			<Add library="libwininet" />
 			<Add library="libws2_32" />
-			<Add library="libsqlite3" />
 			<Add library="ole32" />
 			<Add directory="lib" />
 		</Linker>
