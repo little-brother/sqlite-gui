@@ -1,5 +1,10 @@
-#define GUI_VERSION                "1.6.5"
-#define GUI_VERSION2               1, 6, 5, 0
+#define GUI_VERSION                "1.6.6"
+#define GUI_VERSION2               1, 6, 6, 0
+#ifdef __MINGW64__
+#define GUI_PLATFORM               64
+#else
+#define GUI_PLATFORM               32
+#endif
 #define HELP_VERSION               1
 
 #define IDD_ADDEDIT                11
@@ -21,6 +26,7 @@
 #define IDD_RESULTS_COMPARISON     27
 #define IDD_SHORTCUTS              28
 #define IDD_ADD_INDEX              29
+#define IDD_CUSTOM_FUNCTIONS       30
 
 #define IDD_TOOL_IMPORT_CSV        35
 #define IDD_TOOL_IMPORT_JSON       36
@@ -52,6 +58,7 @@
 #define IDC_REFLIST                70
 #define IDC_PREVIEW_TEXT           71
 #define IDC_PREVIEW_IMAGE          72
+#define IDC_FUNCTION_CODES         73
 
 #define IDC_DLG_EDITOR             100
 #define IDC_DLG_LABEL              101
@@ -82,6 +89,7 @@
 #define IDC_DLG_HTTP_SERVER_PORT   125
 #define IDC_DLG_STARTUP            126
 #define IDC_DLG_MULTIPLE_INSERT    127
+#define IDC_DLG_EDIT_VALUE         128
 
 #define IDC_DLG_QUERYADD           130
 #define IDC_DLG_QUERYFILTER        131
@@ -154,56 +162,63 @@
 #define IDC_DLG_VALUE_SELECTOR     216
 #define IDC_DLG_TYPE               217
 #define IDC_DLG_FOREIGN_KEY_CHECK  218
+#define IDC_DLG_TRIM_VALUES        219
+#define IDC_DLG_SKIP_EMPTY         220
+#define IDC_DLG_ANORT_ON_ERROR     221
 
-#define IDC_DLG_FIND_STRING        220
-#define IDC_DLG_REPLACE_STRING     221
-#define IDC_DLG_FIND               222
-#define IDC_DLG_REPLACE            223
-#define IDC_DLG_REPLACE_ALL        224
-#define IDC_DLG_CASE_SENSITIVE     225
+#define IDC_DLG_FIND_STRING        224
+#define IDC_DLG_REPLACE_STRING     225
+#define IDC_DLG_FIND               226
+#define IDC_DLG_REPLACE            227
+#define IDC_DLG_REPLACE_ALL        228
+#define IDC_DLG_CASE_SENSITIVE     229
 
-#define IDC_DLG_SHORTCUTS          226
+#define IDC_DLG_SHORTCUTS          230
+#define IDC_TAB_EDIT               231
+#define IDC_DLG_FUNCTIONS          232
+#define IDC_DLG_NAME               233
+#define IDC_DLG_NAME_LABEL         234
+#define IDC_DLG_CODE_LABEL         235
 
-#define IDC_DLG_CIPHER_KEY                  227
-#define IDC_DLG_CIPHER_STORE_KEY            228
-#define IDC_DLG_CIPHER                      229
-#define IDC_DLG_CIPHER_LEGACY               230 // iterable!
-#define IDC_DLG_CIPHER_PAGESIZE_LABEL       231
-#define IDC_DLG_CIPHER_PAGESIZE             232
-#define IDC_DLG_CIPHER_PROFILE_LABEL        233
-#define IDC_DLG_CIPHER_PROFILE              234
-#define IDC_DLG_CIPHER_KDF_ITER_LABEL       235
-#define IDC_DLG_CIPHER_KDF_ITER             236
-#define IDC_DLG_CIPHER_KDF_ALGORITHM_LABEL  237
-#define IDC_DLG_CIPHER_KDF_ALGORITHM        238
-#define IDC_DLG_CIPHER_HMAC_USE_LABEL       239
-#define IDC_DLG_CIPHER_HMAC_USE             240
-#define IDC_DLG_CIPHER_HMAC_ALGORITHM_LABEL 241
-#define IDC_DLG_CIPHER_HMAC_ALGORITHM       242
-#define IDC_DLG_CIPHER_FAST_KDF_ITER_LABEL  243
-#define IDC_DLG_CIPHER_FAST_KDF_ITER        244
-#define IDC_DLG_CIPHER_HMAC_SALT_LABEL      245
-#define IDC_DLG_CIPHER_HMAC_SALT            246
-#define IDC_DLG_CIPHER_HMAC_PGNO_LABEL      247
-#define IDC_DLG_CIPHER_HMAC_PGNO            248
-#define IDC_DLG_CIPHER_HEADER_SIZE_LABEL    249
-#define IDC_DLG_CIPHER_HEADER_SIZE          250
+#define IDC_DLG_CIPHER_KEY                  247
+#define IDC_DLG_CIPHER_STORE_KEY            248
+#define IDC_DLG_CIPHER                      249
+#define IDC_DLG_CIPHER_LEGACY               250 // iterable!
+#define IDC_DLG_CIPHER_PAGESIZE_LABEL       261
+#define IDC_DLG_CIPHER_PAGESIZE             262
+#define IDC_DLG_CIPHER_PROFILE_LABEL        263
+#define IDC_DLG_CIPHER_PROFILE              264
+#define IDC_DLG_CIPHER_KDF_ITER_LABEL       265
+#define IDC_DLG_CIPHER_KDF_ITER             266
+#define IDC_DLG_CIPHER_KDF_ALGORITHM_LABEL  267
+#define IDC_DLG_CIPHER_KDF_ALGORITHM        268
+#define IDC_DLG_CIPHER_HMAC_USE_LABEL       269
+#define IDC_DLG_CIPHER_HMAC_USE             270
+#define IDC_DLG_CIPHER_HMAC_ALGORITHM_LABEL 271
+#define IDC_DLG_CIPHER_HMAC_ALGORITHM       272
+#define IDC_DLG_CIPHER_FAST_KDF_ITER_LABEL  273
+#define IDC_DLG_CIPHER_FAST_KDF_ITER        274
+#define IDC_DLG_CIPHER_HMAC_SALT_LABEL      275
+#define IDC_DLG_CIPHER_HMAC_SALT            276
+#define IDC_DLG_CIPHER_HMAC_PGNO_LABEL      277
+#define IDC_DLG_CIPHER_HMAC_PGNO            278
+#define IDC_DLG_CIPHER_HEADER_SIZE_LABEL    279
+#define IDC_DLG_CIPHER_HEADER_SIZE          280
 
-
-#define IDC_DLG_GEN_ISTRUNCATE     260
-#define IDC_DLG_GEN_ROW_COUNT      261
-#define IDC_DLG_GEN_COLUMNS        270
-#define IDC_DLG_GEN_COLUMN         271
-#define IDC_DLG_GEN_COLUMN_NAME    272
-#define IDC_DLG_GEN_COLUMN_TYPE    273
-#define IDC_DLG_GEN_OPTION         274
-#define IDC_DLG_GEN_OPTION_LABEL   280
-#define IDC_DLG_GEN_OPTION_START   281
-#define IDC_DLG_GEN_OPTION_END     282
-#define IDC_DLG_GEN_OPTION_TABLE   283
-#define IDC_DLG_GEN_OPTION_COLUMN  284
-#define IDC_DLG_GEN_OPTION_MULTIPLIER  285
-#define IDC_DLG_GEN_OPTION_EXPR    286
+#define IDC_DLG_GEN_ISTRUNCATE     281
+#define IDC_DLG_GEN_ROW_COUNT      282
+#define IDC_DLG_GEN_COLUMNS        283
+#define IDC_DLG_GEN_COLUMN         284
+#define IDC_DLG_GEN_COLUMN_NAME    285
+#define IDC_DLG_GEN_COLUMN_TYPE    286
+#define IDC_DLG_GEN_OPTION         287
+#define IDC_DLG_GEN_OPTION_LABEL   288
+#define IDC_DLG_GEN_OPTION_START   289
+#define IDC_DLG_GEN_OPTION_END     290
+#define IDC_DLG_GEN_OPTION_TABLE   291
+#define IDC_DLG_GEN_OPTION_COLUMN  292
+#define IDC_DLG_GEN_OPTION_MULTIPLIER  293
+#define IDC_DLG_GEN_OPTION_EXPR    294
 
 #define IDC_DLG_CHART              295
 #define IDC_DLG_CHART_OPTIONS      296
@@ -211,8 +226,6 @@
 #define IDC_DLG_CHART_BASE_LABEL   298
 #define IDC_DLG_CHART_BASE         299
 #define IDC_DLG_CHART_COLUMN       300 // iterable
-
-#define IDC_TAB_EDIT               499
 
 #define IDC_MENU_MAIN              500
 #define IDC_MENU_EDITOR            501
@@ -274,6 +287,7 @@
 #define IDM_DATABASE_DIAGRAM       1536
 #define IDM_COMPARE_DATABASE       1537
 #define IDM_DATABASE_SEARCH        1538
+#define IDM_CUSTOM_FUNCTIONS       1539
 
 #define IDM_HELP                   1540
 #define IDM_ABOUT                  1541
@@ -371,6 +385,8 @@
 #define IDM_PREV_DIALOG            1750
 #define IDM_NEXT_DIALOG            1751
 
+#define IDM_TEST                   1760
+
 // Iterable. Should have a gap.
 #define IDC_HEADER_EDIT            2500
 #define IDC_TAB_ROWS               2600
@@ -387,8 +403,9 @@
 #define IDI_LOGO2                  6001
 #define IDB_TREEVIEW               6002
 #define IDB_TOOLBAR                6003
-#define IDB_DIAGRAM_TOOLBAR        6006
+#define IDB_TOOLBAR_DIAGRAM        6006
 #define IDB_TOOLBAR_DATA           6010
+#define IDB_TOOLBAR_FUNCTIONS      6011
 
 #define IDA_ACCEL                  6100
 #define IDA_ACCEL2                 6101
@@ -410,6 +427,7 @@
 #define IDS_WELCOME                10015
 #define IDS_ODBC_HELP              10016
 #define IDS_CLI_HELP               10017
+#define IDS_FUNCTIONS_HELP         10018
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -452,18 +470,21 @@
 #define WMU_UPDATE_SIZES           WM_USER + 33
 #define WMU_UPDATE_PREVIEW         WM_USER + 34
 #define WMU_RESET_CACHE            WM_USER + 35
+#define WMU_FUNCTION_SAVE          WM_USER + 40
+#define WMU_REGISTER_FUNCTION      WM_USER + 41
+#define WMU_UNREGISTER_FUNCTION    WM_USER + 42
 
-#define WMU_TAB_ADD                WM_USER + 40
-#define WMU_TAB_DELETE             WM_USER + 41
-#define WMU_TAB_SET_CURRENT        WM_USER + 43
-#define WMU_TAB_SET_TEXT           WM_USER + 44
-#define WMU_TAB_GET_TEXT           WM_USER + 45
-#define WMU_TAB_GET_COUNT          WM_USER + 46
-#define WMU_TAB_GET_CURRENT        WM_USER + 47
-#define WMU_TAB_SET_STYLE          WM_USER + 48
-#define WMU_TAB_GET_STYLE          WM_USER + 49
+#define WMU_TAB_ADD                WM_USER + 140
+#define WMU_TAB_DELETE             WM_USER + 141
+#define WMU_TAB_SET_CURRENT        WM_USER + 143
+#define WMU_TAB_SET_TEXT           WM_USER + 144
+#define WMU_TAB_GET_TEXT           WM_USER + 145
+#define WMU_TAB_GET_COUNT          WM_USER + 146
+#define WMU_TAB_GET_CURRENT        WM_USER + 147
+#define WMU_TAB_SET_STYLE          WM_USER + 148
+#define WMU_TAB_GET_STYLE          WM_USER + 149
 
-#define NM_TAB_ADD                 WM_USER + 50
-#define NM_TAB_DELETE              WM_USER + 51
-#define NM_TAB_REQUEST_DELETE      WM_USER + 52
-#define NM_TAB_CHANGE              WM_USER + 53
+#define NM_TAB_ADD                 WM_USER + 150
+#define NM_TAB_DELETE              WM_USER + 151
+#define NM_TAB_REQUEST_DELETE      WM_USER + 152
+#define NM_TAB_CHANGE              WM_USER + 153

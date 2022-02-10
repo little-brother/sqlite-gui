@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 69;
+	const int ICOUNT = 72;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -13,7 +13,7 @@ namespace prefs {
 		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-legacy-rename", "editor-indent", "editor-tab-count", "editor-tab-current",
 		"ask-delete", "word-wrap", "clear-values", "recent-count",
 		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
-		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "csv-import-is-create-table", "csv-import-is-truncate", "csv-import-is-replace",
+		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "csv-import-is-create-table", "csv-import-is-truncate", "csv-import-is-replace", "csv-import-trim-values", "csv-import-skip-empty", "csv-import-abort-on-error",
 		"odbc-strategy",
 		"sql-export-multiple-insert",
 		"row-limit", "show-preview", "preview-width", "max-column-width",
@@ -36,7 +36,7 @@ namespace prefs {
 		0, 1, 1, 1, 1, 0, 0, 1, 0,
 		0, 0, 0, 10,
 		0, 0, 1,
-		0, 0, 1, 1, 0, 1, // csv-import
+		0, 0, 1, 1, 0, 1, 1, 1, 0, // csv-import
 		0,
 		0,
 		10000, 0, 200, 400,
@@ -140,7 +140,8 @@ namespace prefs {
 			"create table if not exists temp.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
 			"create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));" \
 			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
-			"create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);"
+			"create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);" \
+			"create table if not exists functions (id integer primary key autoincrement, name text, type integer default 0, language text default 'sql', code text, code2 text, code3 text, description text);" \
 			"create table if not exists shortcuts as " \
 			"select cast('Alt + F1' as text) name, cast(0x70 as integer) key, cast(0 as integer) ctrl, cast(1 as integer) alt, cast(' "\
 				"-- Columns\npragma table_info(''$SUB$'');\n\n" \

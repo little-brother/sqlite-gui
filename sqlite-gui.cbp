@@ -4,18 +4,17 @@
 	<Project>
 		<Option title="sqlite-gui" />
 		<Option pch_mode="2" />
-		<Option compiler="gcc" />
+		<Option compiler="mingw64_x32" />
 		<Build>
 			<Target title="Debug">
 				<Option output="bin/Debug/sqlite-gui" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
-				<Option compiler="gcc" />
+				<Option compiler="mingw64_x32" />
 				<Compiler>
 					<Add option="-std=c++11" />
 					<Add option="-g" />
 					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-D_WIN32_WINNT=0x0501" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
@@ -26,13 +25,12 @@
 				<Option output="bin/Release/sqlite-gui" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="0" />
-				<Option compiler="gcc" />
+				<Option compiler="mingw64_x32" />
 				<Compiler>
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
 					<Add option="-m32" />
 					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-D_WIN32_WINNT=0x0501" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
@@ -53,7 +51,6 @@
 					<Add option="-std=c++11" />
 					<Add option="-m64" />
 					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-D_WIN32_WINNT=0x0501" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
@@ -63,27 +60,6 @@
 					<Add library="lib/x64/libsqlite3.a" />
 				</Linker>
 			</Target>
-			<Target title="Release32">
-				<Option output="bin/Release32/sqlite-gui" prefix_auto="1" extension_auto="1" />
-				<Option object_output="obj/Release32/" />
-				<Option type="0" />
-				<Option compiler="mingw64_x32" />
-				<Compiler>
-					<Add option="-Os" />
-					<Add option="-std=c++11" />
-					<Add option="-m32" />
-					<Add option="-U__STRICT_ANSI__" />
-					<Add option="-D_WIN32_WINNT=0x0501" />
-					<Add directory="include" />
-				</Compiler>
-				<Linker>
-					<Add option="-s" />
-					<Add option="-static-libstdc++" />
-					<Add option="-static" />
-					<Add option="-m32" />
-					<Add library="lib/x32/libsqlite3.a" />
-				</Linker>
-			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
@@ -91,6 +67,7 @@
 			<Add option="-m32" />
 			<Add option="-DUNICODE" />
 			<Add option="-D_UNICODE" />
+			<Add option="-D_WIN32_WINNT=0x0501" />
 		</Compiler>
 		<Linker>
 			<Add option="-static" />
@@ -115,7 +92,6 @@
 		<Unit filename="src/http.cpp" />
 		<Unit filename="src/http.h" />
 		<Unit filename="src/main.cpp" />
-		<Unit filename="src/missing.h" />
 		<Unit filename="src/prefs.cpp" />
 		<Unit filename="src/prefs.h" />
 		<Unit filename="src/resource.h" />

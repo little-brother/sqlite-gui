@@ -86,7 +86,7 @@ TCHAR* getCurrentText(HWND hWnd);
 bool toggleWordWrap(HWND hEditorWnd);
 bool toggleTextCase (HWND hEditorWnd);
 bool toggleComment (HWND hEditorWnd);
-bool pasteText (HWND hEditorWnd);
+bool pasteText (HWND hEditorWnd, bool detectCSV = false);
 bool formatQuery (HWND hEditorWnd);
 void switchDialog(HWND hDlg, bool isNext);
 void createTooltip(HWND hWnd);

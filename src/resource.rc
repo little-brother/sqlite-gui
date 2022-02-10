@@ -185,7 +185,8 @@ BEGIN
 	EDITTEXT		IDC_DLG_HTTP_SERVER_PORT, 160, 127, 33, 12, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
 	AUTOCHECKBOX	"Check for updates automatically", IDC_DLG_CHECK_UPDATES, 5, 110 + 30, 180, 16, BS_NOTIFY
-	AUTOCHECKBOX	"App exit by escape", IDC_DLG_EXIT_BY_ESCAPE, 5, 110 + 45, 180, 16, BS_NOTIFY
+	LTEXT	        "On Escape", IDC_DLG_LABEL, 5, 158, 50, 16, BS_NOTIFY
+	COMBOBOX		IDC_DLG_EXIT_BY_ESCAPE, 55, 155, 140, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
 	LTEXT		   "Editor indent", IDC_DLG_LABEL, 5, 149 - 20 + 30 + 15, 50, 14, SS_LEFT
 	COMBOBOX		IDC_DLG_INDENT, 55, 146 - 20 + 30 + 15, 65, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
@@ -317,6 +318,20 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_CUSTOM_FUNCTIONS DIALOGEX 100, 50, 400, 300
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
+	CAPTION "User-defined functions"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	CONTROL "", IDC_DLG_FUNCTIONS, WC_LISTBOX, LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOTIFY, 0, 0, 150, 0, WS_EX_STATICEDGE
+
+	LTEXT "Name", IDC_DLG_NAME_LABEL, 0, 0, 0, 0, SS_LEFT
+	EDITTEXT IDC_DLG_NAME, 0, 0, 0, 0, WS_BORDER | WS_TABSTOP
+	LTEXT "SQL implementation code", IDC_DLG_CODE_LABEL, 0, 0, 0, 0, SS_LEFT
+	CONTROL "", IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL, 0, 0, 0, 0, WS_EX_STATICEDGE
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_TOOL_DATABASE_DIAGRAM DIALOGEX 50, 50, 550, 400
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME | WS_CLIPCHILDREN
 	CAPTION "Database diagram"
@@ -371,7 +386,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_TOOL_IMPORT_CSV DIALOGEX 200, 50, 182, 200
+IDD_TOOL_IMPORT_CSV DIALOGEX 200, 50, 182, 212
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME
 	CAPTION "Import CSV data"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -381,18 +396,24 @@ BEGIN
 	LTEXT "Table name", IDC_DLG_LABEL, 5, 22, 45, 14, SS_LEFT
 	EDITTEXT IDC_DLG_TABLENAME, 50, 20, 125, 12, WS_BORDER
 	COMBOBOX IDC_DLG_TABLENAMES, 50, 20, 125, 200, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS | NOT WS_VISIBLE
+
 	AUTOCHECKBOX "Truncate data before import", IDC_DLG_ISTRUNCATE, 50, 15 + 18, 140, 12, BS_NOTIFY | NOT WS_VISIBLE
 	AUTOCHECKBOX "Use REPLACE instead of INSERT", IDC_DLG_ISREPLACE, 50, 15 + 30, 140, 12, BS_NOTIFY | NOT WS_VISIBLE
 
 	AUTOCHECKBOX "Column names in first line", IDC_DLG_ISCOLUMNS, 5, 19 + 40, 140, 16, BS_NOTIFY
-	LTEXT "Column delimiter", IDC_DLG_LABEL, 5, 37 + 42, 80, 14, SS_LEFT
-	COMBOBOX IDC_DLG_DELIMITER, 65, 36 + 40, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-	LTEXT "Encoding", IDC_DLG_LABEL, 5, 52 + 40, 80, 14, SS_LEFT
-	COMBOBOX IDC_DLG_ENCODING, 65, 49 + 40, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
-	CONTROL "",	IDC_DLG_PREVIEW, WC_LISTVIEW, LVS_NOSCROLL | WS_TABSTOP | LVS_AUTOARRANGE | LVS_REPORT | LVS_SINGLESEL, 5, 70 + 40, 170, 60, WS_EX_STATICEDGE
+	AUTOCHECKBOX "Trim values", IDC_DLG_TRIM_VALUES, 5, 19 + 40 + 13, 140, 16, BS_NOTIFY
+	LTEXT "Column delimiter", IDC_DLG_LABEL, 5, 37 + 42 + 12, 80, 14, SS_LEFT
+	COMBOBOX IDC_DLG_DELIMITER, 65, 36 + 40 + 12, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT "Encoding", IDC_DLG_LABEL, 5, 52 + 40 + 12, 80, 14, SS_LEFT
+	COMBOBOX IDC_DLG_ENCODING, 65, 49 + 40 + 12, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
-	PUSHBUTTON "OK", IDC_DLG_OK,50, 141 + 40, 60, 14
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 115, 141 + 40, 60, 14
+	AUTOCHECKBOX "Skip empty rows", IDC_DLG_SKIP_EMPTY, 110, 19 + 40, 140, 16, BS_NOTIFY
+	AUTOCHECKBOX "Abort on error", IDC_DLG_TRIM_VALUES, 110, 19 + 40 + 13, 140, 16, BS_NOTIFY
+
+	CONTROL "",	IDC_DLG_PREVIEW, WC_LISTVIEW, LVS_NOSCROLL | WS_TABSTOP | LVS_AUTOARRANGE | LVS_REPORT | LVS_SINGLESEL, 5, 70 + 40 + 12, 170, 60, WS_EX_STATICEDGE
+
+	PUSHBUTTON "OK", IDC_DLG_OK,50, 141 + 40 + 12, 60, 14
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 115, 141 + 40 + 12, 60, 14
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -567,6 +588,8 @@ BEGIN
 		MENUITEM "Close", IDM_CLOSE, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "No recents", 0, GRAYED
+		MENUITEM SEPARATOR
+		MENUITEM "Custom functions", IDM_CUSTOM_FUNCTIONS
 		MENUITEM SEPARATOR
 		MENUITEM "Set encryption", IDM_ENCRYPTION, GRAYED
 		MENUITEM "Attach database", IDM_ATTACH, GRAYED
@@ -937,9 +960,7 @@ BEGIN
 	IDS_CREATE_VIEW "create view myview\nas\nselect * from mytable"
 	IDS_CREATE_INDEX "-- create [unique] index [if not exists] [schema.]<index-name>\n-- on <table-name>\n-- (<indexed-column1> [asc|desc], <indexed-column2> ...)\n-- [where conditions] <- partial index\ncreate index idx_mytable on mytable (\n  ""colA"" desc,\n  ""colB"" asc\n) where colA is not null"
 	IDS_CREATE_TRIGGER "-- create [TEMP] trigger [if not exists] [schema.]<trigger-name>\n-- {before|after|instead of} {delete|insert|update|update of column1, column2, ...} on <table-name>\n-- when <expression>\n-- begin\n-- <some-statements: use NEW. and OLD. to refs>;\n-- end.\ncreate trigger trg_mytable_insert\nafter insert on mytable\nwhen id > 10\n\nbegin\n  insert into mytable2\n  select NEW.id, NEW.name;\nend;"
-	IDS_ABOUT "sqlite-gui is a visual tool for SQLite database\nLittle Brother (c) 2020-2021"
 	IDS_HOTKEYS "Global\n" \
-		"Esc - App exit\n" \
 		"F5 - Refresh navigation tree\n" \
 		"Tab + Ctrl + Shift - Switch between the tree, the editor and the result panel\n" \
 		"Ctrl + O - Open database\n" \
@@ -1005,7 +1026,7 @@ BEGIN
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
-		"* Do you need a newer version of SQLite?\n   Recompile it and replace sqlite3.dll. 32-bit version is required.\n   For an encryption support you should rebuild SQLite3 Multiple Cipher\n   library. Check Wiki to get more details.\n\n" \
+		"* Do you need a newer version of SQLite?\n   Check Wiki to get more details.\n\n" \
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
 		"* You can define your own types in the data generator by adding rows to \n   table ""generators"" in ""prefs.sqlite"". The type is defined by ""type"" column.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
@@ -1070,6 +1091,14 @@ BEGIN
 		".import-csv <path> <table> - Import the csv file with default settings\n" \
 		".export-csv <path> <query> - Export an query result to the csv file with default settings" \
 
+	IDS_FUNCTIONS_HELP "The function name should be unique to avoid redefinition.\n"
+		"The code is a select statement with a single return value.\n" \
+		"Use ?1, ?2 and etc as arguments e.g. ""select max(?1, ?2)""\n\n" \
+		"You can use exec-command to call non-SQL functions e.g. \n"\
+		"select exec('powershell -nologo ""Get-Content ?1""')\n\n"
+		"Be aware, these functions exist only in application context\n" \
+		"and they are very slow. Only scalar functions are supported."
+
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"
 	IDS_TOOLTIP_SAVE "Save current query"
@@ -1082,7 +1111,8 @@ IDI_LOGO ICON "resources/logo.ico"
 IDI_LOGO2 ICON "resources/logo2.ico"
 IDB_TOOLBAR BITMAP "resources/toolbar.bmp"
 IDB_TOOLBAR_DATA BITMAP "resources/toolbar_data.bmp"
-IDB_DIAGRAM_TOOLBAR BITMAP "resources/toolbar_diagram.bmp"
+IDB_TOOLBAR_DIAGRAM BITMAP "resources/toolbar_diagram.bmp"
+IDB_TOOLBAR_FUNCTIONS BITMAP "resources/toolbar_functions.bmp"
 
 IDR_HELP   RCDATA "resources/help.sql"
 IDR_EXCEL  RCDATA "resources/template.xlsx"

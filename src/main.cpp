@@ -92,7 +92,7 @@ struct ListViewCell {
 ListViewCell currCell;
 
 int currParenthesisPos[] = {-1, -1};
-bool isRequireHighligth = false, isRequireParenthesisHighligth = false, isRequireOccurrenceHighlight = false;
+bool isRequireHighligth = false, isRequireParenthesisHighligth = false, isRequireOccurrenceHighlight = false, isOccuranceHighligthed = false;
 int selStartPos = -1;
 
 TCHAR APP_PATH[MAX_PATH]{0};
@@ -122,6 +122,8 @@ bool saveResultToTable(const TCHAR* table16, int tabNo, int resultNo, int search
 bool startHttpServer();
 bool stopHttpServer();
 HFONT loadFont();
+
+void userDefinedFunction (sqlite3_context *ctx, int argc, sqlite3_value **argv);
 
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -301,6 +303,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	}
 	SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, 0, 0);
 
+	CreateWindow(WC_STATIC, NULL, WS_CHILD, 0, 0, 0, 0, hMainWnd, (HMENU)IDC_FUNCTION_CODES, GetModuleHandle(0),  NULL);
+
 	cli.hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
 	SendMessage(cli.hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 	SetWindowLongPtr(cli.hEditorWnd, GWLP_USERDATA, 0);
@@ -442,26 +446,28 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				int tabCurrent = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 				prefs::set("editor-tab-current", tabCurrent);
 
-				int size = GetWindowTextLength(cli.hEditorWnd);
-				TCHAR text16[size + 1] = {0};
-				GetWindowText(cli.hEditorWnd, text16, size + 1);
+				int len = GetWindowTextLength(cli.hEditorWnd);
+				TCHAR* text16 = new TCHAR[len + 1]{0};
+				GetWindowText(cli.hEditorWnd, text16, len + 1);
 				char *text8 = utils::utf16to8(text16);
 				prefs::set("editor-cli-text", text8);
 				delete [] text8;
+				delete [] text16;
 
 				int tabCount = SendMessage(hMainTabWnd, WMU_TAB_GET_COUNT, 0, 0);
 				prefs::set("editor-tab-count", tabCount);
 
 				for (int tabNo = 0; tabNo < tabCount; tabNo++) {
 					HWND hEditorWnd = tabs[tabNo].hEditorWnd;
-					int size = GetWindowTextLength(hEditorWnd);
-					TCHAR text16[size + 1] = {0};
-					GetWindowText(hEditorWnd, text16, size + 1);
+					int len = GetWindowTextLength(hEditorWnd);
+					TCHAR* text16 = new TCHAR[len + 1]{0};
+					GetWindowText(hEditorWnd, text16, len + 1);
 					char key[80] = {0};
 					sprintf(key, "editor-text-%i", tabNo);
 					char *text8 = utils::utf16to8(text16);
 					prefs::set(key, text8);
 					delete [] text8;
+					delete [] text16;
 
 					TCHAR name16[80] = {0};
 					SendMessage(hMainTabWnd, WMU_TAB_GET_TEXT, tabNo, (LPARAM)name16);
@@ -502,6 +508,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				} while (FindNextFile(hFind, &ffd));
 			}
 			FindClose(hFind);
+
+			HWND hCodesWnd = GetDlgItem(hWnd, IDC_FUNCTION_CODES);
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name from functions", -1, &stmt, 0)) {
+				while (SQLITE_ROW == sqlite3_step(stmt)) {
+					char* code8 = (char*)GetPropA(hCodesWnd, (const char*)sqlite3_column_text(stmt, 0));
+					if (code8)
+						delete [] code8;
+				}
+			}
+			sqlite3_finalize(stmt);
 
 			sqlite3_shutdown();
 			PostQuitMessage (0);
@@ -862,6 +879,21 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_CLOSE)
 				closeDb();
 
+			if (cmd == IDM_CUSTOM_FUNCTIONS) {
+				if (isDbBusy())
+					return false;
+
+				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CUSTOM_FUNCTIONS), hMainWnd, (DLGPROC)&dialogs::cbDlgCustomFunctions);
+			}
+
+			if (cmd == IDM_ENCRYPTION) {
+				if (isDbBusy())
+					return false;
+
+				if (DLG_OK == DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ENCRYPTION), hMainWnd, (DLGPROC)&dialogs::cbDlgEncryption))
+					closeConnections();
+			}
+
 			if (cmd == IDM_ATTACH) {
 				if (isDbBusy())
 					return false;
@@ -872,14 +904,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					attachDb(&db, path8);
 					delete [] path8;
 				}
-			}
-
-			if (cmd == IDM_ENCRYPTION) {
-				if (isDbBusy())
-					return false;
-
-				if (DLG_OK == DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ENCRYPTION), hMainWnd, (DLGPROC)&dialogs::cbDlgEncryption))
-					closeConnections();
 			}
 
 			if (cmd == IDM_SETTINGS && DLG_OK == DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_SETTINGS), hMainWnd, (DLGPROC)&dialogs::cbDlgSettings)) {
@@ -1064,8 +1088,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (!SendMessage(hToolbarWnd, TB_ISBUTTONHIDDEN, IDM_INTERRUPT, 0))
 					return SendMessage(hWnd, WM_COMMAND, IDM_INTERRUPT, 0);
 
-				if(prefs::get("exit-by-escape") && !IsWindowVisible(hAutoComplete) && !GetDlgItem(hMainTabWnd, IDC_TAB_EDIT) && !TreeView_GetEditControl(hTreeWnd))
+				int exitByEscape = prefs::get("exit-by-escape");
+				if((exitByEscape == 1 || (exitByEscape == 2 && MessageBox(hMainWnd, TEXT("Are you sure you want to close the app?"), TEXT("Exit confirmation"), MB_YESNO) == IDYES)) &&
+					!IsWindowVisible(hAutoComplete) && !GetDlgItem(hMainTabWnd, IDC_TAB_EDIT) && !TreeView_GetEditControl(hTreeWnd)) {
 					SendMessage(hMainWnd, WM_CLOSE, 0, 0);
+				}
+
 			}
 
 			if (cmd == IDM_QUERY_DATA || cmd == IDM_EDIT_DATA || cmd == IDM_ERASE_DATA || cmd == IDM_ADD_COLUMN || cmd == IDM_ADD_INDEX) {
@@ -1423,7 +1451,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd >= IDM_RESULT_COMPARE && cmd <= IDM_RESULT_COMPARE + MAX_COMPARE_RESULT) {
 				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
-				HWND hCurrListWnd = (HWND)GetWindowLongPtr(tabs[currTabNo].hTabWnd, GWLP_USERDATA);
+				HWND hCurrListWnd = (HWND)SendMessage(hWnd, WMU_GET_CURRENT_RESULTSET, 0, 0);
 				int currResultNo = GetWindowLongPtr(hCurrListWnd, GWLP_USERDATA);
 
 				HMENU hCompareMenu = GetSubMenu(hResultMenu, 10);
@@ -1466,7 +1494,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SendMessage(hEditorWnd, WM_COPY, 0, 0);
 
 			if (cmd == IDM_EDITOR_PASTE)
-				pasteText (hEditorWnd);
+				pasteText (hEditorWnd, true);
 
 			if (cmd == IDM_EDITOR_DELETE)
 				SendMessage (hEditorWnd, EM_REPLACESEL, TRUE, 0);
@@ -1499,7 +1527,19 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_CLI_CLEAR_ALL)
 				SetWindowText(cli.hResultWnd, 0);
 
-			if (cmd == IDM_ABOUT || cmd == IDM_TIPS || cmd == IDM_EXTENSIONS || cmd == IDM_HOTKEYS) {
+			if (cmd == IDM_ABOUT) {
+				TCHAR buf[1024];
+				_sntprintf(buf, 1023, TEXT("SQLite database editor\n\nGUI version: %ls\nArchitecture: %ls\nSQLite version: %hs\nEncryption support: %ls\nBuild date: %ls\n"),
+				TEXT(GUI_VERSION),
+				GUI_PLATFORM == 32 ? TEXT("x86") : TEXT("x86-64"),
+				sqlite3_libversion(),
+				isCipherSupport ? TEXT("Yes") : TEXT("No"),
+				TEXT(__DATE__));
+
+				MessageBox(hMainWnd, buf, TEXT("About sqlite-gui"), MB_OK);
+			}
+
+			if (cmd == IDM_TIPS || cmd == IDM_EXTENSIONS || cmd == IDM_HOTKEYS) {
 				HMENU hMenu = GetSubMenu(hMainMenu, 3);
 				TCHAR title[255];
 				GetMenuString(hMenu, cmd, title, 255, MF_BYCOMMAND);
@@ -1734,11 +1774,25 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				SELCHANGE *pSc = (SELCHANGE*)lParam;
 				isRequireParenthesisHighligth = pSc->seltyp == SEL_EMPTY;
-				isRequireOccurrenceHighlight = (isRequireOccurrenceHighlight && pSc->seltyp == SEL_EMPTY) || pSc->seltyp != SEL_EMPTY;
 				if (pSc->seltyp == SEL_EMPTY)
 					selStartPos = pSc->chrg.cpMin;
-				if (isRequireParenthesisHighligth || isRequireOccurrenceHighlight)
+
+				isRequireOccurrenceHighlight = (isRequireOccurrenceHighlight && pSc->seltyp == SEL_EMPTY) || isOccuranceHighligthed;
+				if (!isRequireOccurrenceHighlight && pSc->seltyp != SEL_EMPTY) {
+					int len = pSc->chrg.cpMax - pSc->chrg.cpMin;
+					TCHAR* text = new TCHAR[len + 1];
+					if (SendMessage(hEditorWnd, EM_GETSELTEXT, len + 1, (LPARAM)text)) {
+						isRequireOccurrenceHighlight = true;
+						for (int i = 0; i < len && isRequireOccurrenceHighlight; i++)
+							isRequireOccurrenceHighlight = _istalnum(text[i]);
+					}
+					delete [] text;
+				}
+
+				if (isRequireParenthesisHighligth || isRequireOccurrenceHighlight) {
+					isRequireHighligth = false;
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+				}
 
 				return true;
 			}
@@ -2396,6 +2450,52 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
+		// wParam = name8, lParam = code8
+		case WMU_REGISTER_FUNCTION: {
+			const char* name8 = (const char*)wParam;
+
+
+			HWND hCodesWnd = GetDlgItem(hWnd, IDC_FUNCTION_CODES);
+			char* code8 = (char*)GetPropA(hCodesWnd, name8);
+			if (code8)
+				delete [] code8;
+
+			code8 = strdup((const char*)lParam);
+			SetPropA(hCodesWnd, name8, code8);
+
+			for (int i = 0; i < MAX_TAB_COUNT; i++) {
+				TEditorTab* tab = &tabs[i];
+				if (tab->id && tab->db)
+					sqlite3_create_function(tab->db, name8, -1, SQLITE_UTF8, (void*)code8, userDefinedFunction, 0, 0);
+			}
+
+			if (cli.db)
+				sqlite3_create_function(cli.db, name8, -1, SQLITE_UTF8, (void*)code8, userDefinedFunction, 0, 0);
+		}
+		break;
+
+		// wParam = name8
+		case WMU_UNREGISTER_FUNCTION: {
+			const char* name8 = (const char*)wParam;
+
+			HWND hCodesWnd = GetDlgItem(hWnd, IDC_FUNCTION_CODES);
+			char* code8 = (char*)GetPropA(hCodesWnd, name8);
+			if (code8)
+				delete [] code8;
+			RemovePropA(hCodesWnd, name8);
+
+			for (int i = 0; i < MAX_TAB_COUNT; i++) {
+				TEditorTab* tab = &tabs[i];
+				if (tab->id && tab->db)
+					sqlite3_create_function(tab->db, name8, -1, SQLITE_UTF8, 0, 0, 0, 0);
+			}
+
+			if (cli.db)
+				sqlite3_create_function(cli.db, name8, -1, SQLITE_UTF8, 0, 0, 0, 0);
+		}
+		break;
+
+
 		default:
 			return DefWindowProc (hWnd, msg, wParam, lParam);
 	}
@@ -2852,12 +2952,36 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	TEditorTab _tab = *tab;
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, getTabNo(_tab.id), 1);
 
-	auto detectMetaChanges = [](char* query8) {
+	auto detectDataChanges = [](const char* sql8) {
+		char* query8 = _strdup(sql8);
 		strlwr(query8);
-		return strstr(query8, "create table") || strstr(query8, "create virtual table") || strstr(query8, "create view") ||
+
+		auto hasString = [](const char* text, const char* word) {
+			bool res = false;
+			int tlen = strlen(text);
+			int wlen = strlen(word);
+			for (int pos = 0; pos < tlen - wlen && !res; pos++)
+				res = strstr(text + pos, word) != NULL && (pos == tlen - wlen - 1 || !isalnum(text[pos + wlen]));
+
+			return res;
+		};
+
+		bool res = (hasString(query8, "update") && hasString(query8, "set")) ||
+			(hasString(query8, "insert") && hasString(query8, "into")) ||
+			(hasString(query8, "delete") && hasString(query8, "from"));
+		free(query8);
+		return res;
+	};
+
+	auto detectMetaChanges = [](const char* sql8) {
+		char* query8 = _strdup(sql8);
+		strlwr(query8);
+		bool res = strstr(query8, "create table") || strstr(query8, "create virtual table") || strstr(query8, "create view") ||
 			strstr(query8, "create index") || strstr(query8, "create trigger") ||
 			strstr(query8, "drop table") || strstr(query8, "drop view") || strstr(query8, "alter table") ||
 			strstr(query8, "drop index") || strstr(query8, "drop trigger");
+		free(query8);
+		return res;
 	};
 	bool isMetaChanged = false;
 
@@ -2974,11 +3098,13 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			if (hResultWnd == 0) {
 				hResultWnd = hMessageWnd;
 				if (rc == SQLITE_OK && SQLITE_DONE == sqlite3_step(stmt)) {
-					int cnt = sqlite3_changes(_tab.db);
 					TCHAR text[64];
-					_sntprintf(text, 63, TEXT("%i rows have been changed"), cnt);
+					if (detectDataChanges(sql8))
+						_sntprintf(text, 63, TEXT("%i rows have been changed"), sqlite3_changes(_tab.db));
+					else
+						_sntprintf(text, 63, TEXT("Done"));
 					SetWindowText(hResultWnd, text);
-					isMetaChanged = isMetaChanged || (cnt == 0 && detectMetaChanges(sql8));
+					isMetaChanged = isMetaChanged || detectMetaChanges(sql8);
 				} else {
 					char *err8 = (char*)sqlite3_errmsg(_tab.db);
 					TCHAR* err16 = utils::utf8to16(err8);
@@ -3235,7 +3361,7 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 void updateRecentList() {
 	HMENU hMenu = GetSubMenu(hMainMenu, 0);
 	int size = GetMenuItemCount(hMenu);
-	int afterRecentCount = 5 + isCipherSupport; // exit, sep, setting, attach, sep + cipher, save as
+	int afterRecentCount = 7 + isCipherSupport; // exit, sep, setting, attach, sep + cipher, save as, sep + functions
 
 	for (int i = 4; i < size - afterRecentCount; i++)
 		RemoveMenu(hMenu, 4, MF_BYPOSITION);
@@ -3528,6 +3654,13 @@ bool openConnection(sqlite3** _db, const char* path8, bool isReadOnly) {
 	if (strlen(startup8) > 0)
 		sqlite3_exec(*_db, startup8, 0, 0, 0);
 	delete [] startup8;
+
+	sqlite3_stmt* stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name, code from functions", -1, &stmt, 0)) {
+		while (SQLITE_ROW == sqlite3_step(stmt))
+			SendMessage(hMainWnd, WMU_REGISTER_FUNCTION, (WPARAM)sqlite3_column_text(stmt, 0), (LPARAM)sqlite3_column_text(stmt, 1));
+	}
+	sqlite3_finalize(stmt);
 
 	return true;
 }
@@ -3887,7 +4020,7 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 
 		int id = (int)(GetDlgCtrlID(hWnd) / 100) * 100;
 		bool showPreview = prefs::get("show-preview");
-		int w = showPreview ? prefs::get("preview-width") : -5;
+		int w = showPreview && id != IDC_TAB_MESSAGE ? prefs::get("preview-width") : -5;
 
 		LONG flags = SWP_NOACTIVATE | SWP_NOZORDER;
 		if (id == IDC_TAB_MESSAGE || id == IDC_TAB_ROWS)
@@ -3910,9 +4043,11 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, (LPARAM)tabs[tabNo].queryElapsedTimes[resultNo]);
 			}
 
-			if (id == IDC_TAB_PREVIEW) {
+			if (id == IDC_TAB_PREVIEW)
 				ShowWindow(hWnd, prefs::get("show-preview") ? SW_SHOW : SW_HIDE);
-			}
+
+			if (id == IDC_TAB_MESSAGE)
+				ShowWindow(hWnd, SW_SHOW);
 		} else {
 			ShowWindow(hWnd, SW_HIDE);
 		}
@@ -4779,6 +4914,7 @@ void updateOccurrenceHighlighting(HWND hWnd) {
 
 	SendMessage(hWnd, EM_SETSEL, 0, -1);
 	SendMessage(hWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf2);
+	isOccuranceHighligthed = false;
 
 	if (size > 1 && isAlphaNum) {
 		cf2.crBackColor = RGB(225, 225, 255);
@@ -4800,6 +4936,8 @@ void updateOccurrenceHighlighting(HWND hWnd) {
 				i += size;
 			}
 		}
+
+		isOccuranceHighligthed = true;
 	}
 
 	// The selection has a direction defined by min and max positions.
@@ -5244,16 +5382,19 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				bool isSuitable = _tcslen(TABLES[i]) == prefixLen && !_tcsicmp(TABLES[i], prefix);
 
 				size_t tbl_aLen = _tcslen(TABLES[i]) + prefixLen;
-				TCHAR tbl_a[tbl_aLen + 1 + 1 + 2] {0}; // +1 - space, +1 - \0, +2 for quotes
-				TCHAR tbl_t[][10] = {TEXT("%ls %ls"), TEXT("\"%ls\" %ls"), TEXT("'%ls' %ls"), TEXT("[%ls] %ls"), TEXT("`%ls` %ls")};
-				for (int j = 0; j < 5 && !isSuitable; j++) {
-					_sntprintf(tbl_a, tbl_aLen + 4, tbl_t[j], TABLES[i], prefix); // tablename alias
+				TCHAR tbl_a[tbl_aLen + 1 + 1 + 2 + 4  /* as */] {0}; // +1 - space, +1 - \0, +2 for quotes
+				TCHAR tbl_t[][20] = {
+					TEXT("%ls %ls"), TEXT("\"%ls\" %ls"), TEXT("'%ls' %ls"), TEXT("[%ls] %ls"), TEXT("`%ls` %ls"),
+					TEXT("%ls as %ls"), TEXT("\"%ls\" as %ls"), TEXT("'%ls' as %ls"), TEXT("[%ls] as %ls"), TEXT("`%ls` as %ls")
+				};
+				for (int j = 0; j < 10 && !isSuitable; j++) {
+					_sntprintf(tbl_a, tbl_aLen + 4 + 4 /* as */, tbl_t[j], TABLES[i], prefix); // tablename alias
 					_tcslwr(tbl_a);
-					TCHAR* p = _tcsstr(text, tbl_a);
 
+					TCHAR* p = _tcsstr(text, tbl_a);
 					isSuitable = p && // found
 						(_tcslen(p) == tLen || _tcschr(breakers, (p - 1)[0])) && // not xxxtablename alias
-						(p + tbl_aLen == 0 || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : 3))[0])); // not tablename aliasxxx
+						(p + tbl_aLen == 0 || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : j < 5 ? 3 : j == 5 ? 4 : 6))[0])); // not tablename aliasxxx
 				}
 
 				if (isSuitable) {
@@ -5766,8 +5907,8 @@ LRESULT CALLBACK cbNewResultPreview (HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 				pStream->Release();
 			}
 
-			if (hResult != S_OK) {
-				char* hex = new char[size * 5] {0};
+			if (hResult != S_OK || !pStream) {
+				char* hex = new char[size * 4 + (size / 8) * 4 + 36 + 1] {0}; // each byte requires: 3 byte for hex e.g. `FA `, 1 byte for char, 4 bytes per each 8 char for ` | ` + \n and additional 36 byte for last line
 
 				auto xhr = [data, size](int i) {
 					return i < size ? data[i] : 0xFF;
@@ -5778,7 +5919,8 @@ LRESULT CALLBACK cbNewResultPreview (HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 				};
 
 				for (int lineNo = 0; lineNo <= size / 8; lineNo++) {
-					char buf[36];
+					char buf[36]{0};
+
 					sprintf(buf, "%02X %02X %02X %02X %02X %02X %02X %02X | %c%c%c%c%c%c%c%c\n",
 						xhr(4 + lineNo * 8), xhr(4 + lineNo * 8 + 1), xhr(4 + lineNo * 8 + 2), xhr(4 + lineNo * 8 + 3),
 						xhr(4 + lineNo * 8 + 4), xhr(4 + lineNo * 8 + 5), xhr(4 + lineNo * 8 + 6), xhr(4 + lineNo * 8 + 7),
@@ -5796,9 +5938,8 @@ LRESULT CALLBACK cbNewResultPreview (HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 					memcpy(hex + lineNo * 35, buf, 36);
 				}
 
-				TCHAR *hex16;
 				DWORD hexSize = MultiByteToWideChar(CP_ACP, 0, hex, -1, NULL, 0);
-				hex16 = new TCHAR[hexSize + 1];
+				TCHAR* hex16 = new TCHAR[hexSize + 1];
 				MultiByteToWideChar(CP_ACP, 0, hex, -1, hex16, hexSize);
 				delete [] hex;
 
@@ -6454,7 +6595,7 @@ bool toggleComment (HWND hEditorWnd) {
 	return true;
 }
 
-bool pasteText (HWND hEditorWnd) {
+bool pasteText (HWND hEditorWnd, bool detectCSV) {
 	HWND hParentWnd = GetAncestor(hEditorWnd, GA_ROOT);
 	TCHAR* clipboard = utils::getClipboardText();
 	int len = _tcslen(clipboard);
@@ -6492,17 +6633,31 @@ bool pasteText (HWND hEditorWnd) {
 	}
 
 	if (isTableData) {
-		_tcslwr(clipboard);
-		int pos = 0;
-		while (!_istprint(clipboard[pos]) && pos < len)
-			pos++;
+		TCHAR* lwr = _tcsdup(clipboard);
+		_tcslwr(lwr);
 
-		if (_tcsncmp(clipboard + pos, TEXT("select"), 6) == 0 ||
-			_tcsncmp(clipboard + pos, TEXT("insert"), 6) == 0 ||
-			_tcsncmp(clipboard + pos, TEXT("delete"), 6) == 0 ||
-			_tcsncmp(clipboard + pos, TEXT("update"), 6) == 0 ||
-			_tcsncmp(clipboard + pos, TEXT("with "), 5) == 0)
+		auto hasString = [](const TCHAR* text, const TCHAR* word) {
+			bool res = false;
+			int tlen = _tcslen(text);
+			int wlen = _tcslen(word);
+			for (int pos = 0; pos < tlen - wlen && !res; pos++)
+				res = _tcsstr(text + pos, word) != NULL && (pos == tlen - wlen - 1 || !_istalnum(text[pos + wlen]));
+
+			return res;
+		};
+
+		if ((hasString(lwr, TEXT("select")) && hasString(lwr, TEXT("from"))) ||
+			(hasString(lwr, TEXT("delete")) && hasString(lwr, TEXT("from"))) ||
+			(hasString(lwr, TEXT("update")) && hasString(lwr, TEXT("set"))) ||
+			hasString(lwr, TEXT("insert into")) ||
+			hasString(lwr, TEXT("alter table")) ||
+			(
+				(hasString(lwr, TEXT("create")) || hasString(lwr, TEXT("drop"))) &&
+				(hasString(lwr, TEXT("table")) || hasString(lwr, TEXT("view")) || hasString(lwr, TEXT("trigger")) || hasString(lwr, TEXT("index")))
+			))
 			isTableData = false;
+
+		delete [] lwr;
 	}
 
 	if (isTableData) {
@@ -6841,6 +6996,46 @@ void showTooltip(int x, int y, TCHAR* text16) {
 
 void hideTooltip() {
 	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+}
+
+void userDefinedFunction (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+	const char* code8 = (const char*)sqlite3_user_data(ctx);
+	sqlite3* _db = sqlite3_context_db_handle(ctx);
+
+	sqlite3_stmt* stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(_db, code8, -1, &stmt, 0)) {
+		for (int i = 0; i < argc; i++) {
+			int type = sqlite3_value_type(argv[i]);
+			if (type == SQLITE_TEXT) {
+				const char* val = (const char*)sqlite3_value_text(argv[i]);
+				sqlite3_bind_text(stmt, i + 1, val, strlen(val), SQLITE_TRANSIENT);
+			} else if (type == SQLITE_INTEGER) {
+				sqlite3_bind_int(stmt, i + 1, sqlite3_value_int(argv[i]));
+			} else if (type == SQLITE_FLOAT) {
+				sqlite3_bind_double(stmt, i + 1, sqlite3_value_double(argv[i]));
+			} else if (type == SQLITE_BLOB) {
+				sqlite3_bind_blob(stmt, i + 1, sqlite3_value_blob(argv[i]), -1, SQLITE_TRANSIENT);
+			} else {
+				sqlite3_bind_null(stmt, i + 1);
+			}
+		}
+
+		if (SQLITE_ROW == sqlite3_step(stmt)) {
+			int type = sqlite3_column_type(stmt, 0);
+			if (type == SQLITE_TEXT) {
+				sqlite3_result_text(ctx, (const char*)sqlite3_column_text(stmt, 0), -1, SQLITE_TRANSIENT);
+			} else if (type == SQLITE_INTEGER) {
+				sqlite3_result_int(ctx, sqlite3_column_int(stmt, 0));
+			} else if (type == SQLITE_FLOAT) {
+				sqlite3_result_double(ctx, sqlite3_column_double(stmt, 0));
+			} else if (type == SQLITE_BLOB) {
+				sqlite3_result_blob(ctx, sqlite3_column_blob(stmt, 0), -1, SQLITE_TRANSIENT);
+			} else {
+				sqlite3_result_null(ctx);
+			}
+		}
+	}
+	sqlite3_finalize(stmt);
 }
 
 /* Simple query formatter */

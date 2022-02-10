@@ -10,7 +10,7 @@
 namespace utils {
 	TCHAR* trim(TCHAR *in) {
 		auto isBlank = [](TCHAR ch) -> bool {
-			return (ch == TEXT(' ')) || (ch == TEXT('\r')) || (ch == TEXT('\n'));
+			return (ch == TEXT(' ')) || (ch == TEXT('\r')) || (ch == TEXT('\n')) || (ch == TEXT('\t'));
 		};
 
 		int start = 0;
@@ -316,7 +316,7 @@ namespace utils {
 			return sqlite3_bind_int(stmt, pos, 0);
 
 		bool isNum = true;
-		int dotCount = false;
+		int dotCount = 0;
 		for (int i = +(value8[0] == '-' /* is negative */); i < len; i++) {
 			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.' || value8[i] == ',');
 			dotCount += value8[i] == '.' || value8[i] == ',';
@@ -337,7 +337,7 @@ namespace utils {
 
 	BYTE sqlite3_type(const char* decltype8) {
 		if (decltype8 == 0)
-			return SQLITE_TEXT;
+			return SQLITE_NULL;
 
 		char type8[strlen(decltype8) + 1]{0};
 		strcpy(type8, decltype8);

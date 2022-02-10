@@ -280,6 +280,8 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS), prefs::get("csv-import-is-columns") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_TRIM_VALUES), prefs::get("csv-import-trim-values") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SKIP_EMPTY), prefs::get("csv-import-skip-empty") ? BST_CHECKED : BST_UNCHECKED);
 
 				HWND hDelimiter = GetDlgItem(hWnd, IDC_DLG_DELIMITER);
 				for (int i = 0; i < 4; i++)
@@ -505,6 +507,8 @@ namespace tools {
 					prefs::set("csv-import-is-create-table", isCreateTable);
 					prefs::set("csv-import-is-truncate", isTruncate);
 					prefs::set("csv-import-is-replace", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE)) == BST_CHECKED);
+					prefs::set("csv-import-trim-values", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_TRIM_VALUES)) == BST_CHECKED);
+					prefs::set("csv-import-skip-empty", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SKIP_EMPTY)) == BST_CHECKED);
 
 					TCHAR err[1024]{0};
 					int rowCount = importCSV((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), tblname16, err);
@@ -2216,6 +2220,10 @@ namespace tools {
 		bool isCreateTable = prefs::get("csv-import-is-create-table");
 		bool isTruncate = !isCreateTable && prefs::get("csv-import-is-truncate");
 		bool isReplace = !isCreateTable && prefs::get("csv-import-is-replace");
+		bool isTrimValues = prefs::get("csv-import-trim-values");
+		bool isSkipEmpty = prefs::get("csv-import-skip-empty");
+		bool isAbortOnError = prefs::get("csv-import-abort-on-error");
+
 		int iDelimiter = prefs::get("csv-import-delimiter");
 		const TCHAR* delimiter = DELIMITERS[iDelimiter];
 
@@ -2240,12 +2248,17 @@ namespace tools {
 		delete [] schema16;
 
 		auto catQuotted = [](TCHAR* a, TCHAR* b) {
-			_tcscat(a, TEXT("\""));
 			TCHAR* tb = utils::trim(b);
-			TCHAR* qb = utils::replaceAll(tb, TEXT("\""), TEXT("\\\""));
-			_tcscat(a, qb);
-			_tcscat(a, TEXT("\""));
-			delete [] qb;
+			if (tb[0] == TEXT('"')) {
+				_tcscat(a, tb);
+			} else {
+				_tcscat(a, TEXT("\""));
+				TCHAR* qb = utils::replaceAll(tb, TEXT("\""), TEXT("\\\""));
+				_tcscat(a, qb);
+				_tcscat(a, TEXT("\""));
+				delete [] qb;
+			}
+
 			delete [] tb;
 		};
 
@@ -2280,78 +2293,96 @@ namespace tools {
 		char* insert8 = utils::utf16to8(insert16);
 		char* delete8 = utils::utf16to8(delete16);
 
+		bool rc = true;
 		if (isCreateTable)
-			sqlite3_exec(db, create8, NULL, 0, NULL);
+			rc = SQLITE_OK == sqlite3_exec(db, create8, NULL, 0, NULL);
 
-		if (isTruncate)
-			sqlite3_exec(db, delete8, NULL, 0, NULL);
+		if (rc && isTruncate)
+			rc = SQLITE_OK == sqlite3_exec(db, delete8, NULL, 0, NULL);
 
 		int lineNo = 0;
-		sqlite3_stmt *stmt;
-		bool rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
+		int rowNo = 0;
 		if (rc) {
-			while(!feof (f)) {
-				TCHAR* line16 = csvReadLine(f);
-				if (lineNo == 0 && isColumns) {
+			sqlite3_stmt *stmt;
+			rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
+			if (rc) {
+				while(!feof (f) && rc) {
+					TCHAR* line16 = csvReadLine(f);
+					if (lineNo == 0 && isColumns) {
+						lineNo++;
+						continue;
+					}
+
+					if (_tcslen(line16) == 0)
+						continue;
+
+					int colNo = 0;
+
+					TCHAR value[_tcslen(line16) + 1];
+					bool inQuotes = false;
+					int valuePos = 0;
+					int i = 0;
+					bool isEmptyRow = true;
+					do {
+						value[valuePos++] = line16[i];
+
+						if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
+							value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
+							valuePos = 0;
+
+							TCHAR* tvalue16 = isTrimValues ? utils::trim(value) : _tcsdup(value);
+							char* value8 = utils::utf16to8(tvalue16);
+							utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+
+							isEmptyRow = isEmptyRow && (strlen(value8) == 0);
+							delete [] value8;
+							delete [] tvalue16;
+
+							colNo++;
+						}
+
+						if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
+							valuePos--;
+							inQuotes = !inQuotes;
+						}
+
+						if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
+							i++;
+
+					} while (line16[++i]);
+
+					for (int i = colNo; i < colCount; i++)
+						sqlite3_bind_null(stmt, i + 1);
+
+					if (!(isSkipEmpty && isEmptyRow)) {
+						rc = (sqlite3_step(stmt) == SQLITE_DONE) || !isAbortOnError;
+						if (rc)
+							rowNo++;
+					}
+					sqlite3_reset(stmt);
 					lineNo++;
-					continue;
+					delete [] line16;
 				}
-
-				if (_tcslen(line16) == 0)
-					continue;
-
-				int colNo = 0;
-
-				TCHAR value[_tcslen(line16) + 1];
-				bool inQuotes = false;
-				int valuePos = 0;
-				int i = 0;
-				do {
-					value[valuePos++] = line16[i];
-
-					if ((!inQuotes && (line16[i] == delimiter[0] || line16[i] == TEXT('\n'))) || !line16[i + 1]) {
-						value[valuePos - (line16[i + 1] != 0 || inQuotes)] = 0;
-						valuePos = 0;
-
-						TCHAR* tvalue16 = utils::trim(value);
-						char* value8 = utils::utf16to8(tvalue16);
-						utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
-						delete [] value8;
-						delete [] tvalue16;
-
-						colNo++;
-					}
-
-					if (line16[i] == TEXT('"') && line16[i + 1] != TEXT('"')) {
-						valuePos--;
-						inQuotes = !inQuotes;
-					}
-
-					if (line16[i] == TEXT('"') && line16[i + 1] == TEXT('"'))
-						i++;
-
-				} while (line16[++i]);
-
-				for (int i = colNo; i < colCount; i++)
-					sqlite3_bind_null(stmt, i + 1);
-
-				rc = sqlite3_step(stmt) == SQLITE_DONE;
-				sqlite3_reset(stmt);
-				lineNo++;
-				delete [] line16;
 			}
+			sqlite3_finalize(stmt);
+			fclose(f);
 		}
-		sqlite3_finalize(stmt);
-		fclose(f);
 
 		delete [] create8;
 		delete [] insert8;
 		delete [] delete8;
 
-		if (isAutoTransaction)
+		if (rc && isAutoTransaction)
 			sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
 
-		return lineNo - isColumns;
+		if (!rc) {
+			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
+			_sntprintf(err16, 1023, TEXT("Error: %s"), _err16);
+			delete [] _err16;
+			return -1;
+		}
+
+		return rowNo;
 	}
 
 	int exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16) {
@@ -2592,7 +2623,7 @@ namespace tools {
 				SendMessage(hToolbarWnd, TB_GETRECT, IDM_LAST_SEPARATOR, (LPARAM)&rc);
 				cbOldDatabaseDiagramToolbar = (WNDPROC)SetWindowLongPtr(hToolbarWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDatabaseDiagramToolbar);
 
-				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_DIAGRAM_TOOLBAR), 32, 0, RGB(255, 255, 255));
+				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_TOOLBAR_DIAGRAM), 32, 0, RGB(255, 255, 255));
 				SendMessage(hToolbarWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
 				SendMessage(hToolbarWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
 

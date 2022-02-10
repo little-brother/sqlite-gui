@@ -22,6 +22,7 @@ Small, simple, powerfull, fast, free.
 * [Charts](https://github.com/little-brother/sqlite-gui/wiki#charts)
 * [Query parameters](https://github.com/little-brother/sqlite-gui/wiki#query-parameters)
 * [Query shortcuts](https://github.com/little-brother/sqlite-gui/wiki#query-shortcuts)
+* [Custom functions](https://github.com/little-brother/sqlite-gui/wiki#custom-functions)
 * Data generator
 * [Extension pack](https://github.com/little-brother/sqlite-gui/wiki#extensions)
 * [Built-in REST API web server](https://github.com/little-brother/sqlite-gui/wiki#rest-api-web-server)
