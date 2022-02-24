@@ -291,7 +291,7 @@ static void md5 (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	if (sqlite3_value_type(argv[0]) == SQLITE_NULL) 
 		return sqlite3_result_null(ctx);
 
-    UINT8 res[16];
+	UINT8 res[16];
 	_md5(sqlite3_value_text(argv[0]), strlen(sqlite3_value_text(argv[0])), res);
 
 	char buf[33];

@@ -789,8 +789,9 @@ IDC_MENU_RESULT MENU
 BEGIN
 	POPUP "Result"
 	BEGIN
-		MENUITEM "View as chart", IDM_RESULT_CHART
+		MENUITEM "Column filters", IDM_RESULT_FILTERS
 		MENUITEM "Value preview", IDM_RESULT_PREVIEW
+		MENUITEM "View as chart", IDM_RESULT_CHART
 		MENUITEM SEPARATOR
 		MENUITEM "Copy cell to clipboard", IDM_RESULT_COPY_CELL
 		MENUITEM "Copy row to clipboard", IDM_RESULT_COPY_ROW
@@ -801,7 +802,7 @@ BEGIN
 		MENUITEM SEPARATOR
 		POPUP "Compare with"
 		BEGIN
-			MENUITEM "Filler", IDM_RESULT_COMPARE
+			MENUITEM "*** Filler ***", IDM_RESULT_COMPARE
 		END
 	END
 END
@@ -850,6 +851,8 @@ IDC_MENU_BLOB MENU
 BEGIN
 	POPUP "Blob"
 	BEGIN
+		MENUITEM "View as file", IDM_BLOB_VIEW
+		MENUITEM SEPARATOR
 		MENUITEM "Set to NULL", IDM_BLOB_NULL
 		MENUITEM "Set from file", IDM_BLOB_IMPORT
 		MENUITEM "Save to file", IDM_BLOB_EXPORT
@@ -906,6 +909,7 @@ BEGIN
 	POPUP "Image Preview"
 	BEGIN
 		MENUITEM "Save to file", IDM_EXPORT_FILE
+		MENUITEM "View as file", IDM_BLOB_VIEW
 	END
 END
 
@@ -915,6 +919,7 @@ BEGIN
 	POPUP "Text Preview"
 	BEGIN
 		MENUITEM "Copy", IDM_EDITOR_COPY
+		MENUITEM "View as file", IDM_BLOB_VIEW
 	END
 END
 
@@ -995,13 +1000,15 @@ BEGIN
 		"Ctrl + Tab - Toggle to a next result\n" \
 		"Ctrl + 1, Ctrl + 2, ... - Sort by column 1, 2, ... \n" \
 		"Ctrl + Shift + C - Copy selected rows to clipboard with a header\n" \
-		"Alt + Click - Show data if the column references to another table by FK key\n\n" \
+		"Alt + Click - Show data if the column references to another table by FK key\n" \
+		"Alt + Click - Open BLOB as file\n\n" \
 		"Data editor\n" \
 		"Ctrl + Click - Edit a cell value\n" \
 		"F2 - Edit cell value without clearing\n" \
 		"Space - Edit cell value with clearing\n" \
 		"Ctrl + Space - Set cell value as one of column values\n"
-		"Alt + Click - Show data if the column references to another table by FK key\n\n" \
+		"Alt + Click - Show data if the column references to another table by FK key\n" \
+		"Alt + Click - Open BLOB as file\n\n" \
 		"Row dialog\n" \
 		"Ctrl + Enter - Add a row or move to the next row\n" \
 		"Ctrl + Tab - Open a multiline editor for a current field\n" \
@@ -1024,6 +1031,7 @@ BEGIN
 		"   Use !ABC to find rows without ""ABC""\n" \
 		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
+		"* Resultset filters have the same functionality except /smth. These filters\n   work only with fetched data in memory.\n\n"
 		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite?\n   Check Wiki to get more details.\n\n" \

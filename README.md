@@ -1,4 +1,4 @@
-sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++, WinAPI and [Code::Blocks 17](http://www.codeblocks.org/). <br>
+sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++/mingw and WinAPI.<br>
 Small, simple, powerfull, fast, free.
 
 |[**Download the latest version**](https://github.com/little-brother/sqlite-gui/releases/latest)|
@@ -23,7 +23,8 @@ Small, simple, powerfull, fast, free.
 * [Query parameters](https://github.com/little-brother/sqlite-gui/wiki#query-parameters)
 * [Query shortcuts](https://github.com/little-brother/sqlite-gui/wiki#query-shortcuts)
 * [Custom functions](https://github.com/little-brother/sqlite-gui/wiki#custom-functions)
-* Data generator
+* [Jinja scripting](https://github.com/little-brother/sqlite-gui/wiki#jinja-scripting) (experimental)
+* [Data generator](https://github.com/little-brother/sqlite-gui/wiki#data-generator)
 * [Extension pack](https://github.com/little-brother/sqlite-gui/wiki#extensions)
 * [Built-in REST API web server](https://github.com/little-brother/sqlite-gui/wiki#rest-api-web-server)
 * Demo database "Bookstore" for beginners

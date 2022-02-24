@@ -39,7 +39,8 @@ Doesn''t work for non-ANSI symbols without icu extension.', 'select lower(''SQLi
 select ltrim(''@@SQLite@@'', ''@''); --> SQLite@@
 select ltrim(''@12SQLite@@'', ''1@2''); --> SQLite@@', '', 'Str|Characters', 2),
 ('nullif', 'function', 'nullif (any, any2)', 'Returns its first argument if the arguments are different and NULL if the arguments are the same.', 'select nullif(10, 12); --> 10', '', null, 2),
-('printf', 'function', 'printf (format, ...)', 'Works like the printf() function from the standard C library.', 'select printf(''Hello %s!''); --> Hello world!', '', 'Format', -1), 
+('printf', 'function', 'printf (format, ...)', 'Works like the printf() function from the standard C library.
+Format is synonim.', 'select printf(''Hello %s!''); --> Hello world!', 'format', 'Format', -1), 
 ('quote', 'function', 'quote (str)', 'Returns the text of an SQL literal which is the value of its argument suitable for inclusion into an SQL statement. 
 Strings are surrounded by single-quotes with escapes on interior quotes as needed. 
 BLOBs are encoded as hexadecimal literals.', 'select quote(''aa''''bb''); --> ''aa''''bb''', '', null, 1),
@@ -143,6 +144,7 @@ select strftime(''%s'', ''now'', ''+2 day''); --> current Unix-time + 2 days
 
 -- Convert Unix-time 1605961514 to local date-time 21-11-2020 15:25:14
 select strftime(''%d-%m-%Y %H:%M:%S'', 1605961514, ''unixepoch'', ''localtime'')', '', 'Format|TimeString|Modifier1|Modifier2|Modifier3|Modifier4|Modifier5', -1),
+('unixepoch', 'function', 'unixepoch (timestring [, modifier, ...])', 'Returns a unix timestamp - the number of seconds since 1970-01-01 00:00:00 UTC. The return value is always an integer, even if the input time-value has millisecond precision.', 'select unixepoch(''2021-08-14 13:15''); --> 1628946900', '', 'TimeString|Modifier1|Modifier2|Modifier3|Modifier4|Modifier5', -1),
 
 -- AGGREGATE FUNCTIONS
 ('min', 'function', 'min (any [, any, ...])', 'Returns the minimum value in arguments/a group. Only one argument is allowed for aggregation.', 'select available > 5 avail, min(price) "min" from books group by 1;

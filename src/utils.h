@@ -24,6 +24,7 @@ namespace utils {
 	char* readFile(const char* path);
 	char* getFileName(const char* path, bool noExt = false);
 	TCHAR* getFileName(const TCHAR* path16, bool noExt = false);
+	bool getFileExtension(const char* data, int len, TCHAR* out);
 
 	TCHAR* toBlobSize(INT64 bSize);
 
@@ -42,5 +43,7 @@ namespace utils {
 
 	extern const UINT crc32_tab[];
 	UINT crc32(const BYTE* data, int size);
+
+	void mergeSort(int indexes[], void* data, int l, int r, BOOL isBackward, BOOL isNums);
 }
 #endif

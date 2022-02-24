@@ -1,11 +1,11 @@
-#define GUI_VERSION                "1.6.6"
-#define GUI_VERSION2               1, 6, 6, 0
+#define GUI_VERSION                "1.7.0"
+#define GUI_VERSION2               1, 7, 0, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
 #define GUI_PLATFORM               32
 #endif
-#define HELP_VERSION               1
+#define HELP_VERSION               2
 
 #define IDD_ADDEDIT                11
 #define IDD_EDITDATA               12
@@ -321,17 +321,19 @@
 #define IDM_EDITOR_FORMAT          1609
 
 #define IDM_RESULT_PREVIEW         1610
-#define IDM_RESULT_CHART           1611
-#define IDM_RESULT_COPY_CELL       1612
-#define IDM_RESULT_COPY_ROW        1613
-#define IDM_RESULT_AS_TABLE        1614
-#define IDM_RESULT_EXPORT          1615
-#define IDM_RESULT_EXCEL           1616
+#define IDM_RESULT_FILTERS         1611
+#define IDM_RESULT_CHART           1612
+#define IDM_RESULT_COPY_CELL       1613
+#define IDM_RESULT_COPY_ROW        1614
+#define IDM_RESULT_AS_TABLE        1615
+#define IDM_RESULT_EXPORT          1616
+#define IDM_RESULT_EXCEL           1617
 #define IDM_RESULT_COMPARE         1620 // iterable, 50
 
-#define IDM_BLOB_NULL              1680
-#define IDM_BLOB_IMPORT            1681
-#define IDM_BLOB_EXPORT            1682
+#define IDM_BLOB_VIEW              1680
+#define IDM_BLOB_NULL              1681
+#define IDM_BLOB_IMPORT            1682
+#define IDM_BLOB_EXPORT            1683
 
 #define IDM_DEMODB_BOOKSTORE       1685
 #define IDM_DEMODB_CHINOOK         1686
@@ -373,6 +375,7 @@
 #define IDM_EXPORT_PNG             1729
 #define IDM_EXPORT_CLIPBOARD       1730
 #define IDM_EXPORT_FILE            1731
+
 
 #define IDM_LINK_FK                1735
 #define IDM_LINK_VIEW              1736
@@ -473,6 +476,11 @@
 #define WMU_FUNCTION_SAVE          WM_USER + 40
 #define WMU_REGISTER_FUNCTION      WM_USER + 41
 #define WMU_UNREGISTER_FUNCTION    WM_USER + 42
+#define WMU_UPDATE_RESULTSET       WM_USER + 43
+#define WMU_UPDATE_FILTER_SIZE     WM_USER + 44
+#define WMU_SET_HEADER_FILTERS     WM_USER + 45
+#define WMU_AUTO_COLUMN_SIZE       WM_USER + 46
+#define WMU_UPDATE_SB_RESULTSET    WM_USER + 50
 
 #define WMU_TAB_ADD                WM_USER + 140
 #define WMU_TAB_DELETE             WM_USER + 141

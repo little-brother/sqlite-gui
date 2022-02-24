@@ -13,6 +13,7 @@
 #define MAX_CHART_COLOR_COUNT       10
 #define MAX_DIALOG_COUNT            32
 #define MAX_COMPARE_RESULT          50
+#define MAX_RESULT_COLUMN_COUNT     64
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -92,6 +93,8 @@ void switchDialog(HWND hDlg, bool isNext);
 void createTooltip(HWND hWnd);
 void showTooltip(int x, int y, TCHAR* text16);
 void hideTooltip();
+
+bool openBlobAsFile(const unsigned char* data, int size, bool isTxt = false);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);

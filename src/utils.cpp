@@ -300,6 +300,47 @@ namespace utils {
 		return name16;
 	}
 
+	bool getFileExtension(const char* data, int len, TCHAR* out) {
+		_sntprintf(out, 9,
+			len < 10 ? TEXT("bin") :
+			// https://en.wikipedia.org/wiki/List_of_file_signatures
+			strncmp(data, "\x47\x49\x46\x38\x37\x61", 6) == 0 ? TEXT("gif") :
+			strncmp(data, "\x47\x49\x46\x38\x39\x61", 6) == 0 ? TEXT("gif") :
+			strncmp(data, "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A", 8) == 0 ? TEXT("png") :
+			strncmp(data, "\xFF\xD8\xFF\xDB", 4) == 0 ? TEXT("jpg") :
+			strncmp(data, "\xFF\xD8\xFF\xEE", 4) == 0 ? TEXT("jpg") :
+			strncmp(data, "\xFF\xD8\xFF\xE0", 4) == 0 ? TEXT("jpg") :
+			strncmp(data, "\xFF\xD8\xFF\xE1", 4) == 0 ? TEXT("jpg") :
+			strncmp(data, "\x42\x4D", 2) == 0 ? TEXT("bmp") :
+
+			strncmp(data, "\x50\x4B \x03\x04", 4) == 0 ? TEXT("zip") :
+			strncmp(data, "\x52\x61\x72\x21\x1A\x07", 6) == 0 ? TEXT("rar") :
+			strncmp(data, "\x37\x7A\xBC\xAF\x27\x1C", 6) == 0 ? TEXT("7z") :
+			strncmp(data, "\x1F\x8B", 2) == 0 ? TEXT("gz") :
+
+			strncmp(data, "\x52\x49\x46\x46", 4) == 0 ? TEXT("avi") :
+			strncmp(data, "\x1A\x45\xDF\xA3", 4) == 0 ? TEXT("mkv") :
+			strncmp(data, "\x00\x00\x01\xBA", 4) == 0 ? TEXT("mpg") :
+			strncmp(data, "\x00\x00\x01\xB3", 4) == 0 ? TEXT("mpg") :
+			strncmp(data, "\x66\x74\x79\x70\x69\x73\x6F\x6D", 8) == 0 ? TEXT("mp4") :
+
+			strncmp(data, "\x52\x49\x46\x46", 4) == 0 ? TEXT("wav") :
+			strncmp(data, "\xFF\xFB", 2) == 0 ? TEXT("mp3") :
+			strncmp(data, "\xFF\xF3", 2) == 0 ? TEXT("mp3") :
+			strncmp(data, "\xFF\xF2", 2) == 0 ? TEXT("mp3") :
+			strncmp(data, "\x49\x44\x33", 3) == 0 ? TEXT("mp3") :
+			strncmp(data, "\x4F\x67\x67\x53", 4) == 0 ? TEXT("ogg") :
+			strncmp(data, "\x4D\x54\x68\x64", 4) == 0 ? TEXT("mid") :
+
+			strncmp(data, "\x25\x50\x44\x46\x2D", 5) == 0 ? TEXT("pdf") :
+			strncmp(data, "\x7B\x5C\x72\x74\x66\x31", 6) == 0 ? TEXT("rtf") :
+
+			TEXT("bin")
+		);
+
+		return true;
+	}
+
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
 		int len = strlen(value8);
 
@@ -562,4 +603,58 @@ namespace utils {
 
 		return crc ^ ~0U;
 	}
+
+	void mergeSortJoiner(int indexes[], void* data, int l, int m, int r, BOOL isBackward, BOOL isNums) {
+		int n1 = m - l + 1;
+		int n2 = r - m;
+
+		int* L = new int[n1];
+		int* R = new int[n2];
+
+		for (int i = 0; i < n1; i++)
+			L[i] = indexes[l + i];
+		for (int j = 0; j < n2; j++)
+			R[j] = indexes[m + 1 + j];
+
+		int i = 0, j = 0, k = l;
+		while (i < n1 && j < n2) {
+			int cmp = isNums ? ((double*)data)[L[i]] <= ((double*)data)[R[j]] : _tcscmp(((TCHAR**)data)[L[i]], ((TCHAR**)data)[R[j]]) <= 0;
+			if (isBackward)
+				cmp = !cmp;
+
+			if (cmp) {
+				indexes[k] = L[i];
+				i++;
+			} else {
+				indexes[k] = R[j];
+				j++;
+			}
+			k++;
+		}
+
+		while (i < n1) {
+			indexes[k] = L[i];
+			i++;
+			k++;
+		}
+
+		while (j < n2) {
+			indexes[k] = R[j];
+			j++;
+			k++;
+		}
+
+		delete [] L;
+		delete [] R;
+	}
+
+	void mergeSort(int indexes[], void* data, int l, int r, BOOL isBackward, BOOL isNums) {
+		if (l < r) {
+			int m = l + (r - l) / 2;
+			mergeSort(indexes, data, l, m, isBackward, isNums);
+			mergeSort(indexes, data, m + 1, r, isBackward, isNums);
+			mergeSortJoiner(indexes, data, l, m, r, isBackward, isNums);
+		}
+	}
+
 }
