@@ -10,7 +10,8 @@ namespace utils {
 	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 
-	TCHAR* getName(const TCHAR* in, bool isSchema = false);
+	TCHAR* getTableName(const TCHAR* in, bool isSchema = false);
+	TCHAR* getFullTableName(const TCHAR* schema, const TCHAR* tablename, bool isOmitMain = false);
 
 	TCHAR* utf8to16(const char* in);
 	char* utf16to8(const TCHAR* in);

@@ -23,7 +23,7 @@ FILETYPE VFT_APP {
 }
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_ADDEDIT DIALOGEX 50, 50, 500, 300
+IDD_ADDVIEWEDIT DIALOGEX 50, 50, 500, 300
 	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | DS_MODALFRAME
 	CAPTION "Edit table/view; Add/edit index/trigger"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -538,15 +538,6 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_DDL DIALOGEX 10, 10, 500, 400
-	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU
-	CAPTION "DDL"
-	FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-	CONTROL "",IDC_DLG_EDITOR, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL | ES_READONLY, 0, 0, 498, 273, WS_EX_STATICEDGE
-END
-
-LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_CHART DIALOGEX 40, 30, 450, 260
 	STYLE WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
 	CAPTION ""
@@ -639,6 +630,7 @@ BEGIN
 		MENUITEM "Vacuum database", IDM_VACUUM, GRAYED
 		MENUITEM "Reindex database", IDM_REINDEX, GRAYED
 		MENUITEM SEPARATOR
+		MENUITEM "Locate database", IDM_LOCATE, GRAYED
 		MENUITEM "Statistics", IDM_STATISTICS, GRAYED
 	END
 
@@ -768,6 +760,15 @@ BEGIN
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_TEMP MENU
+BEGIN
+	POPUP "Temp schema"
+	BEGIN
+		MENUITEM "Not available", IDM_TEMP_EXPLAIN
+	END
+END
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_EDITOR MENU DISCARDABLE
 BEGIN
 	POPUP ""
@@ -792,6 +793,7 @@ BEGIN
 		MENUITEM "Column filters", IDM_RESULT_FILTERS
 		MENUITEM "Value preview", IDM_RESULT_PREVIEW
 		MENUITEM "View as chart", IDM_RESULT_CHART
+		MENUITEM "Filter by value", IDM_RESULT_VALUE_FILTER
 		MENUITEM SEPARATOR
 		MENUITEM "Copy cell to clipboard", IDM_RESULT_COPY_CELL
 		MENUITEM "Copy row to clipboard", IDM_RESULT_COPY_ROW
@@ -822,6 +824,7 @@ BEGIN
 	POPUP "Edit data"
 	BEGIN
 		MENUITEM "Edit value", IDM_VALUE_EDIT
+		MENUITEM "Filter by value", IDM_RESULT_VALUE_FILTER
 		MENUITEM SEPARATOR
 		MENUITEM "Edit\tEnter", IDM_ROW_EDIT
 		MENUITEM "Delete\tDel", IDM_ROW_DELETE
@@ -1018,9 +1021,6 @@ BEGIN
 		"* Hold Shift while opening the database to open empty in-memory database.\n\n" \
 		"* Only the selected part of the query will be executed.\n\n" \
 		"* Hold Ctrl on dropping a tree item to an editor to append a statement.\n\n" \
-		"* Each tab uses an own independed connection to the database and hence \n" \
-		"   has own TEMP-schema. So if you need to share in-memory data between\n"
-		"   tabs you should use SHARED-schema instead TEMP. Check Wiki for details.\n\n" \
 		"* During a transaction the special indicator is displayed inside the status bar.\n\n" \
 		"* In the batch mode all queries are executed in an one implicit transaction.\n\n" \
 		"* Edit data dialog \n"
@@ -1032,7 +1032,6 @@ BEGIN
 		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* Resultset filters have the same functionality except /smth. These filters\n   work only with fetched data in memory.\n\n"
-		"* To edit data in an attached database, type in Editor\n  <db alias>.<tablename>, e.g. shared.abc and click by it holding Ctrl.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite?\n   Check Wiki to get more details.\n\n" \
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \
@@ -1104,8 +1103,15 @@ BEGIN
 		"Use ?1, ?2 and etc as arguments e.g. ""select max(?1, ?2)""\n\n" \
 		"You can use exec-command to call non-SQL functions e.g. \n"\
 		"select exec('powershell -nologo ""Get-Content ?1""')\n\n"
-		"Be aware, these functions exist only in application context\n" \
+		"Be aware, these functions exist only in the sqlite-gui\n" \
 		"and they are very slow. Only scalar functions are supported."
+
+	IDS_TEMP_EXPLAIN "Each tab uses an own independed connection to the database and hence " \
+		"has own TEMP-schema (SQLite limitation). The navigation tree shows TEMP-schema of a current tab. " \
+		"You can create/update/delete data in TEMP-schema by sql commands as usual."
+		"But all tree operations use a dedicated connection that don't have " \
+		"access to tab's TEMP-schemas. If you need to share temporary data between " \
+		"tabs you should use TEMP2-schema instead TEMP.\n\nCheck Wiki for details."
 
 	IDS_TOOLTIP_OPEN "Open database"
 	IDS_TOOLTIP_CLOSE "Close database"

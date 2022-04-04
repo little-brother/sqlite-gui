@@ -13,6 +13,7 @@
 #define MAX_CHART_COLOR_COUNT       10
 #define MAX_DIALOG_COUNT            32
 #define MAX_COMPARE_RESULT          50
+#define MAX_SCHEMA_COUNT            20
 #define MAX_RESULT_COLUMN_COUNT     64
 
 #define DLG_OK                      1
@@ -105,10 +106,12 @@ int ListView_GetColumnCount(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 int Header_SetItemText(HWND hWnd, int i, TCHAR* pszText);
 void Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState);
+void Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const TCHAR* pszText);
+
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
-TCHAR* getDDL(TCHAR* name16, int type, bool withDrop = false);
+TCHAR* getDDL(const TCHAR* schema16, const TCHAR* name16, int type, bool withDrop = false);
 bool showDbError(HWND hWnd);
 
 #endif

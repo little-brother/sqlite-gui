@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.0"
-#define GUI_VERSION2               1, 7, 0, 0
+#define GUI_VERSION                "1.7.1"
+#define GUI_VERSION2               1, 7, 1, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -7,7 +7,7 @@
 #endif
 #define HELP_VERSION               2
 
-#define IDD_ADDEDIT                11
+#define IDD_ADDVIEWEDIT            11
 #define IDD_EDITDATA               12
 #define IDD_QUERYLIST              13
 #define IDD_ROW                    14
@@ -51,14 +51,15 @@
 #define IDC_EDITOR                 63
 #define IDC_TAB                    64
 #define IDC_TREE                   65
-#define IDC_CLI_EDITOR             66
-#define IDC_CLI_RESULT             67
-#define IDC_CLI_RAWDATA            68
-#define IDC_QUERYLIST              69
-#define IDC_REFLIST                70
-#define IDC_PREVIEW_TEXT           71
-#define IDC_PREVIEW_IMAGE          72
-#define IDC_FUNCTION_CODES         73
+#define IDC_SCHEMA                 66
+#define IDC_CLI_EDITOR             70
+#define IDC_CLI_RESULT             71
+#define IDC_CLI_RAWDATA            72
+#define IDC_QUERYLIST              80
+#define IDC_REFLIST                81
+#define IDC_PREVIEW_TEXT           82
+#define IDC_PREVIEW_IMAGE          83
+#define IDC_FUNCTION_CODES         84
 
 #define IDC_DLG_EDITOR             100
 #define IDC_DLG_LABEL              101
@@ -249,6 +250,7 @@
 #define IDC_MENU_TRIGGER           526
 #define IDC_MENU_COLUMN            527
 #define IDC_MENU_DISABLED          528
+#define IDC_MENU_TEMP              529
 
 #define IDM_OPEN                   1401
 #define IDM_CLOSE                  1402
@@ -257,6 +259,7 @@
 #define IDM_ENCRYPTION             1405
 #define IDM_ATTACH                 1406
 #define IDM_SETTINGS               1407
+#define IDM_SCHEMA                 1450 // iterable
 
 #define IDM_SHORTCUTS              1510
 #define IDM_SAVE                   1511
@@ -273,15 +276,16 @@
 #define IDM_IMPORT_CSV             1521
 #define IDM_IMPORT_JSON            1522
 #define IDM_IMPORT_ODBC            1523
-#define IDM_EXPORT_SQL             1525
-#define IDM_EXPORT_CSV             1526
-#define IDM_EXPORT_JSON            1527
-#define IDM_EXPORT_EXCEL           1528
-#define IDM_EXPORT_ODBC            1529
-#define IDM_CHECK_INTEGRITY        1530
-#define IDM_FOREIGN_KEY_CHECK      1531
-#define IDM_VACUUM                 1532
-#define IDM_REINDEX                1533
+#define IDM_EXPORT_SQL             1524
+#define IDM_EXPORT_CSV             1525
+#define IDM_EXPORT_JSON            1526
+#define IDM_EXPORT_EXCEL           1527
+#define IDM_EXPORT_ODBC            1528
+#define IDM_CHECK_INTEGRITY        1529
+#define IDM_FOREIGN_KEY_CHECK      1530
+#define IDM_VACUUM                 1531
+#define IDM_REINDEX                1532
+#define IDM_LOCATE                 1533
 #define IDM_STATISTICS             1534
 #define IDM_GENERATE_DATA          1535
 #define IDM_DATABASE_DIAGRAM       1536
@@ -323,11 +327,12 @@
 #define IDM_RESULT_PREVIEW         1610
 #define IDM_RESULT_FILTERS         1611
 #define IDM_RESULT_CHART           1612
-#define IDM_RESULT_COPY_CELL       1613
-#define IDM_RESULT_COPY_ROW        1614
-#define IDM_RESULT_AS_TABLE        1615
-#define IDM_RESULT_EXPORT          1616
-#define IDM_RESULT_EXCEL           1617
+#define IDM_RESULT_VALUE_FILTER    1613
+#define IDM_RESULT_COPY_CELL       1614
+#define IDM_RESULT_COPY_ROW        1615
+#define IDM_RESULT_AS_TABLE        1616
+#define IDM_RESULT_EXPORT          1617
+#define IDM_RESULT_EXCEL           1618
 #define IDM_RESULT_COMPARE         1620 // iterable, 50
 
 #define IDM_BLOB_VIEW              1680
@@ -359,6 +364,7 @@
 #define IDM_ENABLE                 1710
 #define IDM_DISABLE                1711
 #define IDM_VIEW                   1712
+#define IDM_TEMP_EXPLAIN           1713
 
 #define IDM_ADD                    1715
 #define IDM_REFRESH                1716
@@ -431,6 +437,7 @@
 #define IDS_ODBC_HELP              10016
 #define IDS_CLI_HELP               10017
 #define IDS_FUNCTIONS_HELP         10018
+#define IDS_TEMP_EXPLAIN           10019
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE

@@ -84,7 +84,7 @@ namespace utils {
 		return replace(in, oldStr, newStr, start, true, ignoreCase);
 	}
 
-	TCHAR* getName(const TCHAR* in, bool isSchema) {
+	TCHAR* getTableName(const TCHAR* in, bool isSchema) {
 		TCHAR* res = new TCHAR[_tcslen(in) + 5]{0}; // `in` can be 1 char, but schema requires 4 ("main")
 		if (!_tcslen(in))
 			return _tcscat(res, isSchema ? TEXT("main") : TEXT(""));
@@ -101,7 +101,7 @@ namespace utils {
 
 			if (q2 && !isSchema && q2[1] == TEXT('.') && q2[2] != 0) {
 				delete [] res;
-				return getName(q2 + 2);
+				return getTableName(q2 + 2);
 			}
 
 		} else {
@@ -110,12 +110,35 @@ namespace utils {
 				_tcsncpy(res, p, _tcslen(p) - _tcslen(d));
 			if (d && !isSchema) {
 				delete [] res;
-				return getName(d + 1);
+				return getTableName(d + 1);
 			}
 		}
 
 		if (!res[0])
 			_tcscat(res, isSchema ? TEXT("main") : in);
+
+		return res;
+	}
+
+	TCHAR* getFullTableName(const TCHAR* schema, const TCHAR* tablename, bool isOmitMain) {
+		int len = _tcslen(schema) + _tcslen(tablename) + 10;
+		TCHAR* res = new TCHAR[len + 1]{0};
+
+		bool isSQ = !_istalpha(schema[0]);
+		for (int i = 0; !isSQ && (i < (int)_tcslen(schema)); i++)
+			isSQ = isSQ || !(_istalnum(schema[i]) || schema[i] == TEXT('_'));
+
+		bool isTQ = !_istalpha(tablename[0]);
+		for (int i = 0; !isTQ && (i < (int)_tcslen(tablename)); i++)
+			isTQ = isTQ || !(_istalnum(tablename[i]) || tablename[i] == TEXT('_'));
+
+		if (isOmitMain && _tcscmp(schema, TEXT("main")) == 0) {
+			_sntprintf(res, len, TEXT("%ls%ls%ls"), isTQ ? TEXT("\"") : TEXT(""), tablename, isTQ ? TEXT("\"") : TEXT(""));
+		} else {
+			_sntprintf(res, len, TEXT("%ls%ls%ls.%ls%ls%ls"),
+				isSQ ? TEXT("\"") : TEXT(""), schema, isSQ ? TEXT("\"") : TEXT(""),
+				isTQ ? TEXT("\"") : TEXT(""), tablename, isTQ ? TEXT("\"") : TEXT(""));
+		}
 
 		return res;
 	}

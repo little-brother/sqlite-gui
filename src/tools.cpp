@@ -834,7 +834,11 @@ namespace tools {
 				if (LOWORD(wParam) == IDC_DLG_ODBC_MANAGER) {
 					TCHAR winPath[MAX_PATH + 1], appPath[MAX_PATH + 1];
 					GetWindowsDirectory(winPath, MAX_PATH);
+					#if GUI_PLATFORM == 32
 					_sntprintf(appPath, MAX_PATH, TEXT("%ls/SysWOW64/odbcad32.exe"), winPath);
+					#else
+					_sntprintf(appPath, MAX_PATH, TEXT("%ls/system32/odbcad32.exe"), winPath);
+					#endif
 					ShellExecute(0, 0, appPath, 0, 0, SW_SHOW);
 					SetFocus(0);
 					return 0;
@@ -1632,8 +1636,8 @@ namespace tools {
 
 				TCHAR name16[1024]{0};
 				GetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16, 1024);
-				TCHAR* schema16 = utils::getName(name16, true);
-				TCHAR* tablename16 = utils::getName(name16);
+				TCHAR* schema16 = utils::getTableName(name16, true);
+				TCHAR* tablename16 = utils::getTableName(name16);
 
 				TCHAR query16[MAX_TEXT_LENGTH + 1]{0};
 				_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("select name from pragma_table_info(\"%ls\") where schema = \"%ls\" order by cid"), tablename16, schema16);
@@ -1778,8 +1782,8 @@ namespace tools {
 
 					TCHAR name16[1024]{0};
 					GetDlgItemText(hWnd, IDC_DLG_TABLENAME, name16, 1024);
-					TCHAR* schema16 = utils::getName(name16, true);
-					TCHAR* tablename16 = utils::getName(name16);
+					TCHAR* schema16 = utils::getTableName(name16, true);
+					TCHAR* tablename16 = utils::getTableName(name16);
 
 					char* schema8 = utils::utf16to8(schema16);
 					char* tablename8 = utils::utf16to8(tablename16);
@@ -2237,8 +2241,8 @@ namespace tools {
 		TCHAR insert16[MAX_TEXT_LENGTH + 1]{0};
 		TCHAR delete16[MAX_TEXT_LENGTH + 1]{0};
 
-		TCHAR* schema16 = utils::getName(tblname16, true);
-		TCHAR* tablename16 = utils::getName(tblname16);
+		TCHAR* schema16 = utils::getTableName(tblname16, true);
+		TCHAR* tablename16 = utils::getTableName(tblname16);
 
 		_sntprintf(create16, MAX_TEXT_LENGTH, TEXT("create table \"%ls\".\"%ls\" ("), schema16, tablename16);
 		_sntprintf(insert16, MAX_TEXT_LENGTH, TEXT("%ls into \"%ls\".\"%ls\" ("), isReplace ? TEXT("replace") : TEXT("insert"), schema16, tablename16);
@@ -2519,19 +2523,20 @@ namespace tools {
 		if (msg == WM_COMMAND) {
 			TCHAR table16[255]{0};
 			GetWindowText(hWnd, table16, 255);
+			TCHAR* fullname16 = utils::getFullTableName(TEXT("main"), table16, false);
 
 			if (wParam == IDM_EDIT_DATA)
-				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)table16);
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)fullname16);
 
 			if (wParam == IDM_DDL) {
-				TCHAR* DDL = getDDL(table16, TABLE, false);
-				if (!DDL) {
-					delete [] DDL;
-					DDL = getDDL(table16, VIEW, false);
-				}
-				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_DDL), hWnd, (DLGPROC)&dialogs::cbDlgDDL, (LPARAM)DDL);
-				delete [] DDL;
+				int len = _tcslen(fullname16) + 2;
+				TCHAR buf16[len + 1];
+				_sntprintf(buf16, len, TEXT(" %ls"), fullname16);
+				buf16[0] = MAKEWORD(1, 0);
+
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDVIEWEDIT), hWnd, (DLGPROC)&dialogs::cbDlgAddViewEdit, (LPARAM)buf16);
 			}
+			delete [] fullname16;
 		}
 
 		if (msg == WM_WINDOWPOSCHANGED) {

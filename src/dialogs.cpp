@@ -43,37 +43,62 @@ namespace dialogs {
 	HMENU hEditDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_EDIT_DATA)), 0);
 	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
 
-	// lParam = (TEXT)[isEdit, type][table16:etc]
-	BOOL CALLBACK cbDlgAddEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	// lParam = (TEXT)[action, type][table16:etc]
+	// action: 0 - add, 1 - view, 2 - edit
+	BOOL CALLBACK cbDlgAddViewEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				TCHAR* params = (TCHAR*)lParam;
-				bool isEdit = LOBYTE(params[0]) == 1;
+				int action = LOBYTE(params[0]);
 				int type = HIBYTE(params[0]);
-				TCHAR* table16 = params + 1;
+				TCHAR* fullname16 = params + 1;
 				SetWindowLongPtr(hWnd, GWLP_USERDATA, type);
 
-				int len = 64 + _tcslen(table16);
+				int len = 64 + _tcslen(fullname16);
 				TCHAR buf[len + 1];
-				_sntprintf(buf, len, isEdit ? TEXT("Edit %ls \"%ls\"") : TEXT("Add %ls"), TYPES16[type], table16);
+				TCHAR* ufullname16 = _tcsdup(fullname16);
+				_tcsupr(ufullname16);
+				_sntprintf(buf, len,
+					action == 0 ? TEXT("Add %ls") :
+					action == 1 ? TEXT("View %ls %ls") :
+					TEXT("Edit %ls %ls"), TYPES16[type], ufullname16);
+				free(ufullname16);
 				SetWindowText(hWnd, buf);
 
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hEditorWnd);
 
-				if (isEdit) {
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
-					TCHAR* sql16 = getDDL(table16, type, true);
-					if (sql16) {
-						SetWindowText(hEditorWnd, sql16);
-						delete [] sql16;
+				TCHAR* schema16 = utils::getTableName(fullname16, true);
+				TCHAR* tablename16 = utils::getTableName(fullname16);
+
+
+
+				if (action != 0) {
+					TCHAR* ddl = getDDL(schema16, tablename16, type, action == 2);
+					if (ddl) {
+						SetWindowText(hEditorWnd, ddl);
+						delete [] ddl;
 					} else {
 						SetWindowText(hEditorWnd, TEXT("Error to get DDL"));
 					}
 				}
+
+				if (action == 1) {
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_OK), SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CANCEL), SW_HIDE);
+				}
+
+				if (action)
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
+
+				delete [] schema16;
+				delete [] tablename16;
+
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
+
+
 				SetFocus(hEditorWnd);
 			}
 			break;
@@ -86,7 +111,7 @@ namespace dialogs {
 
 				RECT rc;
 				GetClientRect(hWnd, &rc);
-				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right - rc.left - 0, rc.bottom - rc.top - 43, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right - rc.left - 0, rc.bottom - rc.top - (IsWindowVisible(hOkWnd) ? 43 : 0), SWP_NOZORDER | SWP_NOMOVE);
 				SetWindowPos(hExampleWnd, 0, 7, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 				SetWindowPos(hOkWnd, 0, rc.right - rc.left - 165, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 				SetWindowPos(hCancelWnd, 0, rc.right - rc.left - 83, rc.bottom - rc.top - 30, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
@@ -186,6 +211,10 @@ namespace dialogs {
 			break;
 
 			case WM_CLOSE: {
+				// If modal
+				EndDialog(hWnd, DLG_CANCEL);
+
+				// If non-modal
 				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				DestroyWindow(hWnd);
 			}
@@ -196,11 +225,17 @@ namespace dialogs {
 	}
 
 
-	// lParam, USERDATA: out -> new table name
+	// lParam, USERDATA = in-out buffer: in - schema, out - new table name
 	BOOL CALLBACK cbDlgAddTable (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+				TCHAR* schema16 = (TCHAR*)lParam;
+				if (_tcscmp(schema16, TEXT("main"))) {
+					TCHAR title16[512];
+					_sntprintf(title16, 511, TEXT("Add table to %ls"), schema16);
+					SetWindowText(hWnd, title16);
+				}
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
 
@@ -312,9 +347,10 @@ namespace dialogs {
 						return 0;
 					}
 
+					TCHAR* fullname16 = utils::getFullTableName((TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), tblName16, false);
 					TCHAR query16[MAX_TEXT_LENGTH] = {0};
-					_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("create table \"%ls\" (\n%ls%ls%ls%ls\n)%ls%ls"),
-						tblName16,
+					_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("create table %ls (\n%ls%ls%ls%ls\n)%ls%ls"),
+						fullname16,
 						columns16,
 						pkCount > 1 ? TEXT(", primary key(\"") : TEXT(""),
 						pkCount > 1 ? pk16 : TEXT(""),
@@ -322,6 +358,7 @@ namespace dialogs {
 						isWithoutRowid ? TEXT(" without rowid") : TEXT(""),
 						isStrict ? TEXT(" strict") : TEXT("")
 					);
+					delete [] fullname16;
 
 					char* query8 = utils::utf16to8(query16);
 					int rc = sqlite3_exec(db, query8, NULL, 0 , 0);
@@ -711,8 +748,8 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgEditData (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				TCHAR* schema16 = utils::getName((TCHAR*)lParam, true);
-				TCHAR* tablename16 = utils::getName((TCHAR*)lParam);
+				TCHAR* schema16 = utils::getTableName((TCHAR*)lParam, true);
+				TCHAR* tablename16 = utils::getTableName((TCHAR*)lParam);
 
 				char* tablename8 = utils::utf16to8(tablename16);
 				SetProp(hWnd, TEXT("TABLENAME8"), (HANDLE)tablename8);
@@ -918,7 +955,7 @@ namespace dialogs {
 				GetWindowRect(hFilterWnd, &rc3);
 				POINT p{rc3.left, rc3.bottom};
 				ScreenToClient(hToolbarWnd, &p);
-				SetWindowPos(hFilterWnd, 0, 0, 0, rc.right - p.x, 19, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(hFilterWnd, 0, 0, 0, rc.right - p.x - 3, 19, SWP_NOZORDER | SWP_NOMOVE);
 			}
 			break;
 
@@ -1010,9 +1047,14 @@ namespace dialogs {
 
 					int len = strlen(tablename8) + strlen(schema8) + 255;
 					TCHAR buf[len + 1];
+					TCHAR* schema16 = utils::utf8to16(schema8);
 					TCHAR* tablename16 = utils::utf8to16(tablename8);
-					_sntprintf(buf, len, TEXT("%ls \"%ls\" [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), tablename16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					TCHAR* name16 = utils::getFullTableName(schema16, tablename16, true);
+					_tcsupr(name16);
+					_sntprintf(buf, len, TEXT("%ls %ls [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), name16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					delete [] schema16;
 					delete [] tablename16;
+					delete [] name16;
 					SetWindowText(hWnd, buf);
 				} else {
 					showDbError(hWnd);
@@ -1408,9 +1450,8 @@ namespace dialogs {
 				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
 
-				if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
+				if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_VALUE_FILTER || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
 					onListViewMenu(hListWnd, currRow, currCol, cmd, true);
-
 
 				if (cmd == IDM_ROW_ADD) {
 					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ROW), hWnd, (DLGPROC)&cbDlgRow, MAKELPARAM(ROW_ADD, 0));
@@ -2304,8 +2345,8 @@ namespace dialogs {
 				_sntprintf(buf, 255, TEXT("Add column to \"%ls\""), table16);
 				SetWindowText(hWnd, buf);
 
-				TCHAR* schema16 = utils::getName(table16, true);
-				TCHAR* tablename16 = utils::getName(table16);
+				TCHAR* schema16 = utils::getTableName(table16, true);
+				TCHAR* tablename16 = utils::getTableName(table16);
 				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
 				SetProp(hWnd, TEXT("SCHEMA16"), (HANDLE)schema16);
 
@@ -2348,7 +2389,7 @@ namespace dialogs {
 					if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL))
 						showDbError(hWnd);
 					else
-						EndDialog(hWnd, 0);
+						EndDialog(hWnd, DLG_OK);
 					delete [] query8;
 				}
 
@@ -2372,24 +2413,27 @@ namespace dialogs {
 		return false;
 	}
 
-	// lParam - table16
+	// lParam - fullname16
 	BOOL CALLBACK cbDlgAddIndex (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				TCHAR* table16 = (TCHAR*)lParam;
-				TCHAR buf[256];
-				_sntprintf(buf, 255, TEXT("Add index to \"%ls\""), table16);
+				TCHAR* fullname16 = (TCHAR*)lParam;
+				TCHAR buf[1024];
+				TCHAR* ufullname16 = _tcsdup(fullname16);
+				_tcsupr(ufullname16);
+				_sntprintf(buf, 1023, TEXT("Add index to %ls"), ufullname16);
+				free(ufullname16);
 				SetWindowText(hWnd, buf);
 
-				TCHAR* schema16 = utils::getName(table16, true);
-				TCHAR* tablename16 = utils::getName(table16);
+				TCHAR* schema16 = utils::getTableName(fullname16, true);
+				TCHAR* tablename16 = utils::getTableName(fullname16);
 
 				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
 				SetProp(hWnd, TEXT("SCHEMA16"), (HANDLE)schema16);
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
 				TCHAR query16[256];
-				_sntprintf(query16, 255, TEXT("select name 'Column name', 'asc' 'Order' from pragma_table_info('%ls')"), tablename16);
+				_sntprintf(query16, 255, TEXT("select name 'Column name', 'asc' 'Order' from pragma_table_info('%ls') where schema = \"%ls\""), tablename16, schema16);
 				char* sql8 = utils::utf16to8(query16);
 				sqlite3_stmt* stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
@@ -2402,7 +2446,7 @@ namespace dialogs {
 				sqlite3_finalize(stmt);
 				delete [] sql8;
 
-				int len = _tcslen(table16) + 10;
+				int len = _tcslen(fullname16) + 10;
 				TCHAR idxName16[len + 1];
 				_sntprintf(idxName16, len, TEXT("idx_%s_"), tablename16);
 				SetDlgItemText(hWnd, IDC_DLG_IDXNAME, idxName16);
@@ -2493,7 +2537,7 @@ namespace dialogs {
 					if (SQLITE_OK != sqlite3_exec(db, query8, NULL, NULL, NULL))
 						showDbError(hWnd);
 					else
-						EndDialog(hWnd, 0);
+						EndDialog(hWnd, DLG_OK);
 					delete [] query8;
 				}
 
@@ -2612,58 +2656,6 @@ namespace dialogs {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
-			}
-			break;
-
-			case WM_CLOSE:
-				EndDialog(hWnd, DLG_CANCEL);
-				break;
-		}
-
-		return false;
-	}
-
-	BOOL CALLBACK cbDlgDDL (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		switch (msg) {
-			case WM_INITDIALOG: {
-				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				setEditorFont(hEditorWnd);
-				SendMessage(hEditorWnd, WM_SETTEXT, 0, (LPARAM)lParam);
-				if (prefs::get("word-wrap"))
-					toggleWordWrap(hEditorWnd);
-				processHighlight(hEditorWnd, true, false, false);
-			}
-			break;
-
-			case WM_SIZE: {
-				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				RECT rc = {0};
-				GetClientRect(hWnd, &rc);
-				SetWindowPos(hEditorWnd, 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
-				SendMessage(hEditorWnd, EM_SETSEL, 0, 0);
-			}
-			break;
-
-			case WM_COMMAND: {
-				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
-			}
-			break;
-
-			case WM_NOTIFY: {
-				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER) {
-					MSGFILTER* pF = (MSGFILTER*)lParam;
-					int key = pF->wParam;
-					bool isKeyDown = pF->lParam & (1U << 31);
-					if (key == 0x57 && HIWORD(GetKeyState(VK_CONTROL))) { // Ctrl + W
-						if (isKeyDown)
-							toggleWordWrap(pF->nmhdr.hwndFrom);
-
-						pF->wParam = 0;
-						return true;
-					}
-				}
 			}
 			break;
 
@@ -4009,7 +4001,7 @@ namespace dialogs {
 		return false;
 	}
 
-	// lParam is an in/out buffer
+	// lParam, USERDATA is in/out buffer: in - schema.tblname, out - a generated statement.
 	BOOL CALLBACK cbDlgDrop (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -4024,11 +4016,18 @@ namespace dialogs {
 				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
 				SetFocus(hColumnsWnd);
 
+				TCHAR* schema16 = utils::getTableName((TCHAR*)lParam, true);
+				TCHAR* tablename16 = utils::getTableName((TCHAR*)lParam);
+
 				sqlite3_stmt* stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?1) order by cid", -1, &stmt, 0)) {
-					char* name8 = utils::utf16to8((TCHAR*)lParam);
-					sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
-					delete [] name8;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?2) where schema = ?1 order by cid", -1, &stmt, 0)) {
+					char* schema8 = utils::utf16to8(schema16);
+					char* tablename8 = utils::utf16to8(tablename16);
+					sqlite3_bind_text(stmt, 1, schema8, strlen(schema8), SQLITE_TRANSIENT);
+					sqlite3_bind_text(stmt, 2, tablename8, strlen(tablename8), SQLITE_TRANSIENT);
+					delete [] schema8;
+					delete [] tablename8;
+
 					int colNo = 0;
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
 						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
@@ -4044,6 +4043,9 @@ namespace dialogs {
 				}
 				sqlite3_finalize(stmt);
 
+				delete [] schema16;
+				delete [] tablename16;
+
 				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
 			}
 			break;
@@ -4051,9 +4053,8 @@ namespace dialogs {
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
 					TCHAR* res = (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-					TCHAR tblname[256];
-					_sntprintf(tblname, 255, res);
 
+					TCHAR* fullname16 = _tcsdup(res);
 					int type = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_TYPE));
 
 					TCHAR columns[MAX_TEXT_LENGTH]{0};
@@ -4089,17 +4090,19 @@ namespace dialogs {
 					}
 
 					if (type == OP_SELECT)
-						_sntprintf(res, 255, TEXT("select\n\t%ls\nfrom %ls"), columns, tblname);
+						_sntprintf(res, 255, TEXT("select\n\t%ls\nfrom %ls"), columns, fullname16);
 					if (type == OP_UPDATE)
-						_sntprintf(res, 255, TEXT("update %ls set %ls where"), tblname, columns);
+						_sntprintf(res, 255, TEXT("update %ls set %ls where"), fullname16, columns);
 					if (type == OP_INSERT) {
 						TCHAR placeholders[valCount * 3 + 1]{0};
 						for (int i= 0; i < valCount; i++)
 							_tcscat(placeholders, i == 0 ? TEXT("?") : TEXT(", ?"));
-						_sntprintf(res, 255, TEXT("insert into %ls (%ls) values (%ls)"), tblname, columns, placeholders);
+						_sntprintf(res, 255, TEXT("insert into %ls (%ls) values (%ls)"), fullname16, columns, placeholders);
 					}
 					if (type == OP_DELETE)
-						_sntprintf(res, 255, TEXT("delete from %ls where %ls"), tblname, columns);
+						_sntprintf(res, 255, TEXT("delete from %ls where %ls"), fullname16, columns);
+
+					free(fullname16);
 
 					EndDialog(hWnd, DLG_OK);
 				}
