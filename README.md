@@ -1,5 +1,5 @@
-sqlite-gui is a lightweight Windows GUI for [SQLite](https://www.sqlite.org/index.html) powered by C++/mingw64/WinAPI.<br>
-Small, simple, powerfull, fast, free.
+sqlite-gui is a lightweight [SQLite](https://www.sqlite.org/index.html) editor for Windows powered by C++/mingw64/WinAPI.<br>
+Small, simple, [powerfull](https://youtu.be/lctkqWD7HTk), fast, free.
 
 |[**Download the latest version**](https://github.com/little-brother/sqlite-gui/releases/latest)|
 |-------------------------------------------------------------------------------------------|

@@ -8,4 +8,4 @@ http-debug.txt
 sqlite-gui.depend
 sqlite-gui.layout
 ToDo.txt
-build.bat
+*.bat

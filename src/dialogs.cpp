@@ -1,5 +1,5 @@
-//#define ULONG_PTR ULONG
 #include <windows.h>
+#include "dmp.h"
 #include "resource.h"
 #include "global.h"
 #include "prefs.h"
@@ -11,6 +11,7 @@ namespace dialogs {
 	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldAddTableComboboxEdit, cbOldAddTableHeader, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT CALLBACK cbNewEditDataComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewAddTableHeader(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -38,7 +39,7 @@ namespace dialogs {
 		0
 	};
 
-	bool isRequireHighligth = false, isRequireParenthesisHighligth = false;
+	bool isRequireHighlight = false, isRequireParenthesisHighlight = false;
 
 	HMENU hEditDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_EDIT_DATA)), 0);
 	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
@@ -71,8 +72,6 @@ namespace dialogs {
 
 				TCHAR* schema16 = utils::getTableName(fullname16, true);
 				TCHAR* tablename16 = utils::getTableName(fullname16);
-
-
 
 				if (action != 0) {
 					TCHAR* ddl = getDDL(schema16, tablename16, type, action == 2);
@@ -129,9 +128,9 @@ namespace dialogs {
 			case WM_COMMAND: {
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighligth = true;
+					isRequireHighlight = true;
 				}
 
 				if (wParam == IDC_DLG_EXAMPLE) {
@@ -189,11 +188,11 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
 					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
 						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighligth = true;
+						isRequireParenthesisHighlight = true;
 					}
 				}
 
@@ -203,10 +202,19 @@ namespace dialogs {
 			}
 			break;
 
+			case WM_TIMER: {
+				if (wParam == IDT_HIGHLIGHT) {
+					KillTimer(hWnd, IDT_HIGHLIGHT);
+
+					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
+					isRequireHighlight = false;
+					isRequireParenthesisHighlight = false;
+				}
+			}
+			break;
+
 			case WMU_HIGHLIGHT: {
-				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth, false);
-				isRequireHighligth = false;
-				isRequireParenthesisHighligth = false;
+				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 			}
 			break;
 
@@ -583,8 +591,10 @@ namespace dialogs {
 			break;
 
 			case WM_TIMER: {
-				KillTimer(hWnd, IDT_EDIT_DATA);
-				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
+				if (wParam == IDT_EDIT_DATA) {
+					KillTimer(hWnd, IDT_EDIT_DATA);
+					SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
+				}
 			}
 			break;
 
@@ -640,7 +650,7 @@ namespace dialogs {
 					if (isOne && kd->wVKey == 0x43) // Ctrl + C
 						SendMessage(hWnd, WM_COMMAND, IDM_QUERY_COPY, 0);
 
-					if (kd->wVKey == 0x41 && GetKeyState(VK_CONTROL)) // Ctrl + A
+					if (kd->wVKey == 0x41 && HIWORD(GetKeyState(VK_CONTROL))) // Ctrl + A
 						ListView_SetItemState(pHdr->hwndFrom, -1, LVIS_SELECTED, LVIS_SELECTED);
 				}
 			}
@@ -1169,6 +1179,11 @@ namespace dialogs {
 				SetWindowLongPtr(hValuesWnd, GWLP_USERDATA, MAKELPARAM(currRow, currCol));
 				cbOldEditDataCombobox = (WNDPROC)SetWindowLongPtr(hValuesWnd, GWLP_WNDPROC, (LONG_PTR)cbNewEditDataCombobox);
 				SendMessage(hValuesWnd, WM_SETFONT, (LPARAM)hDefFont, true);
+
+				COMBOBOXINFO ci{0};
+				ci.cbSize = sizeof(COMBOBOXINFO);
+				GetComboBoxInfo(hValuesWnd, &ci);
+				SetProp(ci.hwndItem, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(ci.hwndItem, GWLP_WNDPROC, (LONG_PTR)&cbNewEditDataComboboxEdit));
 
 				if (wParam) {
 					ComboBox_SetText(hValuesWnd, (TCHAR*)wParam);
@@ -2561,6 +2576,32 @@ namespace dialogs {
 		return false;
 	}
 
+	// type: 1 - editor find strings, 2 - editor replacements, 3 - result find strings
+	void updateSearchSuggestions(HWND hComboWnd, int type) {
+		TCHAR what16[256];
+		GetWindowText(hComboWnd, what16, 255);
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into search_history (time, what, type) values (?1, ?2, ?3)", -1, &stmt, 0)) {
+			sqlite3_bind_int(stmt, 1, std::time(0));
+			char* what8 = utils::utf16to8(what16);
+			sqlite3_bind_text(stmt, 2, what8, strlen(what8), SQLITE_TRANSIENT);
+			delete [] what8;
+			sqlite3_bind_int(stmt, 3, type);
+			sqlite3_step(stmt);
+		}
+		sqlite3_finalize(stmt);
+
+		char sql8[512];
+		sprintf(sql8, "delete from search_history where type = %i and rowid not in (select rowid from search_history where type = %i order by time desc limit 20)", type, type);
+		sqlite3_exec(prefs::db, sql8, 0, 0, 0);
+
+		int pos = ComboBox_FindStringExact(hComboWnd, 0, what16);
+		if (pos != -1)
+			ComboBox_DeleteString(hComboWnd, pos);
+		ComboBox_InsertString(hComboWnd, 0, what16);
+	}
+
 	// lParam, USERDATA = hEditorWnd
 	BOOL CALLBACK cbDlgFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -2579,6 +2620,20 @@ namespace dialogs {
 				SetProp(hEdit, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)&cbNewEdit));
 				hEdit = GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING);
 				SetProp(hEdit, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)&cbNewEdit));
+
+				for (int type = 1; type < 3; type++) {
+					HWND hComboxWnd	= GetDlgItem(hWnd, type == 1 ? IDC_DLG_FIND_STRING : IDC_DLG_REPLACE_STRING);
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select what from search_history where type = ?1 order by time desc limit 20", -1, &stmt, 0)) {
+						sqlite3_bind_int(stmt, 1, type);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* what16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							ComboBox_AddString(hComboxWnd, what16);
+							delete [] what16;
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
 			}
 			break;
 
@@ -2587,31 +2642,30 @@ namespace dialogs {
 				if (wParam == IDOK || wParam == IDC_DLG_FIND || wParam == IDC_DLG_REPLACE || wParam == IDC_DLG_REPLACE_ALL)
 					prefs::set("case-sensitive", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CASE_SENSITIVE)));
 
-				if (wParam == IDC_DLG_FIND || (wParam == IDOK && GetFocus() == GetDlgItem(hWnd, IDC_DLG_FIND_STRING))) {
-					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+				TCHAR replaceString[256];
+				GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+				GetDlgItemText(hWnd, IDC_DLG_REPLACE_STRING, replaceString, 255);
+
+				if (wParam == IDC_DLG_FIND || (wParam == IDOK && GetParent(GetFocus()) == GetDlgItem(hWnd, IDC_DLG_FIND_STRING))) {
 					search(hEditorWnd);
+					updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_FIND_STRING), 1);
 				}
 
-				if (wParam == IDC_DLG_REPLACE || (wParam == IDOK && GetFocus() == GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING))) {
-					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
-					TCHAR replaceString[256];
-					GetDlgItemText(hWnd, IDC_DLG_REPLACE_STRING, replaceString, 255);
-
+				if (wParam == IDC_DLG_REPLACE || (wParam == IDOK && GetParent(GetFocus()) == GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING))) {
 					if (search(hEditorWnd)) {
 						int crPos = LOWORD(SendMessage(hEditorWnd, EM_GETSEL, 0, 0));
 						SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)replaceString);
 						PostMessage(hEditorWnd, EM_SETSEL, crPos, crPos + _tcslen(replaceString));
+
+						updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_FIND_STRING), 1);
+						updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING), 2);
 					}
 				}
 
 				if (wParam == IDC_DLG_REPLACE_ALL) {
-					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
-					TCHAR replaceString[256];
-					GetDlgItemText(hWnd, IDC_DLG_REPLACE_STRING, replaceString, 255);
-
-					int size = GetWindowTextLength(hEditorWnd);
-					TCHAR text16[size + 1] = {0};
-					GetWindowText(hEditorWnd, text16, size + 1);
+					int len = GetWindowTextLength(hEditorWnd);
+					TCHAR text16[len + 1] = {0};
+					GetWindowText(hEditorWnd, text16, len + 1);
 
 					SetWindowRedraw(hEditorWnd, false);
 					int crPos = LOWORD(SendMessage(hEditorWnd, EM_GETSEL, 0, 0));
@@ -2621,6 +2675,9 @@ namespace dialogs {
 					SetWindowRedraw(hEditorWnd, true);
 					InvalidateRect(hEditorWnd, NULL, true);
 					PostMessage(hEditorWnd, EM_SETSEL, crPos, crPos);
+
+					updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_FIND_STRING), 1);
+					updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_REPLACE_STRING), 2);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -2744,6 +2801,7 @@ namespace dialogs {
 						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
 						int no = ListBox_AddString(hListWnd, name16);
 						ListBox_SetItemData(hListWnd, no, (LPARAM)utils::utf8to16((const char*)sqlite3_column_text(stmt, 1)));
+						delete [] name16;
 					}
 				}
 				sqlite3_finalize(stmt);
@@ -2788,9 +2846,9 @@ namespace dialogs {
 					SetWindowLongPtr(hListWnd, GWLP_USERDATA, curr);
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighligth = true;
+					isRequireHighlight = true;
 				}
 
 				if (wParam == IDM_EDITOR_COMMENT)
@@ -2839,11 +2897,11 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
 					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
 						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighligth = true;
+						isRequireParenthesisHighlight = true;
 					}
 				}
 
@@ -2864,10 +2922,19 @@ namespace dialogs {
 			}
 			break;
 
+			case WM_TIMER: {
+				if (wParam == IDT_HIGHLIGHT) {
+					KillTimer(hWnd, IDT_HIGHLIGHT);
+
+					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
+					isRequireHighlight = false;
+					isRequireParenthesisHighlight = false;
+				}
+			}
+			break;
+
 			case WMU_HIGHLIGHT: {
-				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth, false);
-				isRequireHighligth = false;
-				isRequireParenthesisHighligth = false;
+				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 			}
 			break;
 
@@ -3109,9 +3176,9 @@ namespace dialogs {
 					Toolbar_SetButtonState(hToolbarWnd, IDM_TEST, TBSTATE_ENABLED);
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighligth) {
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
 					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighligth = true;
+					isRequireHighlight = true;
 				}
 
 				if (wParam == IDM_EDITOR_COMMENT)
@@ -3142,11 +3209,11 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighligth) {
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
 					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighligth && pSc->seltyp == 0) {
+					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
 						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighligth = true;
+						isRequireParenthesisHighlight = true;
 					}
 				}
 
@@ -3219,10 +3286,239 @@ namespace dialogs {
 			}
 			break;
 
+			case WM_TIMER: {
+				if (wParam == IDT_HIGHLIGHT) {
+					KillTimer(hWnd, IDT_HIGHLIGHT);
+
+					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
+					isRequireHighlight = false;
+					isRequireParenthesisHighlight = false;
+				}
+			}
+			break;
+
 			case WMU_HIGHLIGHT: {
-				processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighligth, isRequireParenthesisHighligth, false);
-				isRequireHighligth = false;
-				isRequireParenthesisHighligth = false;
+				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam, USERDATA = hListWnd
+	BOOL CALLBACK cbDlgResultFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CASE_SENSITIVE), prefs::get("case-sensitive") ? BST_CHECKED : BST_UNCHECKED);
+
+				HWND hComboxWnd	= GetDlgItem(hWnd, IDC_DLG_FIND_STRING);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select what from search_history where type = 3 order by time desc limit 20", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* what16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hComboxWnd, what16);
+						delete [] what16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				SetFocus(hComboxWnd);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_FIND || (wParam == IDOK && GetParent(GetFocus()) == GetDlgItem(hWnd, IDC_DLG_FIND_STRING))) {
+					HWND hListWnd = (HWND)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+					TCHAR searchString[256];
+					GetDlgItemText(hWnd, IDC_DLG_FIND_STRING, searchString, 255);
+
+					prefs::set("case-sensitive", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CASE_SENSITIVE)));
+
+					SendMessage(hListWnd, WMU_RESULT_SEARCH, (WPARAM)searchString, 0);
+					updateSearchSuggestions(GetDlgItem(hWnd, IDC_DLG_FIND_STRING), 3);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam = hListWnd or NULL
+	BOOL CALLBACK cbDlgTextComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				RECT mrc;
+				GetWindowRect(hMainWnd, &mrc);
+
+				int w = mrc.right - mrc.left - 75;
+				int h = mrc.bottom - mrc.top - 50;
+				SetWindowPos(hWnd, 0, (mrc.right + mrc.left - w)/2, (mrc.bottom + mrc.top - h)/2, w, h,  SWP_NOZORDER);
+
+				if (lParam) {
+					HWND hEditorWnd = (HWND)lParam;
+					CHARRANGE range;
+					SendMessage(hEditorWnd, EM_EXGETSEL, 0, (LPARAM)&range);
+
+					bool isSelection = range.cpMin != range.cpMax;
+					int len =  isSelection ? range.cpMax - range.cpMin + 1 : GetWindowTextLength(hEditorWnd);
+					TCHAR* txt = new TCHAR[len + 1]{0};
+					SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, len + 1, (LPARAM)txt);
+					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL, txt);
+					delete [] txt;
+
+					TCHAR* txt2 = utils::getClipboardText();
+					SetDlgItemText(hWnd, IDC_DLG_COMPARED, txt2);
+					delete [] txt2;
+
+					for (int i = 0; i < 2; i++) {
+						HWND hEditorWnd = GetDlgItem(hWnd, i == 0 ? IDC_DLG_ORIGINAL : IDC_DLG_COMPARED);
+						setEditorFont(hEditorWnd);
+
+						RECT rc;
+						GetClientRect(hEditorWnd, &rc);
+						rc.left += 5;
+						rc.top += 5;
+						rc.right -= 5;
+						rc.bottom -= 5;
+						SendMessage(hEditorWnd, EM_SETRECT, 0, (LPARAM)&rc);
+					}
+
+					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_LABEL, TEXT("Editor"));
+					SetDlgItemText(hWnd, IDC_DLG_COMPARED_LABEL, TEXT("Clipboard"));
+
+					SendMessage(hWnd, WMU_COMPARE, 0, 0);
+				}
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hLabelA = GetDlgItem(hWnd, IDC_DLG_ORIGINAL_LABEL);
+				HWND hLabelB = GetDlgItem(hWnd, IDC_DLG_COMPARED_LABEL);
+				HWND hCountA = GetDlgItem(hWnd, IDC_DLG_ORIGINAL_COUNT);
+				HWND hCountB = GetDlgItem(hWnd, IDC_DLG_COMPARED_COUNT);
+				HWND hBtn = GetDlgItem(hWnd, IDC_DLG_COMPARE);
+
+				HWND hEditorA = GetDlgItem(hWnd, IDC_DLG_ORIGINAL);
+				HWND hEditorB = GetDlgItem(hWnd, IDC_DLG_COMPARED);
+
+				RECT rc;
+				GetClientRect(hWnd, &rc);
+
+				SetWindowPos(hLabelA, 0, 2, 8, 100, 14, SWP_NOZORDER);
+				SetWindowPos(hLabelB, 0, rc.right - 102, 8, 100, 14, SWP_NOZORDER);
+				SetWindowPos(hCountA, 0, rc.right / 2 - 100, 5, 40, 20, SWP_NOZORDER);
+				SetWindowPos(hCountB, 0, rc.right / 2 + 60, 5, 40, 20, SWP_NOZORDER);
+				SetWindowPos(hBtn, 0, rc.right/2 - 40, 3, 80, 24, SWP_NOZORDER);
+				SetWindowPos(hEditorA, 0, 0, 30, rc.right / 2 - 2, rc.bottom - 30, SWP_NOZORDER);
+				SetWindowPos(hEditorB, 0, rc.right/2 + 2, 30, rc.right/2 - 2, rc.bottom - 30, SWP_NOZORDER);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_COMPARE)
+					SendMessage(hWnd, WMU_COMPARE, 0, 0);
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_COMPARE: {
+				HWND hEditorA = GetDlgItem(hWnd, IDC_DLG_ORIGINAL);
+				HWND hEditorB = GetDlgItem(hWnd, IDC_DLG_COMPARED);
+
+				GETTEXTEX gt = {0};
+				gt.flags = 0;
+				gt.codepage = 1200;
+
+				GETTEXTLENGTHEX gtl = {GTL_NUMBYTES, 0};
+				int len = SendMessage(hEditorA, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+				TCHAR* txtA16 = new TCHAR[len + 1];
+				gt.cb = len + sizeof(TCHAR);
+				SendMessage(hEditorA, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)txtA16);
+				char* txtA8 = utils::utf16to8(txtA16);
+
+				len = SendMessage(hEditorB, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+				TCHAR* txtB16 = new TCHAR[len + 1];
+				gt.cb = len + sizeof(TCHAR);
+				SendMessage(hEditorB, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)txtB16);
+				char* txtB8 = utils::utf16to8(txtB16);
+
+				struct EditorData {
+					HWND hEditorWnd;
+					TCHAR *txt16;
+					int len16;
+					char *txt8;
+					int len8;
+					int dCount;
+				};
+
+				auto cbDiff = [](void *ref, dmp_operation_t op, const void *data8, uint32_t len8) {
+					EditorData* ed = (EditorData*)ref;
+
+					CHARFORMAT2 cf2;
+					ZeroMemory(&cf2, sizeof(CHARFORMAT2));
+					cf2.cbSize = sizeof(CHARFORMAT2) ;
+					SendMessage(ed->hEditorWnd, EM_GETCHARFORMAT, SCF_DEFAULT, (LPARAM) &cf2);
+					cf2.dwMask = CFM_COLOR | CFM_BOLD;
+					cf2.dwEffects = 0;
+					cf2.crTextColor = RGB(255, 0, 0);
+
+					if (op == DMP_DIFF_DELETE) {
+						char diff8[len8 + 1]{0};
+						strncpy(diff8, (char*)data8, len8);
+						int len16 = MultiByteToWideChar(CP_UTF8, 0, diff8, -1, NULL, 0) - 1;
+
+						int from16 = ed->len16 - MultiByteToWideChar(CP_UTF8, 0, (char*)data8, -1, NULL, 0) + 1;
+						SendMessage(ed->hEditorWnd, EM_SETSEL, from16, from16 + len16);
+						SendMessage(ed->hEditorWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf2);
+						ed->dCount++;
+					}
+
+					return 0;
+				};
+
+				dmp_diff *diffAB, *diffBA;
+				bool rcA = dmp_diff_from_strs(&diffAB, NULL, txtA8, txtB8) != 0;
+				bool rcB = dmp_diff_from_strs(&diffBA, NULL, txtB8, txtA8) != 0;
+
+				if (rcA || rcB) {
+					MessageBox(hWnd, TEXT("Error occurred during comparison"), TEXT("Error"), MB_ICONERROR);
+				} else {
+					TCHAR cnt[64];
+					EditorData ed = {hEditorA, txtA16, (int)_tcslen(txtA16), txtA8, (int)strlen(txtA8), 0};
+					dmp_diff_foreach(diffAB, cbDiff, &ed);
+					SendMessage(hEditorA, EM_SETSEL, 0, 0);
+					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_COUNT, _itot(ed.dCount, cnt, 10));
+
+					ed = {hEditorB, txtB16, (int)_tcslen(txtB16), txtB8, (int)strlen(txtB8), 0};
+					dmp_diff_foreach(diffBA, cbDiff, &ed);
+					SendMessage(hEditorB, EM_SETSEL, 0, 0);
+					SetDlgItemText(hWnd, IDC_DLG_COMPARED_COUNT, _itot(ed.dCount, cnt, 10));
+				}
+				dmp_diff_free(diffAB);
+				dmp_diff_free(diffBA);
+
+				delete [] txtA16;
+				delete [] txtA8;
+				delete [] txtB16;
+				delete [] txtB8;
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -4081,7 +4377,7 @@ namespace dialogs {
 						GetWindowText(hColumnWnd, colName, 255);
 
 						if (_tcslen(columns) > 0)
-							_tcscat(columns, type == OP_SELECT ? TEXT(",\n\t") : type == OP_DELETE ? TEXT(" and ") : TEXT(", "));
+							_tcscat(columns, type == OP_SELECT ? TEXT(",\n       ") : type == OP_DELETE ? TEXT(" and ") : TEXT(", "));
 						_tcscat(columns, colName);
 						if (type == OP_UPDATE || type == OP_DELETE)
 							_tcscat(columns, TEXT(" = ?"));
@@ -4090,7 +4386,7 @@ namespace dialogs {
 					}
 
 					if (type == OP_SELECT)
-						_sntprintf(res, 255, TEXT("select\n\t%ls\nfrom %ls"), columns, fullname16);
+						_sntprintf(res, 255, TEXT("select %ls\n  from %ls"), columns, fullname16);
 					if (type == OP_UPDATE)
 						_sntprintf(res, 255, TEXT("update %ls set %ls where"), fullname16, columns);
 					if (type == OP_INSERT) {
@@ -4746,6 +5042,7 @@ namespace dialogs {
 			case WM_KEYDOWN: {
 				SetProp(hWnd, TEXT("ISCHANGED"), (HANDLE)1);
 				if (wParam == VK_SPACE && HIWORD(GetKeyState(VK_CONTROL))) {
+					SetProp(hWnd, TEXT("ISCHANGED"), 0);
 					SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
 
 					int size = GetWindowTextLength(hWnd);
@@ -4766,6 +5063,11 @@ namespace dialogs {
 					DestroyWindow(hWnd);
 					return true;
 				}
+
+				if (wParam == 0x41 && HIWORD(GetKeyState(VK_CONTROL))) { // Ctrl + A
+					SendMessage(hWnd, EM_SETSEL, 0, -1);
+					return true;
+				}
 			}
 			break;
 
@@ -4774,7 +5076,6 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("ISCHANGED"), (HANDLE)1);
 			}
 			break;
-
 
 			case WM_LBUTTONDBLCLK: {
 				if (GetWindowTextLength(hWnd) == 0) {
@@ -4790,10 +5091,12 @@ namespace dialogs {
 
 	// USERDATA = MAKELPARAM(iItem, iSubItem)
 	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if (msg == WM_GETDLGCODE)
-			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataCombobox, hWnd, msg, wParam, lParam));
-
 		switch (msg) {
+			case WM_GETDLGCODE: {
+				return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataCombobox, hWnd, msg, wParam, lParam));
+			}
+			break;
+
 			case WM_DESTROY: {
 				HWND hListWnd = GetParent(hWnd);
 
@@ -4820,6 +5123,19 @@ namespace dialogs {
 					DestroyWindow(hWnd);
 					return true;
 				}
+
+				if (wParam == 0x41 && HIWORD(GetKeyState(VK_CONTROL))) { // Ctrl + A
+					SendMessage(hWnd, CB_SETEDITSEL, 0, MAKELPARAM(0, -1));
+					return true;
+				}
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (HIWORD(wParam) == EN_CHANGE) {
+					SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
+					return 0;
+				}
 			}
 			break;
 
@@ -4840,9 +5156,19 @@ namespace dialogs {
 				TCHAR value16[256]{0};
 				ComboBox_GetText(hWnd, value16, 255);
 
-				char query8[strlen(column8) + strlen(tablename8) + strlen(schema8) + 128];
-				sprintf(query8, "select distinct \"%s\" from \"%s\".\"%s\" where coalesce(\"%s\", '') <> '' and (?1 is null or \"%s\" like '%%' || ?1 || '%%') order by 1", column8, schema8, tablename8, column8, column8);
+				char query8[strlen(column8) + strlen(tablename8) + strlen(schema8) + 512];
+				sprintf(query8, "select distinct trim(\"%s\") from \"%s\".\"%s\" where typeof(\"%s\") not in ('null', 'blob') and trim(coalesce(\"%s\", '')) <> '' and (?1 is null or \"%s\" like '%%' || ?1 || '%%') order by 1 limit 100",
+							column8, schema8, tablename8, column8, column8, column8);
 				delete [] column8;
+
+				SetWindowRedraw(hWnd, FALSE);
+				ComboBox_ShowDropdown(hWnd, FALSE);
+
+				int pos = 0;
+				SendMessage(hWnd, CB_GETEDITSEL, (WPARAM)&pos, 0);
+				if (wParam == 0)
+					pos = _tcslen(value16);
+				ComboBox_ResetContent(hWnd);
 
 				ComboBox_AddString(hWnd, TEXT(""));
 				sqlite3_stmt* stmt;
@@ -4861,16 +5187,39 @@ namespace dialogs {
 				}
 				sqlite3_finalize(stmt);
 
-				int pos = ComboBox_FindStringExact(hWnd, 0, value16);
-				if (pos != -1)
-					ComboBox_SetCurSel(hWnd, pos);
+				ComboBox_ShowDropdown(hWnd, TRUE);
+				SetWindowText(hWnd, value16);
+				SendMessage(hWnd, CB_SETEDITSEL, 0, MAKELPARAM(pos, pos));
 
-				ComboBox_ShowDropdown(hWnd, true);
+				SetWindowRedraw(hWnd, TRUE);
+				InvalidateRect(hWnd, NULL, TRUE);
 			}
 			break;
 		}
 
 		return CallWindowProc(cbOldEditDataCombobox, hWnd, msg, wParam, lParam);
+	}
+
+	LRESULT CALLBACK cbNewEditDataComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_GETDLGCODE)
+				return (DLGC_WANTALLKEYS | CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam));
+
+		if (msg == WM_KEYDOWN && (wParam == VK_RETURN || wParam == VK_ESCAPE || (wParam == 0x41 && HIWORD(GetKeyState(VK_CONTROL))))) {
+			SendMessage(GetParent(hWnd), msg, wParam, lParam);
+			return 0;
+		}
+
+		if (msg == WM_KEYUP) {
+			if (wParam == VK_DOWN || wParam == VK_UP) {
+				COMBOBOXINFO ci{0};
+				ci.cbSize = sizeof(COMBOBOXINFO);
+				GetComboBoxInfo(GetParent(hWnd), &ci);
+				SetFocus(ci.hwndList);
+				return 0;
+			}
+		}
+
+		return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
 	}
 
 	LRESULT CALLBACK cbNewAddTableCell(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4947,7 +5296,6 @@ namespace dialogs {
 			SendMessage(hWnd, HDM_GETITEMRECT, hi.iItem, (LPARAM)&rc);
 			POINT p{(rc.right + rc.left)/2, rc.bottom + 5};
 			ClientToScreen(hWnd, &p);
-
 
 			TCHAR text16[1024];
 			_sntprintf(text16, 1023, TEXT("%s"), tooltips[hi.iItem]);

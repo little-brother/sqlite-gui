@@ -9,6 +9,7 @@ namespace utils {
 	TCHAR* trim(TCHAR *in);
 	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
+	bool hasString(const TCHAR* str, const TCHAR* sub);
 
 	TCHAR* getTableName(const TCHAR* in, bool isSchema = false);
 	TCHAR* getFullTableName(const TCHAR* schema, const TCHAR* tablename, bool isOmitMain = false);
@@ -35,6 +36,7 @@ namespace utils {
 
 	COLORREF blend(COLORREF c1, COLORREF c2, BYTE alpha);
 
+	bool isSQLiteDatabase(TCHAR* path16);
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
 	BYTE sqlite3_type(const char* type8);
 	void urlDecode (char *dst, const char *src);

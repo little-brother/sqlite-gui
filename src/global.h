@@ -14,7 +14,8 @@
 #define MAX_DIALOG_COUNT            32
 #define MAX_COMPARE_RESULT          50
 #define MAX_SCHEMA_COUNT            20
-#define MAX_RESULT_COLUMN_COUNT     64
+#define MAX_RESULT_COLUMN_COUNT     96
+#define MAX_TRANSPOSE_ROWS         512
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -80,7 +81,7 @@ void setEditorColor(HWND hWnd, COLORREF color, bool noEffects = false);
 
 bool attachDb(sqlite3** _db, const char* path8, const char* name8 = 0);
 bool search(HWND hWnd);
-void processHighlight(HWND hWnd, bool isRequireHighligth, bool isRequireParenthesisHighligth, bool isRequireOccurrenceHighlight);
+void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthesisHighlight, bool isRequireOccurrenceHighlight);
 bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

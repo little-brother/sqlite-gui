@@ -1,11 +1,11 @@
-#define GUI_VERSION                "1.7.1"
-#define GUI_VERSION2               1, 7, 1, 0
+#define GUI_VERSION                "1.7.2"
+#define GUI_VERSION2               1, 7, 2, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
 #define GUI_PLATFORM               32
 #endif
-#define HELP_VERSION               2
+#define HELP_VERSION               3
 
 #define IDD_ADDVIEWEDIT            11
 #define IDD_EDITDATA               12
@@ -27,6 +27,8 @@
 #define IDD_SHORTCUTS              28
 #define IDD_ADD_INDEX              29
 #define IDD_CUSTOM_FUNCTIONS       30
+#define IDD_RESULT_FIND            31
+#define IDD_TEXT_COMPARISON        32
 
 #define IDD_TOOL_IMPORT_CSV        35
 #define IDD_TOOL_IMPORT_JSON       36
@@ -130,34 +132,39 @@
 #define IDC_DLG_ODBC_SCHEMA_LABEL  166
 #define IDC_DLG_DATABASE           170
 #define IDC_DLG_DATABASE_SELECTOR  171
-#define IDC_DLG_COMPARE_SCHEMA     172
-#define IDC_DLG_COMPARE_DATA       173
-#define IDC_DLG_SCHEMA_DIFF        174
-#define IDC_DLG_DATA_DIFF          175
-#define IDC_DLG_ORIGINAL           176
-#define IDC_DLG_COMPARED           177
-#define IDC_DLG_ORIGINAL_DDL       178
-#define IDC_DLG_COMPARED_DDL       179
-#define IDC_DLG_DIFF_ROWS          180
-#define IDC_DLG_SEARCH_TEXT        181
-#define IDC_DLG_SEARCH             182
-#define IDC_DLG_PATTERN            183
-#define IDC_DLG_TABLENAMES         184
-#define IDC_DLG_ISTRUNCATE         186
-#define IDC_DLG_ISREPLACE          187
-#define IDC_DLG_IMPORT_ACTION      188
-#define IDC_DLG_IMPORT_ACTION2     189
-#define IDC_DLG_TABLES             190
-#define IDC_DLG_SEARCH_QUERY       191
-#define IDC_DLG_SEARCH_QUERY_TEXT  192
-#define IDC_DLG_SEARCH_RESULT      193
-#define IDC_DLG_SEARCH_ROWS        194
-#define IDC_DLG_STATISTICS         195
-#define IDC_DLG_FILTER             196
-#define IDC_DLG_ODBC_MANAGER       197
-#define IDC_DLG_ASK_DELETE         198
-#define IDC_DLG_WORD_WRAP          199
-#define IDC_DLG_CLEAR_VALUES       200
+#define IDC_DLG_COMPARE            172
+#define IDC_DLG_COMPARE_SCHEMA     173
+#define IDC_DLG_COMPARE_DATA       174
+#define IDC_DLG_SCHEMA_DIFF        175
+#define IDC_DLG_DATA_DIFF          176
+#define IDC_DLG_ORIGINAL           177
+#define IDC_DLG_COMPARED           178
+#define IDC_DLG_ORIGINAL_DDL       179
+#define IDC_DLG_COMPARED_DDL       180
+#define IDC_DLG_ORIGINAL_LABEL     181
+#define IDC_DLG_COMPARED_LABEL     182
+#define IDC_DLG_ORIGINAL_COUNT     183
+#define IDC_DLG_COMPARED_COUNT     184
+#define IDC_DLG_DIFF_ROWS          185
+#define IDC_DLG_SEARCH_TEXT        186
+#define IDC_DLG_SEARCH             187
+#define IDC_DLG_PATTERN            188
+#define IDC_DLG_TABLENAMES         189
+#define IDC_DLG_ISTRUNCATE         190
+#define IDC_DLG_ISREPLACE          191
+#define IDC_DLG_IMPORT_ACTION      192
+#define IDC_DLG_IMPORT_ACTION2     193
+#define IDC_DLG_TABLES             194
+#define IDC_DLG_SEARCH_QUERY       195
+#define IDC_DLG_SEARCH_QUERY_TEXT  196
+#define IDC_DLG_SEARCH_RESULT      197
+#define IDC_DLG_SEARCH_ROWS        198
+#define IDC_DLG_STATISTICS         199
+#define IDC_DLG_FILTER             200
+#define IDC_DLG_ODBC_MANAGER       201
+#define IDC_DLG_ASK_DELETE         202
+#define IDC_DLG_WORD_WRAP          203
+#define IDC_DLG_CLEAR_VALUES       204
 #define IDC_DLG_GRID_COLOR         210 // + 4 next
 #define IDC_DLG_GRID_COLOR_EDIT    215
 #define IDC_DLG_VALUE_SELECTOR     216
@@ -174,12 +181,12 @@
 #define IDC_DLG_REPLACE_ALL        228
 #define IDC_DLG_CASE_SENSITIVE     229
 
-#define IDC_DLG_SHORTCUTS          230
-#define IDC_TAB_EDIT               231
-#define IDC_DLG_FUNCTIONS          232
-#define IDC_DLG_NAME               233
-#define IDC_DLG_NAME_LABEL         234
-#define IDC_DLG_CODE_LABEL         235
+#define IDC_DLG_SHORTCUTS          235
+#define IDC_TAB_EDIT               236
+#define IDC_DLG_FUNCTIONS          237
+#define IDC_DLG_NAME               238
+#define IDC_DLG_NAME_LABEL         239
+#define IDC_DLG_CODE_LABEL         240
 
 #define IDC_DLG_CIPHER_KEY                  247
 #define IDC_DLG_CIPHER_STORE_KEY            248
@@ -323,17 +330,19 @@
 #define IDM_EDITOR_REPLACE_NEXT    1607
 #define IDM_EDITOR_COMMENT         1608
 #define IDM_EDITOR_FORMAT          1609
+#define IDM_EDITOR_COMPARE         1610
 
-#define IDM_RESULT_PREVIEW         1610
-#define IDM_RESULT_FILTERS         1611
-#define IDM_RESULT_CHART           1612
-#define IDM_RESULT_VALUE_FILTER    1613
-#define IDM_RESULT_COPY_CELL       1614
-#define IDM_RESULT_COPY_ROW        1615
-#define IDM_RESULT_AS_TABLE        1616
-#define IDM_RESULT_EXPORT          1617
-#define IDM_RESULT_EXCEL           1618
-#define IDM_RESULT_COMPARE         1620 // iterable, 50
+#define IDM_RESULT_PREVIEW         1620
+#define IDM_RESULT_FILTERS         1621
+#define IDM_RESULT_CHART           1622
+#define IDM_RESULT_VALUE_FILTER    1623
+#define IDM_RESULT_COPY_CELL       1624
+#define IDM_RESULT_COPY_ROW        1625
+#define IDM_RESULT_AS_TABLE        1626
+#define IDM_RESULT_EXPORT          1627
+#define IDM_RESULT_EXCEL           1628
+#define IDM_RESULT_TRANSPOSE       1629
+#define IDM_RESULT_COMPARE         1630 // iterable, 50
 
 #define IDM_BLOB_VIEW              1680
 #define IDM_BLOB_NULL              1681
@@ -419,7 +428,9 @@
 #define IDA_ACCEL                  6100
 #define IDA_ACCEL2                 6101
 
-#define IDT_EDIT_DATA              7000 // timer
+#define IDT_EDIT_DATA              7000
+#define IDT_HIGHLIGHT              7001
+#define IDT_REFERENCE              7002
 
 #define IDR_HELP                   9000
 #define IDR_EXCEL                  9001
@@ -488,6 +499,8 @@
 #define WMU_SET_HEADER_FILTERS     WM_USER + 45
 #define WMU_AUTO_COLUMN_SIZE       WM_USER + 46
 #define WMU_UPDATE_SB_RESULTSET    WM_USER + 50
+#define WMU_RESULT_SEARCH          WM_USER + 51
+#define WMU_COMPARE                WM_USER + 52
 
 #define WMU_TAB_ADD                WM_USER + 140
 #define WMU_TAB_DELETE             WM_USER + 141

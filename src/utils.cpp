@@ -84,6 +84,20 @@ namespace utils {
 		return replace(in, oldStr, newStr, start, true, ignoreCase);
 	}
 
+	bool hasString(const TCHAR* str, const TCHAR* sub) {
+		bool res = false;
+
+		TCHAR* lstr = _tcsdup(str);
+		_tcslwr(lstr);
+		TCHAR* lsub = _tcsdup(sub);
+		_tcslwr(lsub);
+		res = _tcsstr(lstr, lsub) != 0;
+		free(lstr);
+		free(lsub);
+
+		return res;
+	}
+
 	TCHAR* getTableName(const TCHAR* in, bool isSchema) {
 		TCHAR* res = new TCHAR[_tcslen(in) + 5]{0}; // `in` can be 1 char, but schema requires 4 ("main")
 		if (!_tcslen(in))
@@ -364,6 +378,18 @@ namespace utils {
 		return true;
 	}
 
+	bool isSQLiteDatabase(TCHAR* path16) {
+		FILE *f = _tfopen (path16, TEXT("rb"));
+		if(!f)
+			return 0;
+
+		char buf[16] = {0};
+		fread(buf, 16, 1, f);
+		fclose(f);
+
+		return strncmp(buf, "SQLite format 3", 15) == 0;
+	}
+
 	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
 		int len = strlen(value8);
 
@@ -551,11 +577,13 @@ namespace utils {
 	}
 
 	bool isStartBy(const TCHAR* text, int pos, const TCHAR* test) {
-		for (size_t i = 0; i < _tcslen(test); i++)
+		int len = _tcslen(test);
+		for (int i = 0; i < len; i++)
 			if (_totlower(text[pos + i]) != _totlower(test[i]))
 					return false;
 
-		return true;
+		TCHAR c = text[pos + len];
+		return !_istalnum(c) && text[c] != TEXT('_');
 	}
 
 	bool isPrecedeBy(const TCHAR* text, int pos, const TCHAR* test) {
