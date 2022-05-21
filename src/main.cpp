@@ -59,6 +59,7 @@ HACCEL hAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL));
 HACCEL hDlgAccel = LoadAccelerators(0, MAKEINTRESOURCE(IDA_ACCEL2));
 
 HICON hIcons[2] = {LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(IDI_LOGO)), LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(IDI_LOGO2))};
+HIMAGELIST hTabImageList = ImageList_LoadBitmap(GetModuleHandle(0), MAKEINTRESOURCE(IDB_TAB), 0, 0, RGB(255,255,255));
 
 struct TEditorTab {
 	int id; // unique tab identificator
@@ -67,6 +68,7 @@ struct TEditorTab {
 	HWND hQueryListWnd;
 	TCHAR* tabTooltips[MAX_RESULT_COUNT];
 	TCHAR queryElapsedTimes[MAX_RESULT_COUNT][64];
+	BOOL isPinned[MAX_RESULT_COUNT];
 
 	sqlite3* db;
 	HANDLE thread;
@@ -94,8 +96,6 @@ struct ListViewCell {
 ListViewCell currCell;
 
 int currParenthesisPos[] = {-1, -1};
-bool isRequireHighlight = false, isRequireParenthesisHighlight = false, isRequireOccurrenceHighlight = false, isOccuranceHighlighted = false;
-int selStartPos = -1;
 
 TCHAR APP_PATH[MAX_PATH]{0};
 
@@ -323,6 +323,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	CreateWindow(WC_STATIC, NULL, WS_CHILD, 0, 0, 0, 0, hMainWnd, (HMENU)IDC_FUNCTION_CODES, GetModuleHandle(0),  NULL);
 
 	cli.hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
+	SetProp(cli.hEditorWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(cli.hEditorWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
 	SendMessage(cli.hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 	SetWindowLongPtr(cli.hEditorWnd, GWLP_USERDATA, 0);
 	SendMessage(cli.hEditorWnd, EM_EXLIMITTEXT, 0, 32767 * 10);
@@ -681,6 +682,42 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				prefs::set("splitter-position-y", y - 3 - top);
 				SendMessage(hWnd, WMU_UPDATE_SIZES, FALSE, 0);
 			}
+
+			if (!GetProp(hWnd, TEXT("ISMOUSEHOVER"))) {
+				int spX = prefs::get("splitter-position-x");
+				int spY = prefs::get("splitter-position-y");
+				int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
+
+				if (((spX <= x) && (x < spX + 8)) || ((spY + top <= y) && (y < spY + 8 + top)))  {
+					TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hWnd, 0};
+					TrackMouseEvent(&tme);
+					SetProp(hWnd, TEXT("ISMOUSEHOVER"), (HANDLE)1);
+				}
+			}
+		}
+		break;
+
+		case WM_SETCURSOR: {
+			if (GetProp(hWnd, TEXT("ISMOUSEHOVER"))) {
+				POINT p = {0};
+				GetCursorPos(&p);
+				ScreenToClient(hWnd, &p);
+
+				int spX = prefs::get("splitter-position-x");
+				int spY = prefs::get("splitter-position-y");
+				int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
+
+				HCURSOR hCursor = LoadCursor(0, (spX <= p.x) && (p.x < spX + 8) ? IDC_SIZEWE : (spY + top <= p.y) && (p.y < spY + 8 + top) ? IDC_SIZENS : IDC_ARROW);
+				SetCursor(hCursor);
+				return TRUE;
+			} else {
+				return DefWindowProc(hWnd, msg, wParam, lParam);
+			}
+		}
+		break;
+
+		case WM_MOUSELEAVE: {
+			SetProp(hWnd, TEXT("ISMOUSEHOVER"), 0);
 		}
 		break;
 
@@ -1100,9 +1137,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetWindowRedraw(hEditorWnd, true);
 				InvalidateRect(hEditorWnd, NULL, true);
 
-				isRequireHighlight = false;
-				isRequireParenthesisHighlight = false;
-
 				return true;
 			}
 
@@ -1398,20 +1432,30 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetFocus(hEditorWnd);
 			}
 
-			if (cmd == IDM_TAB_RESULT_COPY_QUERY) {
-				MENUINFO mi{0};
-				mi.cbSize = sizeof(MENUINFO);
-				mi.fMask = MIM_MENUDATA;
-				GetMenuInfo(hTabResultMenu, &mi);
-
-				int tabNo = LOWORD(mi.dwMenuData);
-				int resultNo = HIWORD(mi.dwMenuData);
+			if (cmd == IDM_TAB_RESULT_PIN || cmd == IDM_TAB_RESULT_COPY_QUERY) {
+				ULONG_PTR data = Menu_GetData(hTabResultMenu);
+				int tabNo = LOWORD(data);
+				int resultNo = HIWORD(data);
 
 				if (tabNo == -1 || resultNo >= MAX_RESULT_COUNT)
 					return false;
 
-				TCHAR* query16 = tabs[tabNo].tabTooltips[resultNo];
-				utils::setClipboardText(query16);
+				if (cmd == IDM_TAB_RESULT_PIN) {
+					bool isPinned = tabs[tabNo].isPinned[resultNo];
+					isPinned = !isPinned;
+					tabs[tabNo].isPinned[resultNo] = isPinned;
+
+					TCITEM ti = {0};
+					ti.mask = TCIF_IMAGE;
+					ti.iImage = isPinned ? 0 : -1;
+					TabCtrl_SetItem(tabs[tabNo].hTabWnd, resultNo, &ti);
+					InvalidateRect(tabs[tabNo].hTabWnd, NULL, TRUE);
+				}
+
+				if (cmd == IDM_TAB_RESULT_COPY_QUERY) {
+					TCHAR* query16 = tabs[tabNo].tabTooltips[resultNo];
+					utils::setClipboardText(query16);
+				}
 			}
 
 			if (cmd == IDM_RESULT_FILTERS) {
@@ -1643,8 +1687,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_EDITOR_FORMAT) {
 				formatQuery(hEditorWnd);
-				isRequireHighlight = true;
-				SendMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+				SendMessage(hEditorWnd, WMU_TEXT_CHANGED, 0, 0);
 			}
 
 			if (cmd == IDM_CLI_COPY)
@@ -1860,10 +1903,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 
 			// Notifies via WM_COMMAND
-			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
-				PostMessage(hMainWnd, WMU_HIGHLIGHT, 0, 0);
-				isRequireHighlight = true;
-			}
+			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_CHANGE)
+				SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
 
 			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_KILLFOCUS && IsWindowVisible(hTooltipWnd))
 				hideTooltip();
@@ -2019,29 +2060,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (pHdr->hwndFrom == hEditorWnd && pHdr->code == EN_SELCHANGE) {
 				SendMessage(hMainWnd, WMU_UPDATE_CARET_INFO, 0, 0);
-
-				SELCHANGE *pSc = (SELCHANGE*)lParam;
-				isRequireParenthesisHighlight = pSc->seltyp == SEL_EMPTY;
-				if (pSc->seltyp == SEL_EMPTY)
-					selStartPos = pSc->chrg.cpMin;
-
-				isRequireOccurrenceHighlight = (isRequireOccurrenceHighlight && pSc->seltyp == SEL_EMPTY) || isOccuranceHighlighted;
-				if (!isRequireOccurrenceHighlight && pSc->seltyp != SEL_EMPTY) {
-					int len = pSc->chrg.cpMax - pSc->chrg.cpMin;
-					TCHAR* text = new TCHAR[len + 1];
-					if (SendMessage(hEditorWnd, EM_GETSELTEXT, len + 1, (LPARAM)text)) {
-						isRequireOccurrenceHighlight = true;
-						for (int i = 0; i < len && isRequireOccurrenceHighlight; i++)
-							isRequireOccurrenceHighlight = _istalnum(text[i]);
-					}
-					delete [] text;
-				}
-
-				if (isRequireParenthesisHighlight || isRequireOccurrenceHighlight) {
-					isRequireHighlight = false;
-					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-				}
-
+				SendMessage(pHdr->hwndFrom, WMU_SELECTION_CHANGED, wParam, lParam);
 				return true;
 			}
 
@@ -2301,12 +2320,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				TCHITTESTINFO thi{p, TCHT_ONITEM};
 				ScreenToClient(pHdr->hwndFrom, &(thi.pt));
 				int resultNo = TabCtrl_HitTest(pHdr->hwndFrom, &thi);
+				Menu_SetData(hTabResultMenu, MAKELPARAM(tabNo, resultNo));
 
-				MENUINFO mi{0};
-				mi.cbSize = sizeof(MENUINFO);
-				mi.fMask = MIM_MENUDATA;
-				mi.dwMenuData = MAKELPARAM(tabNo, resultNo);
-				SetMenuInfo(hTabResultMenu, &mi);
+				//Menu_SetItemState(hTabResultMenu, IDM_TAB_RESULT_PIN, tabs[tabNo].isPinned[resultNo] ? MF_CHECKED: MF_UNCHECKED);
+				Menu_SetItemText(hTabResultMenu, IDM_TAB_RESULT_PIN, tabs[tabNo].isPinned[resultNo] ? TEXT("Unpin result") : TEXT("Pin result"));
 
 				TrackPopupMenu(hTabResultMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hMainWnd, NULL);
 			}
@@ -2393,12 +2410,14 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					id = id < tabs[i].id ? tabs[i].id : id;
 
 				hEditorWnd = CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | ES_NOHIDESEL, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_EDITOR, GetModuleHandle(0),  NULL);
+				SetProp(hEditorWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEditorWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 				SendMessage(hEditorWnd, EM_EXLIMITTEXT, 0, 32767 * 10);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
 				hTabWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_TAB, GetModuleHandle(0), NULL);
 				SetProp(hTabWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hTabWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewResultTab));
+				TabCtrl_SetImageList(hTabWnd, hTabImageList);
 				DragAcceptFiles(hEditorWnd, true);
 
 				tabs[tabNo].hEditorWnd = hEditorWnd;
@@ -2468,25 +2487,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					MessageBox(hMainWnd, TEXT("The tab is busy"), TEXT("Info"), MB_OK);
 				return isRunning;
 			}
-		}
-		break;
-
-		case WM_TIMER: {
-			if (wParam == IDT_HIGHLIGHT) {
-				KillTimer(hWnd, IDT_HIGHLIGHT);
-
-				processHighlight(hEditorWnd, isRequireHighlight, isRequireParenthesisHighlight, isRequireOccurrenceHighlight);
-				isRequireHighlight = false;
-				isRequireParenthesisHighlight = false;
-
-				int rc = SendMessage(hEditorWnd, EM_GETSEL, 0, 0);
-				isRequireOccurrenceHighlight = LOWORD(rc) != HIWORD(rc);
-			}
-		}
-		break;
-
-		case WMU_HIGHLIGHT: {
-			SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 		}
 		break;
 
@@ -3205,6 +3205,77 @@ LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
 }
 
+LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	switch(msg){
+		case WM_GETDLGCODE: {
+			return (DLGC_WANTTAB | CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam));
+		}
+		break;
+
+		case WM_DESTROY: {
+			RemoveProp(hWnd, EDITOR_HIGHLIGHT);
+			RemoveProp(hWnd, EDITOR_PARENTHESIS);
+			RemoveProp(hWnd, EDITOR_OCCURRENCE);
+			RemoveProp(hWnd, EDITOR_HASOCCURRENCE);
+			RemoveProp(hWnd, EDITOR_SELECTION_START);
+
+			KillTimer(hWnd, IDT_HIGHLIGHT);
+		}
+		break;
+
+		case WM_TIMER: {
+			if (wParam == IDT_HIGHLIGHT) {
+				KillTimer(hWnd, IDT_HIGHLIGHT);
+
+				processHighlight(hWnd, GetProp(hWnd, EDITOR_HIGHLIGHT), GetProp(hWnd, EDITOR_PARENTHESIS), GetProp(hWnd, EDITOR_OCCURRENCE));
+				SetProp(hWnd, EDITOR_HIGHLIGHT, 0);
+				SetProp(hWnd, EDITOR_PARENTHESIS, 0);
+				SetProp(hWnd, EDITOR_OCCURRENCE, 0);
+			}
+		}
+		break;
+
+		case WMU_HIGHLIGHT: {
+			KillTimer(hWnd, IDT_HIGHLIGHT);
+			SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
+		}
+		break;
+
+		case WMU_TEXT_CHANGED: {
+			if (prefs::get("use-highlight") == 0)
+				return 0;
+
+			SetProp(hWnd, EDITOR_HIGHLIGHT, (HANDLE)1);
+			SendMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+		}
+		break;
+
+		case WMU_SELECTION_CHANGED: {
+			SELCHANGE *pSc = (SELCHANGE*)lParam;
+			bool isSelectionEmpty = pSc->seltyp == SEL_EMPTY;
+			if (isSelectionEmpty)
+				SetProp(hWnd, EDITOR_SELECTION_START, IntToPtr(pSc->chrg.cpMin));
+
+			bool isRequireParenthesis = GetProp(hWnd, EDITOR_PARENTHESIS) == 0 && isSelectionEmpty;
+			bool isRequireOccurrence = GetProp(hWnd, EDITOR_HASOCCURRENCE) || !isSelectionEmpty;
+
+			if (isRequireParenthesis)
+				SetProp(hWnd, EDITOR_PARENTHESIS, (HANDLE)1);
+
+			if (isRequireOccurrence)
+				SetProp(hWnd, EDITOR_OCCURRENCE, (HANDLE)1);
+
+			if (isRequireParenthesis || isRequireOccurrence) {
+				SetProp(hWnd, EDITOR_HIGHLIGHT, 0);
+				SendMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
+			}
+		}
+		break;
+	}
+
+	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+}
+
 LRESULT CALLBACK cbNewTree(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (msg == WM_DROPFILES) {
 		TCHAR path16[MAX_PATH]{0};
@@ -3625,6 +3696,17 @@ static int cbProcessEditorQueryBatch(void *queryNo, int count, char **data, char
 	return 0;
 }
 
+int getPinnedResultCount(int tabNo) {
+	if (tabNo == -1 || tabNo >= MAX_TAB_COUNT)
+		return 0;
+
+	int cnt = 0;
+	for (int resultNo = 0; resultNo < MAX_RESULT_COUNT; resultNo++)
+		cnt += tabs[tabNo].isPinned[resultNo];
+
+	return cnt;
+}
+
 unsigned int __stdcall processEditorQuery (void* data) {
 	TEditorTab* tab = (TEditorTab*)data;
 	updateExecuteMenu(false);
@@ -3681,16 +3763,21 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	};
 	bool isMetaChanged = false;
 
+	int tabNo = getTabNo(_tab.id);
+	int pinCount = getPinnedResultCount(tabNo);
+
 	if (_tab.isBatch) {
+		int resultNo = pinCount;
+
 		TCITEM tci;
 		tci.mask = TCIF_TEXT | TCIF_IMAGE;
 		tci.iImage = -1;
 		tci.pszText = TEXT("Batch");
 		tci.cchTextMax = 6;
-		TabCtrl_InsertItem(_tab.hTabWnd, 0, &tci);
+		TabCtrl_InsertItem(_tab.hTabWnd, resultNo, &tci);
 
 		DWORD tBatchStart = GetTickCount();
-		HWND hResultWnd = GetDlgItem(_tab.hTabWnd, IDC_TAB_MESSAGE);
+		HWND hResultWnd = GetDlgItem(_tab.hTabWnd, IDC_TAB_MESSAGE + resultNo);
 
 		if (prefs::get("synchronous-off"))
 			sqlite3_exec(_tab.db, "pragma synchronous = 0", NULL, 0, NULL);
@@ -3699,8 +3786,8 @@ unsigned int __stdcall processEditorQuery (void* data) {
 		if (isTrn)
 			sqlite3_exec(_tab.db, "begin", NULL, 0, NULL);
 
-		int size = ListBox_GetTextLen(_tab.hQueryListWnd, 0) + 1;
-		TCHAR query16[size]{0};
+		int len = ListBox_GetTextLen(_tab.hQueryListWnd, 0) + 1;
+		TCHAR query16[len + 1]{0};
 		ListBox_GetText(_tab.hQueryListWnd, 0, query16);
 
 		char* query8 = utils::utf16to8(query16);
@@ -3735,31 +3822,33 @@ unsigned int __stdcall processEditorQuery (void* data) {
 		if (isTrn)
 			sqlite3_exec(_tab.db, err8 == 0 ? "commit" : "rollback", NULL, 0, NULL);
 
-		ShowWindow(hResultWnd, SW_SHOW);
-		SetWindowLongPtr(_tab.hTabWnd, GWLP_USERDATA, (LONG_PTR)hResultWnd); // Also see ACTION_UPDATETAB
-
 		int tabNo = getTabNo(_tab.id);
 		tab = &tabs[tabNo];
-		if (tab->tabTooltips[0] != NULL)
-			delete [] tab->tabTooltips[0];
-		tab->tabTooltips[0] = utils::replaceAll(TEXT("Batch"), TEXT(" "), TEXT(" "));
+		if (tab->tabTooltips[resultNo] != NULL)
+			delete [] tab->tabTooltips[resultNo];
+		tab->tabTooltips[resultNo] = utils::replaceAll(TEXT("Batch"), TEXT(" "), TEXT(" "));
 
-		_sntprintf(tab->queryElapsedTimes[0], 63, TEXT("Elapsed: %.2fs"), (GetTickCount() - tBatchStart) / 1000.0);
+		_sntprintf(tab->queryElapsedTimes[resultNo], 63, TEXT("Elapsed: %.2fs"), (GetTickCount() - tBatchStart) / 1000.0);
+
+		TabCtrl_SetCurSel(tab->hTabWnd, resultNo);
+		ShowWindow(hResultWnd, SW_SHOW);
+		SetWindowLongPtr(tab->hTabWnd, GWLP_USERDATA, (LONG_PTR)hResultWnd); // Also see ACTION_UPDATETAB
 		if (hTabWnd == tab->hTabWnd) {
-			SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, (LPARAM)tab->queryElapsedTimes[0]);
+			SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, (LPARAM)tab->queryElapsedTimes[resultNo]);
 			SendMessage(hMainWnd, WMU_UPDATE_SB_RESULTSET, 0, 0);
 		}
+		cbEnumChildren(hResultWnd, ACTION_RESIZETAB);
 
 		MessageBeep(0);
 	} else {
-		for (int resultNo = 0; resultNo < ListBox_GetCount(_tab.hQueryListWnd); resultNo++) {
-			int size = ListBox_GetTextLen(_tab.hQueryListWnd, resultNo) + 1;
+		for (int queryNo = 0; queryNo < ListBox_GetCount(_tab.hQueryListWnd); queryNo++) {
+			int resultNo = queryNo + pinCount;
+
+			int size = ListBox_GetTextLen(_tab.hQueryListWnd, queryNo) + 1;
 			TCHAR query16[size]{0};
-			ListBox_GetText(_tab.hQueryListWnd, resultNo, query16);
+			ListBox_GetText(_tab.hQueryListWnd, queryNo, query16);
 
 			char* sql8 = utils::utf16to8(query16);
-			DWORD tStart, tEnd;
-			tStart = GetTickCount();
 
 			sqlite3_stmt *stmt;
 			int rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
@@ -3775,6 +3864,9 @@ unsigned int __stdcall processEditorQuery (void* data) {
 
 			if (sqlite3_bind_parameter_count(stmt))
 				DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_BIND_PARAMETERS), hMainWnd, (DLGPROC)&dialogs::cbDlgBindParameters, (LPARAM)stmt);
+
+			DWORD tStart, tEnd;
+			tStart = GetTickCount();
 
 			HWND hResultWnd = 0;
 			HWND hRowsWnd = GetDlgItem(_tab.hTabWnd, IDC_TAB_ROWS + resultNo);
@@ -3869,7 +3961,9 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			tci.cchTextMax = _tcslen(caption);
 			TabCtrl_InsertItem(tab->hTabWnd, resultNo, &tci);
 
-			if (resultNo == 0) {
+			if (queryNo == 0) {
+				TabCtrl_SetCurSel(tab->hTabWnd, resultNo);
+				ShowWindow(hResultWnd, SW_SHOW);
 				SetWindowLongPtr(tab->hTabWnd, GWLP_USERDATA, (LONG_PTR)hResultWnd); // Also see ACTION_UPDATETAB
 				if (hTabWnd == tab->hTabWnd) {
 					SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, (LPARAM)tab->queryElapsedTimes[resultNo]);
@@ -3883,7 +3977,6 @@ unsigned int __stdcall processEditorQuery (void* data) {
 		}
 	}
 
-	int tabNo = getTabNo(_tab.id);
 	tab = &tabs[tabNo];
 
 	if (hTabWnd == tab->hTabWnd) {
@@ -4004,6 +4097,7 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 	int start = 0;
 	char quote = 0;
 	int inComment = 0; // 0 - plain text, 1 - inside "--"-comment, 2 - inside "/* */"-comment
+	bool isEmpty = true;
 
 	for (int i = 0; i < size; i++) {
 		if (buf[i] == TEXT('"') || buf[i] == TEXT('\''))
@@ -4012,8 +4106,11 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 		if (inComment == 1 && buf[i] == TEXT('\n'))
 			inComment = 0;
 
-		if (inComment == 2 && buf[i] == TEXT('*') && buf[i + 1] == TEXT('/'))
+		if (inComment == 2 && buf[i] == TEXT('*') && buf[i + 1] == TEXT('/')) {
 			inComment = 0;
+			i++;
+			continue;
+		}
 
 		if ((quote != 0 || inComment > 0) && (i != size - 1))
 			continue;
@@ -4021,6 +4118,8 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 		inComment = buf[i] == TEXT('-') && buf[i + 1] == TEXT('-') ? 1 : buf[i] == TEXT('/') && buf[i + 1] == TEXT('*') ? 2 : 0;
 		if (inComment > 0 && (i != size - 1))
 			continue;
+
+		isEmpty = isEmpty && (_tcschr(TEXT(" \r\n\t;"), buf[i]) || inComment);
 
 		if (buf[i] == ';' || (i == size - 1)) {
 			TCHAR query16[i - start + 2]{0};
@@ -4030,8 +4129,9 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 			if (sqlite3_complete(query8) || (i == size - 1)) {
 				if (query16[_tcslen(query16) - 1] == TEXT(';')) // remove last ;
 					query16[_tcslen(query16) - 1] = 0;
+
 				TCHAR* trimmed16 = utils::trim(query16);
-				if(_tcslen(trimmed16) > 1 && (!onlyCurrent || (onlyCurrent && i >= MIN(range.cpMin, range.cpMax)))) {
+				if(!isEmpty && _tcslen(trimmed16) > 1 && (!onlyCurrent || (onlyCurrent && i >= MIN(range.cpMin, range.cpMax)))) {
 					int idx = ListBox_AddString(tab->hQueryListWnd, trimmed16);
 
 					TCHAR ignores[] = TEXT(" \r\n\t;");
@@ -4047,11 +4147,14 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 				}
 				start = i + 1;
 			}
+
+			isEmpty = true; // reset
 		}
 	}
 
+	int pinCount = getPinnedResultCount(tabNo);
 	int queryCount = ListBox_GetCount(tab->hQueryListWnd);
-	if (!tab->isBatch && queryCount >= MAX_RESULT_COUNT) {
+	if (!tab->isBatch && (pinCount + queryCount >= MAX_RESULT_COUNT)) {
 		if (IDYES != MessageBox(hMainWnd, TEXT("Max number of results (32) will be exceeded.\nDo you want to execute queries as batch?"), NULL, MB_YESNO | MB_ICONQUESTION)) {
 			delete [] buf;
 			return false;
@@ -4064,14 +4167,63 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 		ListBox_AddString(tab->hQueryListWnd, bufcopy);
 	}
 
-	TabCtrl_DeleteAllItems(tab->hTabWnd);
-	EnumChildWindows(tab->hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_DESTROY);
+	if (pinCount != 0) {
+		HWND hTabWnd = tab->hTabWnd;
+		int resultCount = TabCtrl_GetItemCount(hTabWnd);
+
+		int pinNo = 0;
+		for (int resultNo = 0; resultNo < resultCount; resultNo++) {
+			HWND hRowsWnd = GetDlgItem(hTabWnd, IDC_TAB_ROWS + resultNo);
+			HWND hMessageWnd = GetDlgItem(hTabWnd, IDC_TAB_MESSAGE + resultNo);
+			HWND hPreviewWnd = GetDlgItem(hTabWnd, IDC_TAB_PREVIEW + resultNo);
+			if (tab->isPinned[resultNo]) {
+				if (pinNo != resultNo) {
+					bool isError = GetWindowLongPtr(GetDlgItem(hTabWnd, IDC_TAB_ROWS + resultNo), GWLP_USERDATA) != resultNo;
+					SetWindowLongPtr(hRowsWnd, GWLP_USERDATA, isError ? -1 : pinNo);
+					SetWindowLongPtr(hMessageWnd, GWLP_USERDATA, isError ? pinNo : -1);
+					SetWindowLongPtr(hPreviewWnd, GWLP_USERDATA, pinNo);
+
+					SetWindowLongPtr(hRowsWnd, GWLP_ID, IDC_TAB_ROWS + pinNo);
+					SetWindowLongPtr(hMessageWnd, GWLP_ID, IDC_TAB_MESSAGE + pinNo);
+					SetWindowLongPtr(hPreviewWnd, GWLP_ID, IDC_TAB_PREVIEW + pinNo);
+
+					_tcscpy(tab->queryElapsedTimes[pinNo], tab->queryElapsedTimes[resultNo]);
+
+					if (tab->tabTooltips[pinNo])
+						delete [] tab->tabTooltips[pinNo];
+					tab->tabTooltips[pinNo] = tab->tabTooltips[resultNo];
+					tab->tabTooltips[resultNo] = 0;
+
+					tab->isPinned[pinNo] = true;
+				}
+
+				pinNo++;
+			} else {
+				DestroyWindow(hRowsWnd);
+				DestroyWindow(hMessageWnd);
+				DestroyWindow(hPreviewWnd);
+
+				TabCtrl_DeleteItem(hTabWnd, resultNo);
+			}
+		}
+
+		for (int resultNo = pinCount; resultNo < MAX_RESULT_COUNT; resultNo++) {
+			tab->isPinned[resultNo] = false;
+			TabCtrl_DeleteItem(hTabWnd, pinCount);
+		}
+	} else {
+		TabCtrl_DeleteAllItems(tab->hTabWnd);
+		EnumChildWindows(tab->hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_DESTROY);
+	}
 
 	if (tab->isBatch) {
-		HWND hMessageWnd = CreateWindow(WC_STATIC, TEXT("Done"), WS_CHILD | SS_LEFT, 20, 20, 100, 100, tab->hTabWnd, (HMENU)IDC_TAB_MESSAGE, GetModuleHandle(0), NULL);
-		SetWindowLongPtr(hMessageWnd, GWLP_USERDATA, 0);
+		int resultNo = pinCount;
+		HWND hMessageWnd = CreateWindow(WC_STATIC, TEXT("Done"), WS_CHILD | SS_LEFT, 20, 20, 100, 100, tab->hTabWnd, (HMENU)IntToPtr(IDC_TAB_MESSAGE + resultNo), GetModuleHandle(0), NULL);
+		SendMessage(hMessageWnd, WM_SETFONT, (LPARAM)hDefFont, false);
+		SetWindowLongPtr(hMessageWnd, GWLP_USERDATA, resultNo);
 	} else {
-		for (int resultNo = 0; resultNo < queryCount; resultNo++) {
+		for (int queryNo = 0; queryNo < queryCount; queryNo++) {
+			int resultNo = queryNo + pinCount;
 			HWND hRowsWnd = createResultList(tab->hTabWnd, resultNo);
 			ShowWindow(hRowsWnd, SW_HIDE); // hEdit = 0 if hRowsWnd is not visible
 
@@ -5528,7 +5680,8 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 		bufSize += getRowLength(currRowNo);
 
 	bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
-	TCHAR res16[bufSize]{0};
+	bufSize *= 2; // single " is extended to "" => allocate additional memory
+	TCHAR* res16 = new TCHAR[bufSize] {0};
 	TCHAR buf16[MAX_TEXT_LENGTH]{0};
 
 	auto addValue = [](TCHAR* res16, TCHAR* buf16) {
@@ -5577,6 +5730,7 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 		fclose(f);
 	}
 
+	delete [] res16;
 	return true;
 }
 
@@ -5680,7 +5834,8 @@ bool updateHighlighting(HWND hWnd) {
 			break;
 
 			case 6: {
-				while (pos < size && (text[pos] != TEXT('*') || text[pos + 1] != TEXT('/'))) {
+				int start = pos;
+				while (pos < size && !((pos > start + 1) && text[pos] == TEXT('*') && text[pos + 1] == TEXT('/'))) {
 					rCount += text[pos] == TEXT('\r');
 					pos++;
 				}
@@ -5806,7 +5961,8 @@ bool updateOccurrenceHighlighting(HWND hWnd) {
 
 	SendMessage(hWnd, EM_SETSEL, 0, -1);
 	SendMessage(hWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf2);
-	isOccuranceHighlighted = false;
+
+	SetProp(hWnd, EDITOR_HASOCCURRENCE, 0);
 
 	if (size > 1 && isAlphaNum) {
 		cf2.crBackColor = RGB(225, 225, 255);
@@ -5818,7 +5974,7 @@ bool updateOccurrenceHighlighting(HWND hWnd) {
 		TCHAR breakers[] = TEXT(" \"'`\r\n\t-;:(),.=<>/");
 
 		int nl = 0;
-		for (int i = 0; i < tsize - size; i++) {
+		for (int i = 0; i <= tsize - size; i++) {
 			nl += text[i] == TEXT('\n');
 			if (_tcsncmp(text + i, selection, size) == 0 &&
 				(i == 0 || _tcschr(breakers, text[i - 1]) != NULL) &&
@@ -5829,18 +5985,7 @@ bool updateOccurrenceHighlighting(HWND hWnd) {
 			}
 		}
 
-		isOccuranceHighlighted = true;
-	}
-
-	// The selection has a direction defined by min and max positions.
-	// The direction must be restored for the selection to work properly.
-	// https://docs.microsoft.com/en-us/windows/win32/controls/em-setsel
-	// The start value is the anchor point of the selection, and the end value is the active end.
-	// If the user uses the SHIFT key to adjust the size of the selection, the active end can move but the anchor point remains the same.
-	if (min == max || selStartPos == min) {
-		SendMessage(hWnd, EM_SETSEL, min, max);
-	} else {
-		SendMessage(hWnd, EM_SETSEL, max, min);
+		SetProp(hWnd, EDITOR_HASOCCURRENCE, (HANDLE)1);
 	}
 
 	return true;
@@ -5860,8 +6005,11 @@ void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthe
 	}
 	tr_code->QueryInterface(IID_ITextDocument,(void**)&td_code);
 
+
 	POINT scrollPos{0};
 	SendMessage(hWnd, EM_GETSCROLLPOS, 0, (LPARAM)&scrollPos);
+	int min, max;
+	SendMessage(hWnd, EM_GETSEL, (WPARAM)&min, (LPARAM)&max);
 
 	long cnt = 0;
 	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_NONE);
@@ -5887,6 +6035,18 @@ void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthe
 	tr_code->Release();
 
 	SendMessage(hWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
+
+	// The selection has a direction defined by min and max positions.
+	// The direction must be restored for the selection to work properly.
+	// https://docs.microsoft.com/en-us/windows/win32/controls/em-setsel
+	// The start value is the anchor point of the selection, and the end value is the active end.
+	// If the user uses the SHIFT key to adjust the size of the selection, the active end can move but the anchor point remains the same.
+	if (min == max || (LONG_PTR)GetProp(hWnd, EDITOR_SELECTION_START) == min) {
+		SendMessage(hWnd, EM_SETSEL, min, max);
+	} else {
+		SendMessage(hWnd, EM_SETSEL, max, min);
+	}
+
 	if (rc)
 		InvalidateRect(hWnd, 0, TRUE);
 	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
@@ -5973,12 +6133,21 @@ int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax) {
 }
 
 int Header_SetItemText(HWND hWnd, int i, TCHAR* pszText) {
-	HDITEM hdi {0};
+	HDITEM hdi = {0};
 	hdi.mask = HDI_TEXT;
 	hdi.pszText = pszText;
 	hdi.cchTextMax = _tcslen(pszText);
 
 	return Header_SetItem(hWnd, i, &hdi);
+}
+
+void Menu_SetItemText(HMENU hMenu, UINT wID, const TCHAR* caption) {
+	MENUITEMINFO mii = {0};
+	mii.cbSize = sizeof(MENUITEMINFO);
+	mii.fMask = MIIM_STRING;
+	mii.dwTypeData = (TCHAR*)caption;
+	mii.cch = _tcslen(caption);
+	SetMenuItemInfo(hMenu, wID, FALSE, &mii);
 }
 
 void Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState) {
@@ -5997,6 +6166,23 @@ void Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const T
 	mi.wID = wID;
 	mi.dwTypeData = (TCHAR*)pszText;
 	InsertMenuItem(hMenu, uPosition, true, &mi);
+}
+
+void Menu_SetData(HMENU hMenu, ULONG_PTR data) {
+	MENUINFO mi = {0};
+	mi.cbSize = sizeof(MENUINFO);
+	mi.fMask = MIM_MENUDATA;
+	mi.dwMenuData = data;
+	SetMenuInfo(hMenu, &mi);
+}
+
+ULONG_PTR Menu_GetData(HMENU hMenu) {
+	MENUINFO mi = {0};
+	mi.cbSize = sizeof(MENUINFO);
+	mi.fMask = MIM_MENUDATA;
+	GetMenuInfo(hMenu, &mi);
+
+	return mi.dwMenuData;
 }
 
 bool search(HWND hWnd) {
@@ -6439,18 +6625,18 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 		}
 	}
 
-	if (start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("pragma "), 7)) {
+	if (start > 6 && utils::isStartBy(currLine, start - 7, TEXT("pragma"))) {
 		for (int i = 0; PRAGMAS[i]; i++)
 			isExact += addString(PRAGMAS[i]);
 	} else if (
 		((wLen == 0 && _tcschr(TEXT("\r\n\t ("), currLine[start]) != 0) || wLen > 0) &&
-		((start > 2 && !_tcsnicmp(currLine + start - 3, TEXT("on "), 3)) ||
-		(start > 4 && (
-			!_tcsnicmp(currLine + start - 5, TEXT("from "), 5) ||
-			!_tcsnicmp(currLine + start - 5, TEXT("join "), 5) ||
-			!_tcsnicmp(currLine + start - 5, TEXT("into "), 5)
+		((start > 2 && utils::isStartBy(currLine, start - 3, TEXT("on"))) ||
+		(start > 4 && currLine[start] != TEXT('(') && (
+			utils::isStartBy(currLine, start - 5, TEXT("from")) ||
+			utils::isStartBy(currLine, start - 5, TEXT("join")) ||
+			utils::isStartBy(currLine, start - 5, TEXT("into"))
 		)) ||
-		(start > 6 && !_tcsnicmp(currLine + start - 7, TEXT("update "), 7)))) {
+		(start > 6 && utils::isStartBy(currLine, start - 7, TEXT("update"))))) {
 		bool isNoCheck = wLen == 1 && word[0] == TEXT(' ');
 		for (int i = 0; TABLES[i]; i++)
 			isExact += addString(TABLES[i], isNoCheck);
@@ -7560,15 +7746,29 @@ bool toggleComment (HWND hEditorWnd) {
 			}
 		}
 	} else {
-		SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMin);
-		SendMessage(hEditorWnd, EM_REPLACESEL, true, (WPARAM)TEXT("/*"));
-		SendMessage(hEditorWnd, EM_SETSEL, range.cpMax + 2, range.cpMax + 2);
-		SendMessage(hEditorWnd, EM_REPLACESEL, true, (WPARAM)TEXT("*/"));
+		TCHAR* selection = new TCHAR[range.cpMax - range.cpMin + 1];
+		TEXTRANGE rg = {range, selection};
+		SendMessage(hEditorWnd, EM_GETTEXTRANGE, 0, (LPARAM)&rg);
+		TCHAR* trimmed = utils::trim(selection);
+		delete [] selection;
+
+		int tLen = _tcslen(trimmed);
+		bool hasComment = tLen > 3 && _tcsncmp(trimmed, TEXT("/*"), 2) == 0 && _tcsncmp(trimmed + tLen - 2, TEXT("*/"), 2) == 0;
+		if (hasComment) {
+			SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMax);
+			trimmed[tLen - 2] = 0;
+			SendMessage(hEditorWnd, EM_REPLACESEL, true, (WPARAM)(trimmed + 2));
+		} else {
+			SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMin);
+			SendMessage(hEditorWnd, EM_REPLACESEL, true, (WPARAM)TEXT("/*"));
+			SendMessage(hEditorWnd, EM_SETSEL, range.cpMax + 2, range.cpMax + 2);
+			SendMessage(hEditorWnd, EM_REPLACESEL, true, (WPARAM)TEXT("*/"));
+		}
+		delete [] trimmed;
 	}
 
 	SendMessage(hEditorWnd, WM_SETREDRAW, true, 0);
 	processHighlight(hEditorWnd, true, false, false);
-	//InvalidateRect(hEditorWnd, NULL, true);
 
 	return true;
 }
@@ -8086,9 +8286,9 @@ int getTextMode(TCHAR c, TCHAR cn, TCHAR cp, int mode, int len) {
 		c == TEXT('"') && mode == 0 ? 4 :
 		c == TEXT('`') && mode == 0 ? 5 :
 
-		c == TEXT('\'') && mode == 3 && cp != c && len > 1 ? 0 :
-		c == TEXT('"') && mode == 4 && cp != c && len > 1 ? 0 :
-		c == TEXT('`') && mode == 5 && cp != c && len > 1 ? 0 :
+		c == TEXT('\'') && mode == 3 && cp != c && len > 0 ? 0 :
+		c == TEXT('"') && mode == 4 && cp != c && len > 0 ? 0 :
+		c == TEXT('`') && mode == 5 && cp != c && len > 0 ? 0 :
 
 		c == TEXT('-') && cn == TEXT('-') && mode == 0 ? 1 :
 		c == TEXT('/') && cn == TEXT('*') && mode == 0 ? 2 :
@@ -8259,7 +8459,7 @@ bool formatQuery (HWND hEditorWnd) {
 
 		if (mode == 0 && pos > 0 && cp != TEXT(' ') && c != cp && c != TEXT(';') && (
 			_tcschr(TEXT("(<!*+"), c) != 0 ||
-			(_tcschr(TEXT("'\"`"), cp) != 0 && _tcschr(TEXT(".),;"), c) == 0 && pmode == 0) ||
+			(_tcschr(TEXT("'\"`"), cp) != 0 && _tcschr(TEXT(".,;)"), c) == 0 && pmode == 0) ||
 			(c == TEXT('>') && cp != TEXT('<')) ||
 			(c == TEXT('=') && cp != TEXT('!')) ||
 			(c == TEXT('/') && cp != TEXT('*')) ||
@@ -8280,7 +8480,7 @@ bool formatQuery (HWND hEditorWnd) {
 				isFunc = isFunc || (_tcsncmp(fname, TEXT("pragma_"), 7) == 0);
 			}
 
-			if (!isFunc) {
+			if (!isFunc && cp != TEXT(')')) {
 				buf2[bPos] = ' ';
 				bPos++;
 			}
@@ -8291,7 +8491,7 @@ bool formatQuery (HWND hEditorWnd) {
 
 		if (mode == 0 && (
 			(_tcschr(TEXT("=>,*+"), c) != 0) ||
-			(c == TEXT(')') && cn != TEXT(',') && cn != TEXT(';')) ||
+			(c == TEXT(')') && cn != TEXT(')') && cn != TEXT(',') && cn != TEXT(';')) ||
 			(c == TEXT('<') && cn != TEXT('>')) ||
 			(c == TEXT('!') && cn != TEXT('=')) ||
 			(c == TEXT('/') && cn != TEXT('*')) ||

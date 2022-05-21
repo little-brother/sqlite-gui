@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.2"
-#define GUI_VERSION2               1, 7, 2, 0
+#define GUI_VERSION                "1.7.3"
+#define GUI_VERSION2               1, 7, 3, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -359,7 +359,8 @@
 #define IDM_QUERY_ADD_OLD          1692
 #define IDM_QUERY_DELETE           1693
 
-#define IDM_TAB_RESULT_COPY_QUERY  1695
+#define IDM_TAB_RESULT_PIN         1695
+#define IDM_TAB_RESULT_COPY_QUERY  1696
 
 #define IDM_QUERY_DATA             1701
 #define IDM_EDIT_DATA              1702
@@ -424,6 +425,7 @@
 #define IDB_TOOLBAR_DIAGRAM        6006
 #define IDB_TOOLBAR_DATA           6010
 #define IDB_TOOLBAR_FUNCTIONS      6011
+#define IDB_TAB                    6012
 
 #define IDA_ACCEL                  6100
 #define IDA_ACCEL2                 6101
@@ -464,7 +466,6 @@
 #define WMU_TARGET_CHANGED         WM_USER + 6
 #define WMU_TYPE_CHANGED           WM_USER + 7
 #define WMU_REFTABLE_CHANGED       WM_USER + 8
-#define WMU_HIGHLIGHT              WM_USER + 9
 #define WMU_SHOW_INFO              WM_USER + 10
 #define WMU_RESET_LISTVIEW         WM_USER + 11
 #define WMU_EDIT_VALUE             WM_USER + 12
@@ -501,6 +502,10 @@
 #define WMU_UPDATE_SB_RESULTSET    WM_USER + 50
 #define WMU_RESULT_SEARCH          WM_USER + 51
 #define WMU_COMPARE                WM_USER + 52
+
+#define WMU_HIGHLIGHT              WM_USER + 60
+#define WMU_SELECTION_CHANGED      WM_USER + 61
+#define WMU_TEXT_CHANGED           WM_USER + 62
 
 #define WMU_TAB_ADD                WM_USER + 140
 #define WMU_TAB_DELETE             WM_USER + 141

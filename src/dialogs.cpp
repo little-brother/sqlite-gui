@@ -39,8 +39,6 @@ namespace dialogs {
 		0
 	};
 
-	bool isRequireHighlight = false, isRequireParenthesisHighlight = false;
-
 	HMENU hEditDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_EDIT_DATA)), 0);
 	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
 
@@ -67,6 +65,7 @@ namespace dialogs {
 				SetWindowText(hWnd, buf);
 
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				SetProp(hEditorWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEditorWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hEditorWnd);
 
@@ -128,10 +127,8 @@ namespace dialogs {
 			case WM_COMMAND: {
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
-					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighlight = true;
-				}
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
+					SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
 
 				if (wParam == IDC_DLG_EXAMPLE) {
 					TCHAR buf[1024];
@@ -188,33 +185,12 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
-					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
-						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighlight = true;
-					}
-				}
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE)
+					return SendMessage(pHdr->hwndFrom, WMU_SELECTION_CHANGED, wParam, lParam);
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
 					return processEditorEvents((MSGFILTER*)lParam);
 
-			}
-			break;
-
-			case WM_TIMER: {
-				if (wParam == IDT_HIGHLIGHT) {
-					KillTimer(hWnd, IDT_HIGHLIGHT);
-
-					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
-					isRequireHighlight = false;
-					isRequireParenthesisHighlight = false;
-				}
-			}
-			break;
-
-			case WMU_HIGHLIGHT: {
-				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 			}
 			break;
 
@@ -2786,6 +2762,7 @@ namespace dialogs {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
+				SetProp(hEditorWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEditorWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
 				setEditorFont(hEditorWnd);
 				if (prefs::get("word-wrap"))
@@ -2846,10 +2823,8 @@ namespace dialogs {
 					SetWindowLongPtr(hListWnd, GWLP_USERDATA, curr);
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
-					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighlight = true;
-				}
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
+					SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
 
 				if (wParam == IDM_EDITOR_COMMENT)
 					toggleComment(hEditorWnd);
@@ -2897,13 +2872,8 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
-					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
-						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighlight = true;
-					}
-				}
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE)
+					return SendMessage(pHdr->hwndFrom, WMU_SELECTION_CHANGED, wParam, lParam);
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
 					return processEditorEvents((MSGFILTER*)lParam);
@@ -2919,22 +2889,6 @@ namespace dialogs {
 				TCHAR* data = new TCHAR[size + 1];
 				GetWindowText(hEditorWnd, data, size + 1);
 				ListBox_SetItemData(hListWnd, wParam, (LONG_PTR)data);
-			}
-			break;
-
-			case WM_TIMER: {
-				if (wParam == IDT_HIGHLIGHT) {
-					KillTimer(hWnd, IDT_HIGHLIGHT);
-
-					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
-					isRequireHighlight = false;
-					isRequireParenthesisHighlight = false;
-				}
-			}
-			break;
-
-			case WMU_HIGHLIGHT: {
-				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 			}
 			break;
 
@@ -2982,8 +2936,9 @@ namespace dialogs {
 				SetWindowLongPtr(hListWnd, GWLP_USERDATA, -1);
 
 				HWND hEditorWnd = GetDlgItem(hWnd, IDC_DLG_EDITOR);
-				setEditorFont(hEditorWnd);
+				SetProp(hEditorWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hEditorWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
 				SendMessage(hEditorWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
+				setEditorFont(hEditorWnd);
 
 				EnableWindow(GetDlgItem(hWnd, IDC_DLG_NAME), FALSE);
 				EnableWindow(GetDlgItem(hWnd, IDC_DLG_EDITOR), FALSE);
@@ -3176,10 +3131,8 @@ namespace dialogs {
 					Toolbar_SetButtonState(hToolbarWnd, IDM_TEST, TBSTATE_ENABLED);
 				}
 
-				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE && prefs::get("use-highlight") && !isRequireHighlight) {
-					PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-					isRequireHighlight = true;
-				}
+				if (LOWORD(wParam) == IDC_DLG_EDITOR && HIWORD(wParam) == EN_CHANGE)
+					SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
 
 				if (wParam == IDM_EDITOR_COMMENT)
 					toggleComment(hEditorWnd);
@@ -3209,13 +3162,8 @@ namespace dialogs {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE && !isRequireParenthesisHighlight) {
-					SELCHANGE *pSc = (SELCHANGE *)lParam;
-					if (!isRequireParenthesisHighlight && pSc->seltyp == 0) {
-						PostMessage(hWnd, WMU_HIGHLIGHT, 0, 0);
-						isRequireParenthesisHighlight = true;
-					}
-				}
+				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_SELCHANGE)
+					return SendMessage(pHdr->hwndFrom, WMU_SELECTION_CHANGED, wParam, lParam);
 
 				if (wParam == IDC_DLG_EDITOR && pHdr->code == EN_MSGFILTER)
 					return processEditorEvents((MSGFILTER*)lParam);
@@ -3283,22 +3231,6 @@ namespace dialogs {
 					delete [] code8;
 				}
 				sqlite3_finalize(stmt);
-			}
-			break;
-
-			case WM_TIMER: {
-				if (wParam == IDT_HIGHLIGHT) {
-					KillTimer(hWnd, IDT_HIGHLIGHT);
-
-					processHighlight(GetDlgItem(hWnd, IDC_DLG_EDITOR), isRequireHighlight, isRequireParenthesisHighlight, false);
-					isRequireHighlight = false;
-					isRequireParenthesisHighlight = false;
-				}
-			}
-			break;
-
-			case WMU_HIGHLIGHT: {
-				SetTimer(hWnd, IDT_HIGHLIGHT, prefs::get("highlight-delay"), NULL);
 			}
 			break;
 		}
@@ -3541,7 +3473,6 @@ namespace dialogs {
 	#define CHART_TEXT   3
 
 	#define CHART_BORDER 40
-	#define CHART_GRID 5
 	#define CHART_BARS_LEFT 150
 	#define CHART_BAR_HEIGHT 20
 	#define CHART_BAR_SPACE 3
@@ -3597,17 +3528,19 @@ namespace dialogs {
 		SelectFont(hdc, hDefFont);
 
 		int dataColCount = 0;
-		for (int colNo = 0; colNo < colCount; colNo++)
+		int groupColCount = 0;
+		for (int colNo = 0; colNo < colCount; colNo++) {
 			dataColCount += isColumns[colNo];
+			groupColCount += colTypes[colNo] == CHART_DATE || colTypes[colNo] == CHART_TEXT;
+		}
 
-		if (dataColCount == 0)
+		if (dataColCount == 0 || (groupColCount == 0 && type == CHART_BARS))
 			type = CHART_NONE;
 
 		if (type == CHART_BARS) {
 			HBRUSH hNullBrush = CreateSolidBrush(RGB(200, 200, 200));
-			double minV = MIN(minX, minY);
-			minV = MIN(0, minV);
-			double maxV = MAX(maxX, maxY);
+			double minV = MIN(0, minY);
+			double maxV = maxY;
 
 			int barNo = 0;
 			for (int colNo = 1; colNo < colCount; colNo++) {
@@ -3637,15 +3570,19 @@ namespace dialogs {
 					Rectangle(hdc, left, top - scrollY, right, top + CHART_BAR_HEIGHT - scrollY);
 
 					// Value and title on bar
-					bool isValueInside = (right - left > 30) || (!isNull && val < 0);
-					RECT rc {left + 10, top - scrollY, isValueInside ? right - 10 : right + 30, top + CHART_BAR_HEIGHT - scrollY};
 					TCHAR val16[64];
 					if (isNull)
 						_sntprintf(val16, 63, TEXT("N/A"));
 					else
 						_sntprintf(val16, 63, TEXT("%g"), data[colNo + rowNo * colCount]);
+					SIZE s = {0};
+					GetTextExtentPoint32(hdc, val16, _tcslen(val16), &s);
+
+					bool isValueInside = (right - left > s.cx + 10) || (!isNull && val < 0);
 					SetBkColor(hdc, isNull ? RGB(200, 200, 200) : isValueInside ? COLORS[colorNo] : RGB(255, 255, 255));
 					SetTextColor(hdc, isValueInside ? RGB(255, 255, 255) : RGB(0, 0, 0));
+
+					RECT rc {left + 10, top - scrollY, isValueInside ? right - 10 : right + 10 + s.cx, top + CHART_BAR_HEIGHT - scrollY};
 					DrawText(hdc, val16, _tcslen(val16), &rc, (val > 0 ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE);
 
 					if ((right - left > 60) && isExport) {
@@ -3700,10 +3637,10 @@ namespace dialogs {
 			};
 
 			int x = 0;
+			double d = findDelta(maxX - minX, w / prefs::get("chart-grid-size-x"));
 			if (colBaseType == CHART_DATE) {
 				int DAY = 60 * 60 * 24;
-				double dst = maxX - minX;
-				double d =  dst <= DAY ? DAY / 24 : dst <= 7 * DAY ? DAY : DAY * 30;
+				d = d < DAY / 24 ? DAY / 24 : floor(d / DAY) * DAY;
 				for (int i = 0; minX + d * i < maxX + d; i++) {
 					double x0 = minX + d * i;
 					x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
@@ -3718,7 +3655,7 @@ namespace dialogs {
 					TCHAR val[64];
 					time_t rawtime = x0;
 					struct tm ts = *localtime(&rawtime);
-					_tcsftime(val, 64, dst < DAY ? TEXT("%Y-%m-%d %H:%M") : TEXT("%Y-%m-%d"), &ts);
+					_tcsftime(val, 64, d < DAY ? TEXT("%Y-%m-%d %H:%M") : TEXT("%Y-%m-%d"), &ts);
 
 					RECT rc {x - 30, 10, x + 30, CHART_BORDER + 5};
 					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_WORDBREAK | DT_CENTER);
@@ -3726,7 +3663,6 @@ namespace dialogs {
 					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER);
 				}
 			} else {
-				double d = findDelta(maxX - minX, CHART_GRID);
 				for (int i = 0; minX + d * i < maxX + d; i++) {
 					double x0 = minX + d * i;
 					x = map(x0, minX, maxX, CHART_BORDER, w - CHART_BORDER);
@@ -3749,7 +3685,7 @@ namespace dialogs {
 			}
 
 			int y = 0;
-			double d = findDelta(maxY - minY, CHART_GRID);
+			d = findDelta(maxY - minY, h / prefs::get("chart-grid-size-y"));
 			for (int i = 0; minY + d * i < maxY + d; i++) {
 				double y0 = minY + d * i;
 				y = map(y0, minY, maxY, CHART_BORDER, h - CHART_BORDER);
@@ -4198,8 +4134,10 @@ namespace dialogs {
 
 				minmax[0] = minX;
 				minmax[1] = maxX;
-				minmax[2] = minY;
-				minmax[3] = maxY;
+
+				float d = ceil(log10(maxY - minY));
+				minmax[2] = floor(minY/d) * d;
+				minmax[3] = ceil(maxY/d) * d;
 			}
 			break;
 
@@ -5868,7 +5806,7 @@ namespace dialogs {
 
 						if (((type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) &&
 							(colTypes[colNo] == CHART_NUMBER || colTypes[colNo] == CHART_DATE)) ||
-							(type == CHART_BARS && colTypes[colNo] == CHART_TEXT)) {
+							(type == CHART_BARS && (colTypes[colNo] == CHART_TEXT || colTypes[colNo] == CHART_DATE))) {
 							TCHAR buf[256];
 							GetWindowText(hColumnWnd, buf, 255);
 							int pos = ComboBox_AddString(hBaseWnd, buf);

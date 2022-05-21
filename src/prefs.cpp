@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 74;
+	const int ICOUNT = 76;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -17,6 +17,7 @@ namespace prefs {
 		"odbc-strategy",
 		"sql-export-multiple-insert",
 		"row-limit", "show-preview", "preview-width", "show-filters", "max-column-width",
+		"chart-grid-size-x", "chart-grid-size-y",
 		"cipher-legacy", "retain-passphrase",
 		"check-update", "last-update-check",
 		"case-sensitive",
@@ -40,6 +41,7 @@ namespace prefs {
 		0,
 		0,
 		10000, 0, 200, 0, 400,
+		100, 50,
 		0, 0,
 		1, 0,
 		0,
@@ -148,6 +150,7 @@ namespace prefs {
 				"-- Columns\npragma table_info(''$SUB$'');\n\n" \
 				"-- Foreign keys\npragma foreign_key_list(''$SUB$'');\n\n" \
 				"-- DDL\nselect * from sqlite_master where tbl_name = ''$SUB$'';\n\n" \
+				"-- First 10 rows\nselect * from (\"$SUB$\") limit 10;\n\n" \
 				"-- Memory usage\nselect tosize(SUM(payload)) payload, tosize(SUM(pgsize)) total from dbstat where name = ''$SUB$'';" \
 			"' as text) query " \
 			"union select 'Ctrl + 1', 0x31, 1, 0, '-- $SUB$\nselect * from \"$SUB$\" limit 100' " \

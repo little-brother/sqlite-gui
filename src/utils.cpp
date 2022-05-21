@@ -578,12 +578,8 @@ namespace utils {
 
 	bool isStartBy(const TCHAR* text, int pos, const TCHAR* test) {
 		int len = _tcslen(test);
-		for (int i = 0; i < len; i++)
-			if (_totlower(text[pos + i]) != _totlower(test[i]))
-					return false;
-
 		TCHAR c = text[pos + len];
-		return !_istalnum(c) && text[c] != TEXT('_');
+		return _tcsnicmp(text + pos, test, len) == 0 && !_istalnum(c) && c != TEXT('_');
 	}
 
 	bool isPrecedeBy(const TCHAR* text, int pos, const TCHAR* test) {

@@ -38,6 +38,12 @@
 #define TRIGGER                     4
 #define COLUMN                      5
 
+#define EDITOR_HIGHLIGHT            TEXT("HIGHLIGHT")
+#define EDITOR_PARENTHESIS          TEXT("PARENTHESIS")
+#define EDITOR_OCCURRENCE           TEXT("OCCURRENCE")
+#define EDITOR_HASOCCURRENCE        TEXT("HASOCCURRENCE")
+#define EDITOR_SELECTION_START      TEXT("SELECTION_START")
+
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -73,6 +79,7 @@ extern HFONT hDefFont;
 extern HFONT hFont;
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
@@ -106,8 +113,11 @@ int ListView_Reset(HWND hListWnd);
 int ListView_GetColumnCount(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 int Header_SetItemText(HWND hWnd, int i, TCHAR* pszText);
+void Menu_SetItemText(HMENU hMenu, UINT wID, const TCHAR* caption);
 void Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState);
 void Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const TCHAR* pszText);
+void Menu_SetData(HMENU hMenu, ULONG_PTR data);
+ULONG_PTR Menu_GetData(HMENU hMenu);
 
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
