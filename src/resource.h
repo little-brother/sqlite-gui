@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.3"
-#define GUI_VERSION2               1, 7, 3, 0
+#define GUI_VERSION                "1.7.4"
+#define GUI_VERSION2               1, 7, 4, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else

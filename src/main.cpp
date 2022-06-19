@@ -3254,7 +3254,7 @@ LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 			SELCHANGE *pSc = (SELCHANGE*)lParam;
 			bool isSelectionEmpty = pSc->seltyp == SEL_EMPTY;
 			if (isSelectionEmpty)
-				SetProp(hWnd, EDITOR_SELECTION_START, IntToPtr(pSc->chrg.cpMin));
+				SetProp(hWnd, EDITOR_SELECTION_START, LongToPtr(pSc->chrg.cpMin));
 
 			bool isRequireParenthesis = GetProp(hWnd, EDITOR_PARENTHESIS) == 0 && isSelectionEmpty;
 			bool isRequireOccurrence = GetProp(hWnd, EDITOR_HASOCCURRENCE) || !isSelectionEmpty;
@@ -3393,18 +3393,19 @@ int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 	return order * (isNum ? (num > num2 ? 1 : -1) : _tcscoll(buf, buf2));
 }
 
-void onCLIQueryEnd(TCHAR* sql16, TCHAR* result16, bool isSave, int elapsed) {
+void onCLIQueryEnd(const TCHAR* sql16, TCHAR* result16, bool isSave, int elapsed) {
 	if (_tcslen(result16) > 0) {
 		_tcscat(result16, TEXT("\n\n============================================================\n\n"));
 		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
 		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)result16);
 
-		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n\n"));
-		SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
-		SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
+		if (sql16 && _tcslen(sql16) > 0) {
+			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)TEXT("\n\n"));
+			SendMessage(cli.hResultWnd, EM_SETSEL, 0, 0);
+			SendMessage(cli.hResultWnd, EM_REPLACESEL, 0, (LPARAM)sql16);
+		}
 	}
-	SetWindowText(cli.hEditorWnd, 0);
 
 	if (isSave) {
 		sqlite3_stmt* stmt;
@@ -3428,6 +3429,38 @@ void onCLIQueryEnd(TCHAR* sql16, TCHAR* result16, bool isSave, int elapsed) {
 		}
 		sqlite3_finalize(stmt);
 	}
+
+	// Scroll to top
+	int cnt = SendMessage(cli.hResultWnd, EM_GETLINECOUNT, 0, 0);
+	SendMessage(cli.hResultWnd, EM_LINESCROLL, 0, -cnt);
+}
+
+TCHAR* parseInja(TCHAR* buf) {
+	TCHAR* res = 0;
+	if (isInjaSupport && (
+		(_tcsstr(buf, TEXT("{{")) && _tcsstr(buf, TEXT("}}"))) ||
+		(_tcsstr(buf, TEXT("{%")) && _tcsstr(buf, TEXT("%}")))
+		)) {
+		sqlite3_stmt *stmt;
+		bool rc = SQLITE_OK == sqlite3_prepare_v2(db, "select inja(?1)", -1, &stmt, 0);
+		if (rc) {
+			char* buf8 = utils::utf16to8(buf);
+			sqlite3_bind_text(stmt, 1, buf8, strlen(buf8), SQLITE_TRANSIENT);
+			delete [] buf8;
+			rc = SQLITE_ROW == sqlite3_step(stmt);
+			if (rc)
+				res = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+		}
+		sqlite3_finalize(stmt);
+
+		if (!rc)
+			showDbError(hMainWnd);
+	} else {
+		res = new TCHAR[_tcslen(buf) + 1] {0};
+		_tcscpy(res, buf);
+	}
+
+	return res;
 }
 
 unsigned int __stdcall processCliQuery (void* data) {
@@ -3573,6 +3606,7 @@ unsigned int __stdcall processCliQuery (void* data) {
 	}
 
 	onCLIQueryEnd(sql16, result16, rc == SQLITE_OK, elapsed);
+	SetWindowText(cli.hEditorWnd, NULL);
 	delete [] sql8;
 
 	RedrawWindow(cli.hResultWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME);
@@ -3682,12 +3716,34 @@ int executeCLIQuery(bool isPlan) {
 		}
 
 		onCLIQueryEnd(sql16, result16, isSave, 0);
+		SetWindowText(cli.hEditorWnd, NULL);
+
 		LocalFree(args);
 		return 0;
 	}
 
-	cli.isPlan = isPlan;
-	cli.thread = (HANDLE)_beginthreadex(0, 0, &processCliQuery, 0, 0, 0);
+	TCHAR* inja16 = parseInja(sql16);
+	if (!inja16)
+		return 0;
+
+	if (_tcscmp(inja16, sql16) == 0) {
+		cli.isPlan = isPlan;
+		cli.thread = (HANDLE)_beginthreadex(0, 0, &processCliQuery, 0, 0, 0);
+	} else {
+		int len = _tcslen(inja16) + 255;
+		TCHAR* res16 =  new TCHAR[len + 1];
+		_stprintf(res16, len, TEXT("Inja script result\n------------------------------------------------------------\n%ls"), inja16);
+
+		if (prefs::get("cli-preserve-inja")) {
+			onCLIQueryEnd(TEXT(""), res16, false, 0);
+		} else {
+			onCLIQueryEnd(sql16, res16, true, 0);
+			SetWindowText(cli.hEditorWnd, NULL);
+		}
+
+		delete [] res16;
+	}
+	delete [] inja16;
 	return 1;
 }
 
@@ -4061,33 +4117,13 @@ int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
 	for (int i = 0; isSelection && _tcschr(buf, TEXT('\r')) && (i < size + 1); i++)
 		buf[i] = buf[i] == TEXT('\r') && buf[i + 1] != TEXT('\n') ? TEXT('\n') : buf[i];
 
-	if (isInjaSupport && (
-		(_tcsstr(buf, TEXT("{{")) && _tcsstr(buf, TEXT("}}"))) ||
-		(_tcsstr(buf, TEXT("{%")) && _tcsstr(buf, TEXT("%}")))
-		)) {
+	TCHAR* inja = parseInja(buf);
+	if (!inja)
+		return false;
 
-		sqlite3_stmt *stmt;
-		bool rc = SQLITE_OK == sqlite3_prepare_v2(db, "select inja(?1)", -1, &stmt, 0);
-		if (rc) {
-			char* buf8 = utils::utf16to8(buf);
-			sqlite3_bind_text(stmt, 1, buf8, strlen(buf8), SQLITE_TRANSIENT);
-			delete [] buf8;
-			rc = SQLITE_ROW == sqlite3_step(stmt);
-			if (rc) {
-				TCHAR* buf16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-				delete [] buf;
-				buf = buf16;
-				size = _tcslen(buf16);
-			}
-		}
-		sqlite3_finalize(stmt);
-
-		if (!rc) {
-			showDbError(hMainWnd);
-			delete [] buf;
-			return false;
-		}
-	}
+	delete [] buf;
+	buf = inja;
+	size = _tcslen(buf);
 
 	TCHAR bufcopy[size + 1] {0};
 	_tcscpy(bufcopy, buf);

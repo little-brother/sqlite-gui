@@ -12,6 +12,9 @@ SQLITE_EXTENSION_INIT1
 #include "inja.hpp"
 
 static int bindArgs(sqlite3_stmt* stmt, inja::Arguments& args) {
+	if (args.size() <= 1)
+		return 0;
+		
 	inja::json irgs = args.at(1)->get<inja::json>();
 	if (!irgs.is_object() && !irgs.is_array()) {
 		irgs = inja::json::array();
