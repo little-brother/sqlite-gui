@@ -827,6 +827,7 @@ BEGIN
 		MENUITEM "View as chart", IDM_RESULT_CHART
 		MENUITEM "Filter by value", IDM_RESULT_VALUE_FILTER
 		MENUITEM "Transpose", IDM_RESULT_TRANSPOSE
+		MENUITEM "Heat map", IDM_RESULT_HEATMAP
 		MENUITEM SEPARATOR
 		MENUITEM "Save as table", IDM_RESULT_AS_TABLE
 		MENUITEM "Export to csv", IDM_RESULT_EXPORT
@@ -1069,6 +1070,7 @@ BEGIN
 		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* Resultset filters have the same functionality except /smth. These filters\n   work only with fetched data in memory.\n\n"
+		"* The heat map for a resultset can be customized. Hold Ctrl if all columns\n   should have a common range. Hold Shift to invert colors.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite?\n   Check Wiki to get more details.\n\n" \
 		"* The Ora extension is used for: data generator, statistics, edit tables\n   without rowid and edit views with ""instead of""-triggers.\n\n" \

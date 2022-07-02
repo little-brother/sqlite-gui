@@ -176,8 +176,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	hResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_RESULT));
 	hResultMenu = GetSubMenu(hResultMenu, 0);
-	Menu_SetItemState(hResultMenu, IDM_RESULT_PREVIEW, prefs::get("show-preview") ? MF_CHECKED : MF_UNCHECKED);
-	Menu_SetItemState(hResultMenu, IDM_RESULT_FILTERS, prefs::get("show-filters") ? MF_CHECKED : MF_UNCHECKED);
 
 	hTabResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_TAB_RESULT));
 	hTabResultMenu = GetSubMenu(hTabResultMenu, 0);
@@ -1475,7 +1473,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				bool isShowPreview = prefs::get("show-preview");
 				isShowPreview = (isShowPreview + 1) % 2;
 				prefs::set("show-preview", isShowPreview);
-				Menu_SetItemState(hResultMenu, IDM_RESULT_PREVIEW, prefs::get("show-preview") ? MF_CHECKED : MF_UNCHECKED);
 				EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_UPDATETAB);
 				EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
 				if (isShowPreview) {
@@ -1567,6 +1564,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 
 				SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
+			}
+
+			if (cmd == IDM_RESULT_HEATMAP) {
+				HWND hListWnd = (HWND)SendMessage(hWnd, WMU_GET_CURRENT_RESULTSET, 0, 0);
+				SendMessage(hListWnd, WMU_HEATMAP, 0, 0);
 			}
 
 			if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_VALUE_FILTER || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
@@ -2384,11 +2386,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				HWND hListWnd = (HWND)SendMessage(hWnd, WMU_GET_CURRENT_RESULTSET, 0, 0);
 				HWND hHeader = ListView_GetHeader(hListWnd);
+				Menu_SetItemState(hResultMenu, IDM_RESULT_PREVIEW, prefs::get("show-preview") ? MF_CHECKED : MF_UNCHECKED);
 				bool isShowFilters = GetWindowLongPtr(hHeader, GWL_STYLE) & HDS_FILTERBAR;
 				Menu_SetItemState(hResultMenu, IDM_RESULT_FILTERS, isShowFilters ? MF_CHECKED : MF_UNCHECKED);
 				bool isTransposed = GetProp(hListWnd, TEXT("ISTRANSPOSED"));
 				UINT tState = (isTransposed ? MF_CHECKED : MF_UNCHECKED) | (!isTransposed && *(int*)GetProp(hListWnd, TEXT("TOTALROWCOUNT")) > MAX_TRANSPOSE_ROWS ? MF_DISABLED | MF_GRAYED : 0);
 				Menu_SetItemState(hResultMenu, IDM_RESULT_TRANSPOSE, tState);
+				Menu_SetItemState(hResultMenu, IDM_RESULT_HEATMAP, GetProp(hListWnd, TEXT("HEATMAP")) ? MF_CHECKED : MF_UNCHECKED);
 
 				TrackPopupMenu(hResultMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hMainWnd, NULL);
 			}
@@ -2950,6 +2954,77 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
+		case WMU_HEATMAP: {
+			bool isVirtual = GetWindowLong(hWnd, GWL_STYLE) & LVS_OWNERDATA;
+			if (!isVirtual)
+				return 0;
+
+			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
+			if (heatmap) {
+				delete [] heatmap;
+				RemoveProp(hWnd, TEXT("HEATMAP"));
+			} else {
+				HWND hHeader = ListView_GetHeader(hWnd);
+				int colCount = Header_GetItemCount(hHeader) - 1;
+				int rowCount = *(int*)GetProp(hWnd, TEXT("TOTALROWCOUNT"));
+				if (colCount == 0 || rowCount == 0)
+					return 0;
+
+				TCHAR*** cache = (TCHAR***)GetProp(hWnd, TEXT("CACHE"));
+
+				auto getColor = [](double min, double max, double value, bool isReverse) {
+					double v = 2 * (value - min)/(max - min); // --> (0, 2)
+					return isReverse ?
+						(v < 1 ? RGB(255, v * 255, 0) : RGB((2 - v) * 255, 255, 0)) :
+						(v < 1 ? RGB(v * 255, 255, 0) : RGB(255, (2 - v) * 255, 0));
+				};
+
+				COLORREF* heatmap = new COLORREF[rowCount * (colCount + 1)] {0};
+
+				double NO_VALUE = 0.00012003;
+				bool isSharedExtremes = HIWORD(GetKeyState(VK_CONTROL));
+				bool isReverseColors = HIWORD(GetKeyState(VK_SHIFT));
+				if (isSharedExtremes) {
+					double min = NO_VALUE, max = NO_VALUE;
+					for (int colNo = 1; colNo <= colCount; colNo++) {
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							double value;
+							if (utils::isNumber(cache[rowNo][colNo], &value)) {
+								min = min == NO_VALUE || min > value ? value : min;
+								max = max == NO_VALUE || max < value ? value : max;
+							}
+						}
+					}
+
+					for (int colNo = 1; colNo <= colCount; colNo++) {
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							double value;
+							heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
+						}
+					}
+				} else {
+					for (int colNo = 1; colNo <= colCount; colNo++) {
+						double min = NO_VALUE, max = NO_VALUE;
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							double value;
+							if (utils::isNumber(cache[rowNo][colNo], &value)) {
+								min = min == NO_VALUE || min > value ? value : min;
+								max = max == NO_VALUE || max < value ? value : max;
+							}
+						}
+
+						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+							double value;
+							heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
+						}
+					}
+				}
+				SetProp(hWnd, TEXT("HEATMAP"), heatmap);
+			}
+			InvalidateRect(hWnd, NULL, TRUE);
+		}
+		break;
+
 		case WMU_UPDATE_RESULTSET: {
 			HWND hListWnd = hWnd;
 			HWND hHeader = ListView_GetHeader(hListWnd);
@@ -3182,6 +3257,10 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			byte* datatypes = (byte*)GetProp(hWnd, TEXT("DATATYPES"));
 			if (datatypes)
 				delete [] datatypes;
+
+			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
+			if (heatmap)
+				delete [] heatmap;
 
 			int vCount = (int)(LONG_PTR)GetProp(hWnd, TEXT("VALUECOUNT"));
 			unsigned char** blobs = (unsigned char**)GetProp(hWnd, TEXT("BLOBS"));
@@ -6794,6 +6873,7 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 				int result = CDRF_DODEFAULT;
 				HWND hListWnd = pHdr->hwndFrom;
 				byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+				COLORREF* heatmap = (COLORREF*)GetProp(hListWnd, TEXT("HEATMAP"));
 				if (!datatypes)
 					return result;
 
@@ -6816,7 +6896,7 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 						rowNo = resultset[rowNo];
 					}
 
-					pCustomDraw->clrTextBk = GRIDCOLORS[datatypes[colNo + colCount * rowNo]];
+					pCustomDraw->clrTextBk = heatmap ? heatmap[colNo + colCount * rowNo] : GRIDCOLORS[datatypes[colNo + colCount * rowNo]];
 					result = CDRF_NOTIFYPOSTPAINT;
 				}
 

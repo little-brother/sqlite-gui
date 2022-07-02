@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.4"
-#define GUI_VERSION2               1, 7, 4, 0
+#define GUI_VERSION                "1.7.5"
+#define GUI_VERSION2               1, 7, 5, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -342,7 +342,8 @@
 #define IDM_RESULT_EXPORT          1627
 #define IDM_RESULT_EXCEL           1628
 #define IDM_RESULT_TRANSPOSE       1629
-#define IDM_RESULT_COMPARE         1630 // iterable, 50
+#define IDM_RESULT_HEATMAP         1630
+#define IDM_RESULT_COMPARE         1640 // iterable, 50
 
 #define IDM_BLOB_VIEW              1680
 #define IDM_BLOB_NULL              1681
@@ -502,6 +503,7 @@
 #define WMU_UPDATE_SB_RESULTSET    WM_USER + 50
 #define WMU_RESULT_SEARCH          WM_USER + 51
 #define WMU_COMPARE                WM_USER + 52
+#define WMU_HEATMAP                WM_USER + 53
 
 #define WMU_HIGHLIGHT              WM_USER + 60
 #define WMU_SELECTION_CHANGED      WM_USER + 61

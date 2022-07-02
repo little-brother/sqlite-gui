@@ -457,6 +457,10 @@ namespace utils {
 
 	// Supports both 2.7 and 2,7
 	bool isNumber(const TCHAR* str, double *out) {
+		int len = _tcslen(str);
+		if (len == 0)
+			return false;
+
 		double d;
 		TCHAR *endptr;
 		errno = 0;
@@ -468,7 +472,6 @@ namespace utils {
 		if (rc)
 			return true;
 
-		int len = _tcslen(str);
 		TCHAR str2[len + 1]{0};
 		_tcscpy(str2, str);
 		for (int i = 0; i < len; i++)
@@ -485,6 +488,10 @@ namespace utils {
 	}
 
 	bool isNumber(const char* str, double *out) {
+		int len = strlen(str);
+		if (len == 0)
+			return false;
+
 		double d;
 		char *endptr;
 		errno = 0;
@@ -496,7 +503,6 @@ namespace utils {
 		if (rc)
 			return true;
 
-		int len = strlen(str);
 		char str2[len + 1]{0};
 		strcpy(str2, str);
 		for (int i = 0; i < len; i++)

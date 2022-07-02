@@ -37,7 +37,8 @@ static int bindArgs(sqlite3_stmt* stmt, inja::Arguments& args) {
 			} 
 			
 			if (it.value().is_string()) {
-				const char* value8 = it.value().get<std::string>().c_str();	
+				std::string str = it.value().get<std::string>();
+				const char* value8 = str.c_str();	
 				sqlite3_bind_text(stmt, idx, value8, strlen(value8), SQLITE_TRANSIENT);	
 			} 
 		}	
@@ -139,6 +140,11 @@ static void _inja(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 		sqlite3_finalize(stmt);
 		
 		return res;		
+	});
+
+	env.add_callback("raise_error", 1, [](inja::Arguments& args) {
+		throw std::logic_error(args.at(0)->get<std::string>());
+		return 0;
 	});
 			
 	const char* tmpl = (const char*)sqlite3_value_text(argv[0]);	
