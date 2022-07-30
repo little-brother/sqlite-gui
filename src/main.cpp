@@ -117,6 +117,7 @@ void updateTree(int type = 0, TCHAR* select = NULL);
 void updateTransactionState();
 int enableDbObject(const char* name8, int type);
 int disableDbObject(const char* name8, int type);
+bool isObjectPinned(const TCHAR* name16);
 HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
 void saveQuery(const char* storage, const char* query);
 unsigned int __stdcall checkUpdate (void* data);
@@ -535,17 +536,27 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 			sqlite3_finalize(stmt);
-
 			sqlite3_shutdown();
+
+			RemoveProp(hWnd, TEXT("LASTFOCUS"));
 			PostQuitMessage (0);
 		}
 		break;
 
 		case WM_ACTIVATEAPP: {
-			if (!wParam)
+			if (wParam)
 				ShowWindow(hAutoComplete, SW_HIDE);
 		}
 		break;
+
+		case WM_ACTIVATE: {
+			if (LOWORD(wParam) != WA_INACTIVE)
+				SetFocus((HWND)GetProp(hWnd, TEXT("LASTFOCUS")));
+			else
+				SetProp(hWnd, TEXT("LASTFOCUS"), GetFocus());
+		}
+		break;
+
 
 		case WM_SIZE: {
 			SendMessage(hToolbarWnd, WM_SIZE, 0, 0);
@@ -833,9 +844,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					treeItems[0] = thi.hItem;
 				}
 
+				TCHAR name16[256] = {0};
+
 				TVITEM ti;
 				ti.hItem = treeItems[0];
-				ti.mask = TVIF_PARAM;
+				ti.mask = TVIF_PARAM | TVIF_TEXT;
+				ti.pszText = name16;
+				ti.cchTextMax = 256;
 				TreeView_GetItem(hTreeWnd, &ti);
 
 				if (isContextKey) {
@@ -850,10 +865,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				int type = ti.lParam;
 				if (type) {
-					BOOL isCut = TreeView_GetItemState(hTreeWnd, ti.hItem, TVIS_CUT) & TVIS_CUT;
-
 					TCHAR schema16[256];
 					GetWindowText(hSchemaWnd, schema16, 255);
+
+					bool isMain = _tcscmp(schema16, TEXT("main")) == 0;
+					BOOL isCut = TreeView_GetItemState(hTreeWnd, ti.hItem, TVIS_CUT) & TVIS_CUT;
 
 					int idc = _tcscmp(schema16, TEXT("temp")) == 0 ? IDC_MENU_TEMP :
 						type == TABLE ? IDC_MENU_TABLE :
@@ -866,30 +882,30 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						isCut ? IDC_MENU_DISABLED :
 						0;
 
+					HMENU hMenu = treeMenus[idc];
+
 					if (type == VIEW) {
-						TCHAR name16[256] = {0};
-						TV_ITEM tv;
-						tv.mask = TVIF_TEXT;
-						tv.hItem = treeItems[0];
-						tv.pszText = name16;
-						tv.cchTextMax = 256;
-
-						if(!TreeView_GetItem(hTreeWnd, &tv))
-							return 0;
-
 						char* name8 = utils::utf16to8(name16);
 						sqlite3_stmt *stmt;
 						sqlite3_prepare_v2(db, "select 1 from sqlite_master where tbl_name = ?1 and type = 'trigger' and instr(lower(sql), 'instead of ') > 0", -1, &stmt, 0);
 						sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
-						ModifyMenu(treeMenus[idc], IDM_EDIT_DATA, MF_BYCOMMAND | MF_STRING, IDM_EDIT_DATA, SQLITE_ROW == sqlite3_step(stmt) ? TEXT("Edit data") : TEXT("View data"));
+						bool hasEditTrigger = SQLITE_ROW == sqlite3_step(stmt);
+						ModifyMenu(hMenu, IDM_EDIT_DATA, MF_BYCOMMAND | MF_STRING, IDM_EDIT_DATA, hasEditTrigger ? TEXT("Edit data") : TEXT("View data"));
 						sqlite3_finalize(stmt);
 						delete [] name8;
 					}
 
 					if (idc) {
-						HMENU hMenu = treeMenus[idc];
-						bool isMain = _tcscmp(schema16, TEXT("main")) == 0;
 						UINT state = MF_BYCOMMAND | (isMain ? MF_ENABLED : MF_DISABLED | MF_GRAYED);
+
+						if (idc == IDC_MENU_TABLE || idc == IDC_MENU_VIEW) {
+							if (isMain) {
+								bool isPinned = isObjectPinned(name16);
+								ModifyMenu(hMenu, IDM_PIN_ON_TOP, MF_BYCOMMAND | MF_STRING | state, IDM_PIN_ON_TOP, isPinned ? TEXT("Unpin from top") : TEXT("Pin on top"));
+							} else {
+								ModifyMenu(hMenu, IDM_PIN_ON_TOP, MF_BYCOMMAND | MF_STRING | state, IDM_PIN_ON_TOP, TEXT("Pin on top"));
+							}
+						}
 
 						if (idc == IDC_MENU_INDEX || idc == IDC_MENU_TRIGGER)
 							EnableMenuItem(hMenu, IDM_DISABLE, state);
@@ -1068,7 +1084,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				HWND hEditorWnd = (HWND)lParam;
 				SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 
-				SetWindowRedraw(hEditorWnd, false);
+				SetWindowRedraw(hEditorWnd, FALSE);
 				POINT scrollPos{0};
 				SendMessage(hWnd, EM_GETSCROLLPOS, 0, (LPARAM)&scrollPos);
 
@@ -1163,6 +1179,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_QUERY_DATA || cmd == IDM_EDIT_DATA || cmd == IDM_ERASE_DATA ||
 				cmd == IDM_ADD || cmd == IDM_VIEW || cmd == IDM_EDIT || cmd == IDM_DELETE ||
+				cmd == IDM_PIN_ON_TOP ||
 				cmd == IDM_ADD_COLUMN || cmd == IDM_ADD_INDEX) {
 				TCHAR schema16[256];
 				GetWindowText(hSchemaWnd, schema16, 255);
@@ -1312,6 +1329,27 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							}
 						}
 					}
+				}
+
+				if (cmd == IDM_PIN_ON_TOP) {
+					bool isPinned = isObjectPinned(name16);
+					sqlite3_stmt* stmt;
+					bool rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db, isPinned ? "delete from pinned where dbname = ?1 and name = ?2" : "insert into pinned (dbname, name) values (?1, ?2)", -1, &stmt, 0);
+					if (rc) {
+						char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0), false);
+						char* name8 = utils::utf16to8(name16);
+
+						sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, name8, strlen(name8), SQLITE_TRANSIENT);
+						rc = SQLITE_DONE == sqlite3_step(stmt);
+
+						delete [] dbname8;
+						delete [] name8;
+					}
+					sqlite3_finalize(stmt);
+
+					if (rc)
+						updateTree(abs(type), name16);
 				}
 
 				if (cmd == IDM_ADD_COLUMN) {
@@ -2278,9 +2316,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					return CDRF_NOTIFYITEMDRAW;
 
 				if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
-					BOOL isCut = TreeView_GetItemState(pHdr->hwndFrom, (HTREEITEM)pCustomDraw->nmcd.dwItemSpec, TVIS_CUT) & TVIS_CUT;
+					UINT state = TreeView_GetItemState(pHdr->hwndFrom, (HTREEITEM)pCustomDraw->nmcd.dwItemSpec, TVIS_CUT);
 					pCustomDraw->clrText = pCustomDraw->clrTextBk != RGB(255, 255, 255) ? RGB(255, 255, 255) :
-						isCut ? RGB(200, 200, 200) : RGB(0, 0, 0);
+						state & TVIS_CUT ? RGB(200, 200, 200) :
+						state & TVIS_BOLD ? RGB(0, 0, 200) :
+						RGB(0, 0, 0);
 				}
 
 				return CDRF_DODEFAULT;
@@ -2960,67 +3000,76 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				return 0;
 
 			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
+			bool isHeatmap = heatmap != NULL;
+			bool isCtrl = HIWORD(GetKeyState(VK_CONTROL));
+			bool isShift = HIWORD(GetKeyState(VK_SHIFT));
 			if (heatmap) {
 				delete [] heatmap;
 				RemoveProp(hWnd, TEXT("HEATMAP"));
-			} else {
-				HWND hHeader = ListView_GetHeader(hWnd);
-				int colCount = Header_GetItemCount(hHeader) - 1;
-				int rowCount = *(int*)GetProp(hWnd, TEXT("TOTALROWCOUNT"));
-				if (colCount == 0 || rowCount == 0)
-					return 0;
+			}
 
-				TCHAR*** cache = (TCHAR***)GetProp(hWnd, TEXT("CACHE"));
+			if (isHeatmap && !isCtrl && !isShift) {
+				InvalidateRect(hWnd, NULL, TRUE);
+				return 0;
+			}
 
-				auto getColor = [](double min, double max, double value, bool isReverse) {
-					double v = 2 * (value - min)/(max - min); // --> (0, 2)
-					return isReverse ?
-						(v < 1 ? RGB(255, v * 255, 0) : RGB((2 - v) * 255, 255, 0)) :
-						(v < 1 ? RGB(v * 255, 255, 0) : RGB(255, (2 - v) * 255, 0));
-				};
+			HWND hHeader = ListView_GetHeader(hWnd);
+			int colCount = Header_GetItemCount(hHeader) - 1;
+			int rowCount = *(int*)GetProp(hWnd, TEXT("TOTALROWCOUNT"));
+			if (colCount == 0 || rowCount == 0)
+				return 0;
 
-				COLORREF* heatmap = new COLORREF[rowCount * (colCount + 1)] {0};
+			TCHAR*** cache = (TCHAR***)GetProp(hWnd, TEXT("CACHE"));
 
-				double NO_VALUE = 0.00012003;
-				bool isSharedExtremes = HIWORD(GetKeyState(VK_CONTROL));
-				bool isReverseColors = HIWORD(GetKeyState(VK_SHIFT));
-				if (isSharedExtremes) {
-					double min = NO_VALUE, max = NO_VALUE;
-					for (int colNo = 1; colNo <= colCount; colNo++) {
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							double value;
-							if (utils::isNumber(cache[rowNo][colNo], &value)) {
-								min = min == NO_VALUE || min > value ? value : min;
-								max = max == NO_VALUE || max < value ? value : max;
-							}
-						}
-					}
+			auto getColor = [](double min, double max, double value, bool isReverse) {
+				double v = 2 * (value - min)/(max - min); // --> (0, 2)
+				return isReverse ?
+					(v < 1 ? RGB(255, v * 255, 0) : RGB((2 - v) * 255, 255, 0)) :
+					(v < 1 ? RGB(v * 255, 255, 0) : RGB(255, (2 - v) * 255, 0));
+			};
 
-					for (int colNo = 1; colNo <= colCount; colNo++) {
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							double value;
-							heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
-						}
-					}
-				} else {
-					for (int colNo = 1; colNo <= colCount; colNo++) {
-						double min = NO_VALUE, max = NO_VALUE;
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							double value;
-							if (utils::isNumber(cache[rowNo][colNo], &value)) {
-								min = min == NO_VALUE || min > value ? value : min;
-								max = max == NO_VALUE || max < value ? value : max;
-							}
-						}
+			heatmap = new COLORREF[rowCount * (colCount + 1)] {0};
 
-						for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-							double value;
-							heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
+			double NO_VALUE = 0.00012003;
+			bool isSharedExtremes = isCtrl;
+			bool isReverseColors = HIWORD(GetKeyState(VK_SHIFT));
+			if (isSharedExtremes) {
+				double min = NO_VALUE, max = NO_VALUE;
+				for (int colNo = 1; colNo <= colCount; colNo++) {
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						double value;
+						if (utils::isNumber(cache[rowNo][colNo], &value)) {
+							min = min == NO_VALUE || min > value ? value : min;
+							max = max == NO_VALUE || max < value ? value : max;
 						}
 					}
 				}
-				SetProp(hWnd, TEXT("HEATMAP"), heatmap);
+
+				for (int colNo = 1; colNo <= colCount; colNo++) {
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						double value;
+						heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
+					}
+				}
+			} else {
+				for (int colNo = 1; colNo <= colCount; colNo++) {
+					double min = NO_VALUE, max = NO_VALUE;
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						double value;
+						if (utils::isNumber(cache[rowNo][colNo], &value)) {
+							min = min == NO_VALUE || min > value ? value : min;
+							max = max == NO_VALUE || max < value ? value : max;
+						}
+					}
+
+					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+						double value;
+						heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
+					}
+				}
 			}
+			SetProp(hWnd, TEXT("HEATMAP"), heatmap);
+
 			InvalidateRect(hWnd, NULL, TRUE);
 		}
 		break;
@@ -4892,6 +4941,23 @@ int disableDbObject(const char* name8, int type) {
 	return rc;
 }
 
+bool isObjectPinned(const TCHAR* name16) {
+	sqlite3_stmt *stmt;
+	sqlite3_prepare_v2(prefs::db, "select 1 from pinned where dbname = ?1 and name = ?2", -1, &stmt, 0);
+
+	char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+	char* name8 = utils::utf16to8(name16);
+	sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, name8, strlen(name8), SQLITE_TRANSIENT);
+	delete [] dbname8;
+	delete [] name8;
+
+	bool isPinned = SQLITE_ROW == sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+
+	return isPinned;
+}
+
 void setEditorFont(HWND hWnd) {
 	if (!hWnd)
 		return;
@@ -5075,7 +5141,7 @@ COLORREF RichEdit_GetTextColor (HWND hWnd, int pos) {
 	return cf.crTextColor;
 }
 
-HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, int type = 0, int disabled = 0) {
+HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, int type = 0, int disabled = 0, int pinned = 0) {
 	TVITEM tvi{0};
 	TVINSERTSTRUCT tvins{0};
 	tvi.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
@@ -5083,13 +5149,19 @@ HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, i
 	tvi.cchTextMax = _tcslen(caption) + 1;
 	tvi.lParam = type;
 
+	if (pinned && (type == TABLE || type == VIEW)) {
+		tvi.stateMask = TVIS_BOLD;
+		tvi.state = TVIS_BOLD;
+	}
+
 	if (disabled && (type == INDEX || type == TRIGGER)) {
 		tvi.stateMask = TVIS_CUT;
 		tvi.state = TVIS_CUT;
 	}
 
 	tvins.item = tvi;
-	tvins.hInsertAfter = parent != TVI_ROOT || type == 0 ? TVI_LAST : abs(type) == 1 ? TVI_FIRST : treeItems[abs(type) - 1];
+	tvins.hInsertAfter = pinned ? (HTREEITEM)GetProp(hTreeWnd, TEXT("LASTPINNED")) : parent != TVI_ROOT || type == 0 ? TVI_LAST : abs(type) == 1 ? TVI_FIRST : treeItems[abs(type) - 1];
+	//pinned && parent != TVI_ROOT ? TVI_FIRST : TVI_LAST;//parent != TVI_ROOT || type == 0 ? TVI_LAST : //abs(type) == 1 ? TVI_FIRST : treeItems[abs(type)];
 	tvins.hParent = parent;
 	return (HTREEITEM)SendMessage(hTreeWnd, TVM_INSERTITEM, 0, (LPARAM)(LPTVINSERTSTRUCT)&tvins);
 };
@@ -5125,6 +5197,8 @@ void updateTree(int type, TCHAR* select) {
 		isExpanded = TreeView_GetItem(hTreeWnd, &tv) && (tv.state & TVIS_EXPANDED);
 	}
 
+	SetWindowRedraw(hTreeWnd, FALSE);
+
 	TreeView_DeleteItem(hTreeWnd, type == 0 ? TVI_ROOT : treeItems[type]);
 	if (type == 0) {
 		for (int i = 1; i < 5; i++)
@@ -5133,15 +5207,39 @@ void updateTree(int type, TCHAR* select) {
 		treeItems[type] = TreeView_AddItem(TYPES16p[type], TVI_ROOT, -type);
 	}
 
-	sqlite3_stmt *stmt;
-	char sql[1024];
+	char sql[2048];
 	TCHAR schema16[256];
 	GetWindowText(hSchemaWnd, schema16, 255);
+	bool isMain = _tcscmp(schema16, TEXT("main")) == 0;
+
+	TCHAR* pinned16 = 0;
+	if (isMain && (type == 0 || type == TABLE || type == VIEW)) {
+		sqlite3_stmt *stmt;
+		sqlite3_prepare_v2(prefs::db, "select '~~~' || group_concat(name, '~~~') || '~~~' from pinned where dbname = ?1", -1, &stmt, 0);
+		char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0), false);
+		sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
+		delete [] dbname8;
+
+		if (SQLITE_ROW == sqlite3_step(stmt))
+			pinned16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+		sqlite3_finalize(stmt);
+	}
+
+	auto isObjectPinned = [pinned16](TCHAR* name16) {
+		if (!pinned16)
+			return false;
+
+		int len = _tcslen(name16) + 6 + 1;
+		TCHAR qname16[len];
+		_sntprintf(qname16, len, TEXT("~~~%ls~~~"), name16);
+		return _tcsstr(pinned16, qname16) != 0;
+	};
+	SetProp(hTreeWnd, TEXT("LASTPINNED"), TVI_FIRST);
 
 	char* schema8 = utils::utf16to8(schema16);
 	sprintf(sql,
 		"select t.name, t.type, " \
-		"iif(t.type in ('table', 'view'), group_concat(c.name || iif(t.type = 'table', ': ' || c.type || iif(c.pk,' [pk]',''), ''), ','), null) columns, 0 disabled " \
+		"iif(t.type in ('table', 'view'), group_concat(c.name || iif(t.type = 'table', ': ' || c.type || iif(c.pk,' [pk]',''), ''), ','), null) columns" \
 		"from \"%s\".sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg and c.schema = \"%s\" " \
 		"where t.sql is not null and t.type = coalesce(?1, t.type) and t.name <> 'sqlite_sequence' " \
 		"group by t.type, t.name order by t.type, t.name",
@@ -5153,98 +5251,94 @@ void updateTree(int type, TCHAR* select) {
 		conn = tabNo == -1 ? cli.db : tabs[tabNo].db;
 	}
 
-	int rc = sqlite3_prepare_v2(conn, sql, -1, &stmt, 0);
-	if (type)
-			sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
-	else
-			sqlite3_bind_null(stmt, 1);
+	auto insertTreeItems = [conn, type, isObjectPinned, schema8](const char* sql, bool hasColumns) {
+		auto getItemType = [](const char* type8) {
+			return !strcmp(type8, "table") ? TABLE :
+				!strcmp(type8, "view") ? VIEW :
+				!strcmp(type8, "index") ? INDEX :
+				!strcmp(type8, "trigger") ? TRIGGER :
+				0;
+		};
 
-	while (rc == SQLITE_OK && SQLITE_ROW == sqlite3_step(stmt)) {
-		TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
-		TCHAR* type16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 1));
-		TCHAR* columns16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 2));
-		BOOL disabled = sqlite3_column_int(stmt, 3);
+		sqlite3_stmt *stmt;
 
-		HTREEITEM hItem = 0;
-		if (!_tcscmp(type16, TEXT("table")))
-			hItem = TreeView_AddItem(name16, treeItems[TABLE], TABLE);
-
-		if (!_tcscmp(type16, TEXT("view")))
-			hItem = TreeView_AddItem(name16, treeItems[VIEW], VIEW);
-
-		if (!_tcscmp(type16, TEXT("trigger")))
-			hItem = TreeView_AddItem(name16, treeItems[TRIGGER], TRIGGER, disabled);
-
-		if (!_tcscmp(type16, TEXT("index")))
-			hItem = TreeView_AddItem(name16, treeItems[INDEX], INDEX, disabled);
-
-		if (!_tcscmp(type16, TEXT("table")) || !_tcscmp(type16, TEXT("view"))) {
-			TCHAR* column16 = _tcstok (columns16, TEXT(","));
-			while (column16 != NULL) {
-				TreeView_AddItem(column16, hItem, !_tcscmp(type16, TEXT("table")) ? COLUMN : 0);
-				column16 = _tcstok (NULL, TEXT(","));
-			}
-		}
-
-		delete [] type16;
-		delete [] name16;
-		delete [] columns16;
-	}
-	sqlite3_finalize(stmt);
-
-	if (SQLITE_OK != sqlite3_errcode(db)) {
-		sprintf(sql, "select name, type from \"%s\".sqlite_master where sql is not null and type = coalesce(?1, type) and name <> 'sqlite_sequence' order by 1", schema8);
-		sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+		int rc = sqlite3_prepare_v2(conn, sql, -1, &stmt, 0);
 		if (type)
 				sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
 		else
 				sqlite3_bind_null(stmt, 1);
 
-		while (SQLITE_ROW == sqlite3_step(stmt)) {
-			char* type8 = (char*)sqlite3_column_text(stmt, 1);
-			int type = !strcmp(type8, TYPES8[TABLE]) ? TABLE :
-				!strcmp(type8, TYPES8[VIEW]) ? VIEW :
-				!strcmp(type8, TYPES8[INDEX]) ? INDEX :
-				!strcmp(type8, TYPES8[TRIGGER]) ? TRIGGER :
-				-1;
-
-			if (type == -1)
+		int prevItemType = -1;
+		while (rc == SQLITE_OK && SQLITE_ROW == sqlite3_step(stmt)) {
+			int itemType = getItemType((char*)sqlite3_column_text(stmt, 1));
+			if (itemType == 0)
 				continue;
 
-			char* name8 = (char*)sqlite3_column_text(stmt, 0);
+			if (itemType != prevItemType)
+				SetProp(hTreeWnd, TEXT("LASTPINNED"), TVI_FIRST);
+
+			const char* name8 = (const char*) sqlite3_column_text(stmt, 0);
+			const char* type8 = (const char*) sqlite3_column_text(stmt, 1);
 			TCHAR* name16 = utils::utf8to16(name8);
-			HTREEITEM hItem = TreeView_AddItem(name16, treeItems[type], type);
-			delete [] name16;
+			TCHAR* columns16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 2));
 
-			if (type == TABLE || type == VIEW) {
-				sqlite3_stmt *substmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name || iif(?2 = 'table', ': ' || type || case when pk then ' [pk]' else '' end, '') from pragma_table_xinfo(?1) where schema = ?3 order by cid", -1, &substmt, 0)) {
-					sqlite3_bind_text(substmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
-					sqlite3_bind_text(substmt, 2, type8, strlen(type8), SQLITE_TRANSIENT);
-					sqlite3_bind_text(substmt, 3, schema8, strlen(schema8), SQLITE_TRANSIENT);
-					while(SQLITE_ROW == sqlite3_step(substmt)) {
-						TCHAR* column16 = utils::utf8to16((char *) sqlite3_column_text(substmt, 0));
-						TreeView_AddItem(column16, hItem, COLUMN);
-						delete [] column16;
-					}
-				}
+			bool pinned = (itemType == TABLE || itemType == VIEW) && isObjectPinned(name16);
+			HTREEITEM hItem = TreeView_AddItem(name16, treeItems[itemType], itemType, 0, pinned);
 
-				if (SQLITE_DONE != sqlite3_errcode(db)) {
-					TCHAR* err16 = utils::utf8to16(sqlite3_errmsg(db));
-					TCHAR msg16[256];
-					_sntprintf(msg16, 255, TEXT("Error: %ls"), err16);
-					delete [] err16;
-					TreeView_AddItem(msg16, hItem, 0);
-					TreeView_Expand(hTreeWnd, hItem, TVE_EXPAND);
-				}
-				sqlite3_finalize(substmt);
+			if (pinned) {
+				SetProp(hTreeWnd, TEXT("LASTPINNED"), hItem);
+				prevItemType = itemType;
 			}
+
+			if (itemType == TABLE || itemType == VIEW) {
+				if (hasColumns) {
+					TCHAR* column16 = _tcstok (columns16, TEXT(","));
+					while (column16 != NULL) {
+						TreeView_AddItem(column16, hItem, itemType == TABLE ? COLUMN : 0);
+						column16 = _tcstok (NULL, TEXT(","));
+					}
+				} else {
+					sqlite3_stmt *substmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name || iif(?2 = 'table', ': ' || type || case when pk then ' [pk]' else '' end, '') from pragma_table_xinfo(?1) where schema = ?3 order by cid", -1, &substmt, 0)) {
+						sqlite3_bind_text(substmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(substmt, 2, type8, strlen(type8), SQLITE_TRANSIENT);
+						sqlite3_bind_text(substmt, 3, schema8, strlen(schema8), SQLITE_TRANSIENT);
+						while(SQLITE_ROW == sqlite3_step(substmt)) {
+							TCHAR* column16 = utils::utf8to16((char *) sqlite3_column_text(substmt, 0));
+							TreeView_AddItem(column16, hItem, COLUMN);
+							delete [] column16;
+						}
+					}
+
+					if (SQLITE_DONE != sqlite3_errcode(db)) {
+						TCHAR* err16 = utils::utf8to16(sqlite3_errmsg(db));
+						TCHAR msg16[256];
+						_sntprintf(msg16, 255, TEXT("Error: %ls"), err16);
+						delete [] err16;
+						TreeView_AddItem(msg16, hItem, 0);
+						TreeView_Expand(hTreeWnd, hItem, TVE_EXPAND);
+					}
+					sqlite3_finalize(substmt);
+				}
+			}
+
+			delete [] name16;
+			delete [] columns16;
 		}
 		sqlite3_finalize(stmt);
+		RemoveProp(hTreeWnd, TEXT("LASTPINNED"));
+
+		return SQLITE_OK != sqlite3_errcode(conn);
+	};
+
+	if (insertTreeItems(sql, true)) {
+		sprintf(sql, "select name, type from \"%s\".sqlite_master where sql is not null and type = coalesce(?1, type) and name <> 'sqlite_sequence' order by 2, 1", schema8);
+		insertTreeItems(sql, false);
 	}
 
 	if ((type == 0 || type == INDEX || type == TRIGGER) && (strcmp(schema8, "main") == 0)) {
 		char sql[] = "select d.name, d.type, 1 disabled from disabled d where d.type = coalesce(?1, d.type) and d.dbpath = ?2 order by type, name";
+		sqlite3_stmt *stmt;
 		int rc = sqlite3_prepare_v2(prefs::db, sql, -1, &stmt, 0);
 		if (type)
 				sqlite3_bind_text(stmt, 1, TYPES8[type], strlen(TYPES8[type]), SQLITE_TRANSIENT);
@@ -5273,8 +5367,14 @@ void updateTree(int type, TCHAR* select) {
 
 	delete [] schema8;
 
+
 	if (isExpanded)
 		TreeView_Expand(hTreeWnd, treeItems[type], TVE_EXPAND);
+
+	if (!type) {
+		TreeView_Expand(hTreeWnd, treeItems[TABLE], TVE_EXPAND);
+		TreeView_Expand(hTreeWnd, treeItems[VIEW], TVE_EXPAND);
+	}
 
 	if (selType && _tcslen(selText) > 0) {
 		HTREEITEM hItem = TreeView_GetNextItem(hTreeWnd, treeItems[selType], TVGN_CHILD);
@@ -5295,13 +5395,11 @@ void updateTree(int type, TCHAR* select) {
 					TreeView_SelectItem(hTreeWnd, treeItems[selType]);
 			}
 		}
+	} else {
+		TreeView_SelectItem(hTreeWnd, NULL);
 	}
 
-	if (!type) {
-		TreeView_Expand(hTreeWnd, treeItems[TABLE], TVE_EXPAND);
-		TreeView_Expand(hTreeWnd, treeItems[VIEW], TVE_EXPAND);
-	}
-
+	// Update table and view cache
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++)
 		if (TABLES[i]) {
 			delete [] TABLES[i];
@@ -5333,7 +5431,14 @@ void updateTree(int type, TCHAR* select) {
 	TABLES[tblNo + 2] = new TCHAR[256]{0};
 	_tcscpy(TABLES[tblNo + 2], TEXT("dbstat"));
 
-	SetScrollPos(hTreeWnd, SB_VERT, yPos, true);
+	SetWindowRedraw(hTreeWnd, TRUE);
+	SetScrollPos(hTreeWnd, SB_VERT, yPos, TRUE);
+	SendMessage(hTreeWnd, WM_SIZE, 0, 0);
+
+	HTREEITEM hItem = TreeView_GetSelection(hTreeWnd);
+	if (hItem)
+		TreeView_EnsureVisible(hTreeWnd, hItem);
+
 	InvalidateRect(hTreeWnd, 0, TRUE);
 }
 
@@ -6470,7 +6575,11 @@ bool processEditorEvents(MSGFILTER* pF) {
 bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	// https://stackoverflow.com/questions/8161741/handling-keyboard-input-in-win32-wm-char-or-wm-keydown-wm-keyup
 	// Shift + 7 and Shift + 9 equals to up and down
-	bool isNavKey = !HIWORD(GetKeyState(VK_SHIFT)) && (key == VK_ESCAPE || key == VK_UP || key == VK_DOWN || key == VK_RETURN);
+	bool isNavKey = !HIWORD(GetKeyState(VK_SHIFT)) && (
+		key == VK_ESCAPE || key == VK_RETURN ||
+		key == VK_UP || key == VK_DOWN ||
+		key == VK_HOME || key == VK_END ||
+		key == VK_PRIOR || key == VK_NEXT);
 	bool isCtrlSpace = HIWORD(GetKeyState(VK_CONTROL)) && (key == VK_SPACE);
 
 	if (IsWindowVisible(hAutoComplete) && isNavKey) {
@@ -6478,8 +6587,8 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 			if (key == VK_ESCAPE)
 				ShowWindow(hAutoComplete, SW_HIDE);
 
+			int iCount = ListBox_GetCount(hAutoComplete);
 			if (key == VK_UP || key == VK_DOWN) {
-				int iCount = ListBox_GetCount(hAutoComplete);
 				int pos = ListBox_GetCurSel(hAutoComplete);
 				ListBox_SetCurSel(hAutoComplete, (pos + (key == VK_UP ? -1 : 1) + iCount) % iCount);
 			}
@@ -6504,6 +6613,27 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (LPARAM)(isAlphaNum ? buf : qbuf));
 				SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
 				ShowWindow(hAutoComplete, SW_HIDE);
+			}
+
+			if (key == VK_HOME || key == VK_END || key == VK_NEXT || key == VK_PRIOR) {
+				int itemNo = 0;
+
+				if (key == VK_HOME)
+					itemNo = 0;
+
+				if (key == VK_END)
+					itemNo = iCount - 1;
+
+				if (key == VK_NEXT || key == VK_PRIOR) {
+					RECT rc;
+					GetClientRect(hAutoComplete, &rc);
+					int iPage = rc.bottom/ListBox_GetItemHeight(hAutoComplete, 0);
+					int currNo = ListBox_GetCurSel(hAutoComplete);
+					itemNo = key == VK_NEXT ? MIN(iCount - 1, currNo + iPage) : MAX(0, currNo - iPage);
+				}
+
+				ListBox_SetCurSel(hAutoComplete, itemNo);
+				SendMessage(hAutoComplete, LB_SETTOPINDEX, itemNo, 0);
 			}
 		}
 

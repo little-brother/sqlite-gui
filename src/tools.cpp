@@ -2369,12 +2369,12 @@ namespace tools {
 				}
 			}
 			sqlite3_finalize(stmt);
-			fclose(f);
 		}
 
 		delete [] create8;
 		delete [] insert8;
 		delete [] delete8;
+		fclose(f);
 
 		if (rc && isAutoTransaction)
 			sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);

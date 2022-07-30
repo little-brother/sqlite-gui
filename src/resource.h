@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.5"
-#define GUI_VERSION2               1, 7, 5, 0
+#define GUI_VERSION                "1.7.6"
+#define GUI_VERSION2               1, 7, 6, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -376,6 +376,7 @@
 #define IDM_DISABLE                1711
 #define IDM_VIEW                   1712
 #define IDM_TEMP_EXPLAIN           1713
+#define IDM_PIN_ON_TOP             1714
 
 #define IDM_ADD                    1715
 #define IDM_REFRESH                1716
