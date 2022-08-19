@@ -709,5 +709,4 @@ namespace utils {
 			mergeSortJoiner(indexes, data, l, m, r, isBackward, isNums);
 		}
 	}
-
 }

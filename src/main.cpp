@@ -113,6 +113,7 @@ void enableMainMenu();
 void disableMainMenu();
 void updateExecuteMenu(bool isEnable);
 void updateRecentList();
+bool updateReferences();
 void updateTree(int type = 0, TCHAR* select = NULL);
 void updateTransactionState();
 int enableDbObject(const char* name8, int type);
@@ -539,6 +540,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			sqlite3_shutdown();
 
 			RemoveProp(hWnd, TEXT("LASTFOCUS"));
+			RemoveProp(hWnd, TEXT("ACTIVATETIME"));
 			PostQuitMessage (0);
 		}
 		break;
@@ -550,9 +552,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		break;
 
 		case WM_ACTIVATE: {
-			if (LOWORD(wParam) != WA_INACTIVE)
+			if (LOWORD(wParam) != WA_INACTIVE) {
 				SetFocus((HWND)GetProp(hWnd, TEXT("LASTFOCUS")));
-			else
+				SetProp(hWnd, TEXT("ACTIVATETIME"), UIntToPtr(GetTickCount()));
+			} else
 				SetProp(hWnd, TEXT("LASTFOCUS"), GetFocus());
 		}
 		break;
@@ -1079,7 +1082,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SetFocus(hNextWnd);
 			}
 
-			if (cmd == IDM_PROCESS_TAB) {
+			if (cmd == IDM_PROCESS_INDENT) {
+				// Fix https://github.com/little-brother/sqlite-gui/issues/124#issuecomment-1200335003
+				if (labs(PtrToUint(GetProp(hWnd, TEXT("ACTIVATETIME"))) - GetTickCount()) < 100)
+					return 0;
+
 				int start, end;
 				HWND hEditorWnd = (HWND)lParam;
 				SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
@@ -1094,6 +1101,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				const TCHAR* indent = dialogs::INDENTS[prefs::get("editor-indent")];
 
 				int shift0 = 0;
+
+				// issue #128
+				int singleLineIndentLen = _tcslen(indent);
+				int singleLineSpaceCount = 0;
+
 				for (int currLineNo = startLineNo; currLineNo < endLineNo + 1; currLineNo++) {
 					int currLineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, currLineNo, 0);
 					int currLineSize = SendMessage(hEditorWnd, EM_LINELENGTH, currLineIdx, 0);
@@ -1109,6 +1121,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							bool isOut = true;
 							for (int pos = 0; pos < start - currLineIdx; pos++)
 								isOut = isOut && (currLine[pos] == TEXT(' ') || currLine[pos] == TEXT('\t'));
+
+							for (int pos = start - currLineIdx - 1; pos >= 0 && currLine[pos] == TEXT(' '); pos--)
+								singleLineSpaceCount++;
 
 							if (!isOut) {
 								if (dir == 1)
@@ -1134,11 +1149,21 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					}
 
 					SendMessage(hEditorWnd, EM_SETSEL, currLineIdx, currLineIdx + shift);
-					SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)(dir == 1 ? indent : TEXT("")));
+					// issue #128
+					if (start == end && indent[0] != TEXT('\t')) {
+						TCHAR singleLineIndent[singleLineIndentLen + 1] = {0};
+						for (int pos = 0; pos < singleLineIndentLen - singleLineSpaceCount % singleLineIndentLen; pos++)
+							singleLineIndent[pos] = TEXT(' ');
+
+						singleLineIndentLen = _tcslen(singleLineIndent);
+						SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)singleLineIndent);
+					} else {
+						SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)(dir == 1 ? indent : TEXT("")));
+					}
 				}
 
 				if (start == end) {
-					shift0 = dir == 1 ? _tcslen(indent) : start != SendMessage(hEditorWnd, EM_LINEINDEX, startLineNo, 0) ? -shift0 : 0;
+					shift0 = dir == 1 ? singleLineIndentLen : start != SendMessage(hEditorWnd, EM_LINEINDEX, startLineNo, 0) ? -shift0 : 0;
 					SendMessage(hEditorWnd, EM_SETSEL, start + shift0, start + shift0);
 				} else {
 					start = SendMessage(hEditorWnd, EM_LINEINDEX, startLineNo, 0);
@@ -1246,8 +1271,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				if (cmd == IDM_ADD && type == TABLE) {
 					_stprintf(name16, 255, schema16);
-					if (DLG_OK == DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable, (LPARAM)name16))
+					if (DLG_OK == DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable, (LPARAM)name16)) {
+						updateReferences();
 						updateTree(TABLE, name16);
+					}
 				}
 
 				if ((cmd == IDM_ADD && type != TABLE) || cmd == IDM_VIEW || cmd == IDM_EDIT) {
@@ -1902,7 +1929,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (cmd == IDM_DATABASE_SEARCH)
 				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_DATABASE_SEARCH), hMainWnd, (DLGPROC)tools::cbDlgDatabaseSearch);
 
-			if (cmd == IDM_LOCATE) {
+			if (cmd == IDM_LOCATE_FILE) {
 				const char* dbname8 = sqlite3_db_filename(db, 0);
 				TCHAR* dbname16 = utils::utf8to16(dbname8);
 				TCHAR path16[MAX_PATH + 20];
@@ -1916,6 +1943,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_FOREIGN_KEY_CHECK)
 				DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_FOREIGN_KEY_CHECK), hMainWnd, (DLGPROC)tools::cbDlgForeignKeyCheck);
+
+			if (cmd == IDM_DESKTOP_SHORTCUT && DLG_OK == DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_DESKTOP_SHORTCUT), hMainWnd, (DLGPROC)tools::cbDlgDesktopShortcut))
+				MessageBox(hWnd, TEXT("Done!"), TEXT("Link creation"), MB_OK);
 
 			if (cmd == IDM_CHECK_INTEGRITY) {
 				sqlite3_stmt* stmt;
@@ -2856,11 +2886,6 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		case WM_GETDLGCODE: {
 			if (lParam && ((MSG*)lParam)->message == WM_KEYDOWN && (wParam == VK_RETURN))
 			   return DLGC_WANTMESSAGE;
-		}
-		break;
-
-		case WM_SYSKEYDOWN: {
-			return wParam == VK_MENU;
 		}
 		break;
 
@@ -4176,8 +4201,10 @@ unsigned int __stdcall processEditorQuery (void* data) {
 	tab->isBatch = 0;
 	updateTransactionState();
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, getTabNo(_tab.id), 0);
-	if (isMetaChanged)
+	if (isMetaChanged) {
 		updateTree();
+		updateReferences();
+	}
 
 	return 1;
 }
@@ -6215,6 +6242,8 @@ void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthe
 	if (!isRequireHighlight && !isRequireParenthesisHighlight && !isRequireOccurrenceHighlight)
 		return;
 
+	SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
+
 	IUnknown *tr_code = NULL;
 	ITextDocument *td_code;
 
@@ -6224,7 +6253,6 @@ void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthe
 		return;
 	}
 	tr_code->QueryInterface(IID_ITextDocument,(void**)&td_code);
-
 
 	POINT scrollPos{0};
 	SendMessage(hWnd, EM_GETSCROLLPOS, 0, (LPARAM)&scrollPos);
@@ -6267,8 +6295,9 @@ void processHighlight(HWND hWnd, bool isRequireHighlight, bool isRequireParenthe
 		SendMessage(hWnd, EM_SETSEL, max, min);
 	}
 
-	if (rc)
-		InvalidateRect(hWnd, 0, TRUE);
+	SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
+
+	InvalidateRect(hWnd, 0, TRUE);
 	SendMessage(hWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE |  ENM_KEYEVENTS | ENM_MOUSEEVENTS | ENM_DROPFILES);
 }
 
@@ -6482,9 +6511,9 @@ bool processEditorEvents(MSGFILTER* pF) {
 			return true;
 		}
 
-		if (key == VK_TAB && !isControl) {
+		if (key == VK_TAB && !isControl && !(IsWindowVisible(hAutoComplete) && prefs::get("autocomplete-by-tab"))) {
 			if (isKeyDown)
-				SendMessage(hMainWnd, WM_COMMAND, IDM_PROCESS_TAB, (LPARAM)hWnd);
+				SendMessage(hMainWnd, WM_COMMAND, IDM_PROCESS_INDENT, (LPARAM)hWnd);
 			pF->wParam = 0;
 			return true;
 		}
@@ -6573,13 +6602,19 @@ bool processEditorEvents(MSGFILTER* pF) {
 }
 
 bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
+	if (!prefs::get("use-autocomplete"))
+		return false;
+
 	// https://stackoverflow.com/questions/8161741/handling-keyboard-input-in-win32-wm-char-or-wm-keydown-wm-keyup
 	// Shift + 7 and Shift + 9 equals to up and down
+	bool isByTab = prefs::get("autocomplete-by-tab");
 	bool isNavKey = !HIWORD(GetKeyState(VK_SHIFT)) && (
-		key == VK_ESCAPE || key == VK_RETURN ||
+		key == VK_ESCAPE ||
 		key == VK_UP || key == VK_DOWN ||
 		key == VK_HOME || key == VK_END ||
-		key == VK_PRIOR || key == VK_NEXT);
+		key == VK_PRIOR || key == VK_NEXT ||
+		(key == VK_RETURN && !isByTab) ||
+		(key == VK_TAB && isByTab));
 	bool isCtrlSpace = HIWORD(GetKeyState(VK_CONTROL)) && (key == VK_SPACE);
 
 	if (IsWindowVisible(hAutoComplete) && isNavKey) {
@@ -6593,7 +6628,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 				ListBox_SetCurSel(hAutoComplete, (pos + (key == VK_UP ? -1 : 1) + iCount) % iCount);
 			}
 
-			if (key == VK_RETURN) {
+			if ((key == VK_RETURN && !isByTab) || (key == VK_TAB && isByTab)) {
 				TCHAR buf[1024]{0}, qbuf[1031]{0};
 				int pos = ListBox_GetCurSel(hAutoComplete);
 				ListBox_GetText(hAutoComplete, pos, buf);

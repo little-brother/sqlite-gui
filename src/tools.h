@@ -19,6 +19,7 @@ namespace tools {
 	BOOL CALLBACK cbDlgDatabaseSearch (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgStatistics (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgForeignKeyCheck (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	BOOL CALLBACK cbDlgDesktopShortcut (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	int  importCSV(TCHAR* path16, TCHAR* tblname16, TCHAR* err16);
 	int  exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16);

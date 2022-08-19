@@ -20,6 +20,7 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewChart(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	BOOL CALLBACK cbDlgFKSelector (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16);
 	COLORREF GetBrushColor(HBRUSH brush);
 
@@ -814,7 +815,7 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("CANUPDATE"), (HANDLE)canUpdate);
 				SetProp(hWnd, TEXT("CANDELETE"), (HANDLE)canDelete);
 
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				LONG_PTR styles = GetWindowLongPtr(hHeader, GWL_STYLE);
 				SetWindowLongPtr(hHeader, GWL_STYLE, styles | HDS_FILTERBAR);
@@ -904,7 +905,7 @@ namespace dialogs {
 				}
 
 				RECT mrc;
-				GetWindowRect(hMainWnd, &mrc);
+				GetWindowRect(hMainWnd ? hMainWnd : GetDesktopWindow(), &mrc);
 
 				Header_GetItemRect(hHeader, colCount - 1, &rc);
 				int w = MAX(MIN(rc.right + 20, mrc.right - mrc.left - 75), 300);
@@ -920,15 +921,15 @@ namespace dialogs {
 
 				SetWindowPos(hWnd, 0, (mrc.right + mrc.left - w)/2, (mrc.bottom + mrc.top - h)/2, w, h,  SWP_NOZORDER);
 
-				// Single table mode
-				createTooltip(hWnd);
+				if (!hMainWnd)
+					createTooltip(hWnd);
 
 				ListView_SetItemState(hListWnd, -1, 0, LVIS_FOCUSED | LVIS_SELECTED);
 			}
 			break;
 
 			case WM_SIZE: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				HWND hToolbarWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
 
 				SendMessage(hToolbarWnd, WM_SIZE, 0, 0);
@@ -945,8 +946,13 @@ namespace dialogs {
 			}
 			break;
 
+			case WM_SYSCOMMAND: {
+				return wParam != VK_MENU && (lParam >> 16) <= 0; // https://stackoverflow.com/a/9627980/6121703
+			}
+			break;
+
 			case WMU_UPDATE_DATA: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				bool isTable = GetProp(hWnd, TEXT("ISTABLE"));
 				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
@@ -1061,7 +1067,7 @@ namespace dialogs {
 			break;
 
 			case WMU_UPDATE_COLSIZE: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				int colCount = Header_GetItemCount(hHeader);
 				SendMessage(hHeader, WM_SIZE, 0, 0);
@@ -1075,7 +1081,7 @@ namespace dialogs {
 			break;
 
 			case WMU_SET_CURRENT_CELL: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				RECT rect;
 				int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
@@ -1094,15 +1100,16 @@ namespace dialogs {
 			break;
 
 			case WMU_SYNC_CURRENT_CELL: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 				int rowNo = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
 				SendMessage(hWnd, WMU_SET_CURRENT_CELL, rowNo, currCol);
 			}
 			break;
 
+			// wParam = 0/1 - store a previous text or not
 			case WMU_EDIT_VALUE: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				bool withText = wParam != 0;
 				int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
@@ -1141,7 +1148,7 @@ namespace dialogs {
 
 			// wParam - init text or NULL
 			case WMU_CREATE_VALUE_SELECTOR: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 
@@ -1180,13 +1187,18 @@ namespace dialogs {
 			}
 			break;
 
+			case WMU_OPEN_FK_VALUE_SELECTOR: {
+				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FK_SELECTOR), hWnd, (DLGPROC)cbDlgFKSelector, (LPARAM)hWnd);
+			}
+			break;
+
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 				bool canInsert = GetProp(hWnd, TEXT("CANINSERT"));
 				bool canUpdate = GetProp(hWnd, TEXT("CANUPDATE"));
 				bool canDelete = GetProp(hWnd, TEXT("CANDELETE"));
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 
 				if (pHdr->code == LVN_COLUMNCLICK) {
 					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
@@ -1378,7 +1390,7 @@ namespace dialogs {
 					}
 
 					if (canUpdate && !isControl && (
-						(kd->wVKey == VK_SPACE) ||
+						(kd->wVKey == VK_SPACE && !isAlt) ||
 						(kd->wVKey == VK_OEM_PLUS) || (kd->wVKey == VK_OEM_MINUS) || (kd->wVKey == VK_OEM_COMMA) || (kd->wVKey == VK_OEM_PERIOD) || // +-,.
 						(kd->wVKey >= 0x30 && kd->wVKey <= 0x5A) || // 0, 1, ..., y, z
 						(kd->wVKey >= 0x60 && kd->wVKey <= 0x6F) // Numpad
@@ -1399,6 +1411,12 @@ namespace dialogs {
 
 					if (kd->wVKey == VK_SPACE && isControl) {
 						SendMessage(hWnd, WMU_CREATE_VALUE_SELECTOR, 0, 0);
+						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
+						return true;
+					}
+
+					if (canUpdate && kd->wVKey == VK_SPACE && isAlt) {
+						SendMessage(hWnd, WMU_OPEN_FK_VALUE_SELECTOR, 0, 0);
 						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
 						return true;
 					}
@@ -1434,7 +1452,7 @@ namespace dialogs {
 				bool hasRowid = GetProp(hWnd, TEXT("HASROWID"));
 				bool canUpdate = GetProp(hWnd, TEXT("CANUPDATE"));
 				char* md5keys8 = (char*)GetProp(hWnd, TEXT("MD5KEYS8"));
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 
@@ -1540,7 +1558,7 @@ namespace dialogs {
 				}
 
 				if (cmd == IDM_ROW_DUPLICATE) {
-					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 					int count = ListView_GetSelectedCount(hListWnd);
 					int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd));
 
@@ -1708,7 +1726,7 @@ namespace dialogs {
 			break;
 
 			case WM_CLOSE: {
-				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
 				HWND hValuesWnd = FindWindowEx(hListWnd, 0, WC_COMBOBOX, 0);
 				if (hValuesWnd)
 					DestroyWindow(hValuesWnd);
@@ -1780,6 +1798,186 @@ namespace dialogs {
 				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				EndDialog(hWnd, DLG_CANCEL);
 				DestroyWindow(hWnd);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	// lParam, USERDATA = Parent Dlg handle
+	BOOL CALLBACK cbDlgFKSelector (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+
+				HWND hParentWnd = (HWND)lParam;
+				char* tablename8 = (char*)GetProp(hParentWnd, TEXT("TABLENAME8"));
+				char* schema8 = (char*)GetProp(hParentWnd, TEXT("SCHEMA8"));
+				int currCol = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("CURRENTCOLUMN"));
+				int currRow = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("CURRENTROW"));
+				HWND hParentListWnd = GetDlgItem(hParentWnd, IDC_DLG_ROWS);
+
+				bool isForeignKey = false;
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select \"table\", \"to\", upper(\"table\" || '.' || \"to\") from pragma_foreign_key_list(?2) where schema = ?1 and \"from\" = ?3", -1, &stmt, 0)) {
+					sqlite3_bind_text(stmt, 1, schema8, strlen(schema8), SQLITE_TRANSIENT);
+					sqlite3_bind_text(stmt, 2, tablename8, strlen(tablename8), SQLITE_TRANSIENT);
+					TCHAR colName16[256];
+					Header_GetItemText(ListView_GetHeader(hParentListWnd), currCol, colName16, 255);
+					char* colName8 = utils::utf16to8(colName16);
+					sqlite3_bind_text(stmt, 3, colName8, strlen(colName8), SQLITE_TRANSIENT);
+					delete [] colName8;
+
+					isForeignKey = SQLITE_ROW == sqlite3_step(stmt);
+					if (isForeignKey) {
+						char sql8[2048];
+						sprintf(sql8, "select * from \"%s\".\"%s\"", schema8, sqlite3_column_text(stmt, 0));
+
+						HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
+						sqlite3_stmt* stmt2;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt2, 0)) {
+							ListView_SetData(hListWnd, stmt2);
+
+							TCHAR* fkName16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+							int colNo = 0;
+							for (; colNo < ListView_GetColumnCount(hListWnd); colNo++) {
+								TCHAR colName16[256];
+								Header_GetItemText(ListView_GetHeader(hListWnd), colNo, colName16, 255);
+								if (_tcscmp(fkName16, colName16))
+									continue;
+
+								SetProp(hWnd, TEXT("KEYCOLUMN"), IntToPtr(colNo));
+								break;
+							}
+							delete [] fkName16;
+
+							TCHAR value16[1024];
+							ListView_GetItemText(hParentListWnd, currRow, currCol, value16, 1023);
+							for (int rowNo = 0; rowNo < ListView_GetItemCount(hListWnd); rowNo++) {
+								TCHAR fkValue16[1024];
+								ListView_GetItemText(hListWnd, rowNo, colNo, fkValue16, 1023);
+
+								if (_tcscmp(fkValue16, value16))
+									continue;
+
+								ListView_SetItemState (hListWnd, rowNo, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+								break;
+							}
+
+							TCHAR title16[1024];
+							TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 2));
+							_sntprintf(title16, 1023, TEXT("Select \"%ls\" value from %ls"), colName16, name16);
+							SetWindowText(hWnd, title16);
+							delete [] name16;
+						} else {
+							showDbError(hWnd);
+						}
+						sqlite3_finalize(stmt2);
+
+						RECT rc, rcParent;
+						GetClientRect (hWnd, &rc);
+						GetClientRect (hParentWnd, &rcParent);
+
+						POINT p = {rcParent.right/2, rcParent.bottom/2};
+						ClientToScreen(hParentWnd, &p);
+						SetWindowPos(hWnd, 0, p.x - rc.right/2, p.y - rc.bottom/2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+						//SendMessage(hListWnd, WM_SETFONT, (WPARAM)hFont, false);
+						SetFocus(hListWnd);
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				if (!isForeignKey)
+					return EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_SIZE: {
+				RECT rc = {0};
+				GetClientRect(hWnd, &rc);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ROWS), 0, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER);
+			}
+			break;
+
+			case WMU_SET_VALUE: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
+				int colNo = (int)(LONG_PTR)GetProp(hWnd, TEXT("KEYCOLUMN"));
+				int rowNo = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
+				if (rowNo != -1) {
+					TCHAR value16[MAX_TEXT_LENGTH + 1];
+					ListView_GetItemText(hListWnd, rowNo, colNo, value16, MAX_TEXT_LENGTH);
+
+					HWND hParentWnd = (HWND)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+					int colNo = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("CURRENTCOLUMN"));
+					int rowNo = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("CURRENTROW"));
+					ListView_UpdateCell(GetDlgItem(hParentWnd, IDC_DLG_ROWS), rowNo, colNo, value16);
+				}
+				EndDialog(hWnd, DLG_CANCEL);
+				return true;
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDOK) {
+					GetDlgItemText(hWnd, IDC_DLG_EDITOR, (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), MAX_TEXT_LENGTH);
+					EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
+
+				if (pHdr->code == (UINT)NM_CUSTOMDRAW && pHdr->hwndFrom == hListWnd) {
+					NMLVCUSTOMDRAW* pCustomDraw = (LPNMLVCUSTOMDRAW)lParam;
+
+					int result = CDRF_DODEFAULT;
+					if (pCustomDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
+						result = CDRF_NOTIFYITEMDRAW;
+
+					if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+						result = CDRF_NOTIFYSUBITEMDRAW | CDRF_NEWFONT;
+
+					if (pCustomDraw->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM)) {
+						int colNo = (int)(LONG_PTR)GetProp(hWnd, TEXT("KEYCOLUMN"));
+						pCustomDraw->clrTextBk = colNo == pCustomDraw->iSubItem ? RGB(255, 255, 225) : RGB(255, 255, 255);
+						result = CDRF_DODEFAULT;
+					}
+
+					SetWindowLongPtr(hWnd, DWLP_MSGRESULT, result);
+					return true;
+				}
+
+				if (pHdr->code == LVN_KEYDOWN && pHdr->hwndFrom == hListWnd) {
+					NMLVKEYDOWN* kd = (LPNMLVKEYDOWN) lParam;
+
+					if (kd->wVKey == VK_RETURN) {
+						PostMessage(hWnd, WMU_SET_VALUE, 0, 0);
+						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
+						return true;
+					}
+				}
+
+				if (pHdr->code == (DWORD)NM_DBLCLK && pHdr->hwndFrom == hListWnd) {
+					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
+
+					if (ia->iItem == -1)
+						return 0;
+
+					SendMessage(hWnd, WMU_SET_VALUE, 0, 0);
+				}
+			}
+			break;
+
+			case WM_CLOSE: {
+				RemoveProp(hWnd, TEXT("KEYCOLUMN"));
+				EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 		}
@@ -1864,7 +2062,7 @@ namespace dialogs {
 			case WM_INITDIALOG: {
 				int mode = LOWORD(lParam);
 				int isResultWnd = HIWORD(lParam);
-				HWND hListWnd = isResultWnd ? (HWND)SendMessage(hMainWnd, WMU_GET_CURRENT_RESULTSET, 0, 0) : GetDlgItem(GetWindow(hWnd, GW_OWNER), IDC_DLG_QUERYLIST);
+				HWND hListWnd = isResultWnd ? (HWND)SendMessage(hMainWnd, WMU_GET_CURRENT_RESULTSET, 0, 0) : GetDlgItem(GetWindow(hWnd, GW_OWNER), IDC_DLG_ROWS);
 				HWND hHeader = ListView_GetHeader(hListWnd);
 				int colCount = Header_GetItemCount(hHeader) - !isResultWnd;
 
@@ -4411,6 +4609,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP), prefs::get("word-wrap") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER), prefs::get("http-server") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES), prefs::get("check-update") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_TAB_AUTOCOMPLETE), prefs::get("autocomplete-by-tab") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
 
@@ -4470,6 +4669,7 @@ namespace dialogs {
 					prefs::set("word-wrap", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP)));
 					prefs::set("http-server", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
 					prefs::set("check-update", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES)));
+					prefs::set("autocomplete-by-tab", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_TAB_AUTOCOMPLETE)));
 					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE)));
 					prefs::set("exit-by-escape", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
 					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));
@@ -5298,7 +5498,7 @@ namespace dialogs {
 						SendMessage(hDlgWnd, WM_CLOSE, 0, 0);
 
 					if (wParam == VK_TAB) {
-						HWND hListWnd = GetDlgItem(hDlgWnd, IDC_DLG_QUERYLIST);
+						HWND hListWnd = GetDlgItem(hDlgWnd, IDC_DLG_ROWS);
 						HWND hHeader = ListView_GetHeader(hListWnd);
 
 						HWND hFocusWnd = GetDlgItem(hHeader, IDC_HEADER_EDIT + 1);

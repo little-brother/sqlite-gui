@@ -83,6 +83,7 @@
 			<Add library="libwininet" />
 			<Add library="libws2_32" />
 			<Add library="ole32" />
+			<Add library="uuid" />
 			<Add directory="lib" />
 		</Linker>
 		<Unit filename="ToDo.txt" />

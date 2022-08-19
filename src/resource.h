@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.6"
-#define GUI_VERSION2               1, 7, 6, 0
+#define GUI_VERSION                "1.7.7"
+#define GUI_VERSION2               1, 7, 7, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -29,6 +29,7 @@
 #define IDD_CUSTOM_FUNCTIONS       30
 #define IDD_RESULT_FIND            31
 #define IDD_TEXT_COMPARISON        32
+#define IDD_FK_SELECTOR            33
 
 #define IDD_TOOL_IMPORT_CSV        35
 #define IDD_TOOL_IMPORT_JSON       36
@@ -42,6 +43,7 @@
 #define IDD_TOOL_DATABASE_SEARCH   44
 #define IDD_TOOL_STATISTICS        45
 #define IDD_TOOL_FOREIGN_KEY_CHECK 46
+#define IDD_TOOL_DESKTOP_SHORTCUT  47
 
 #define IDC_DLG_OK                 51
 #define IDC_DLG_CANCEL             52
@@ -93,11 +95,13 @@
 #define IDC_DLG_STARTUP            126
 #define IDC_DLG_MULTIPLE_INSERT    127
 #define IDC_DLG_EDIT_VALUE         128
+#define IDC_DLG_TAB_AUTOCOMPLETE   129
 
 #define IDC_DLG_QUERYADD           130
 #define IDC_DLG_QUERYFILTER        131
 #define IDC_DLG_QUERYLIST          132
 #define IDC_DLG_USERDATA           133
+#define IDC_DLG_ROWS               134
 
 #define IDC_DLG_IDXNAME            135
 #define IDC_DLG_IDXWHERE           136
@@ -173,6 +177,7 @@
 #define IDC_DLG_TRIM_VALUES        219
 #define IDC_DLG_SKIP_EMPTY         220
 #define IDC_DLG_ANORT_ON_ERROR     221
+#define IDC_DLG_LINK_NAME          222
 
 #define IDC_DLG_FIND_STRING        224
 #define IDC_DLG_REPLACE_STRING     225
@@ -292,28 +297,29 @@
 #define IDM_FOREIGN_KEY_CHECK      1530
 #define IDM_VACUUM                 1531
 #define IDM_REINDEX                1532
-#define IDM_LOCATE                 1533
-#define IDM_STATISTICS             1534
-#define IDM_GENERATE_DATA          1535
-#define IDM_DATABASE_DIAGRAM       1536
-#define IDM_COMPARE_DATABASE       1537
-#define IDM_DATABASE_SEARCH        1538
-#define IDM_CUSTOM_FUNCTIONS       1539
+#define IDM_DESKTOP_SHORTCUT       1533
+#define IDM_LOCATE_FILE            1534
+#define IDM_STATISTICS             1535
+#define IDM_GENERATE_DATA          1536
+#define IDM_DATABASE_DIAGRAM       1537
+#define IDM_COMPARE_DATABASE       1538
+#define IDM_DATABASE_SEARCH        1539
+#define IDM_CUSTOM_FUNCTIONS       1540
 
-#define IDM_HELP                   1540
-#define IDM_ABOUT                  1541
-#define IDM_HOMEPAGE               1542
-#define IDM_WIKI                   1543
-#define IDM_HOTKEYS                1544
-#define IDM_TIPS                   1545
-#define IDM_EXTENSIONS             1546
-#define IDM_SQLITE_HOMEPAGE        1547
-#define IDM_TUTORIAL1              1548
-#define IDM_TUTORIAL2              1549
+#define IDM_HELP                   1550
+#define IDM_ABOUT                  1551
+#define IDM_HOMEPAGE               1552
+#define IDM_WIKI                   1553
+#define IDM_HOTKEYS                1554
+#define IDM_TIPS                   1555
+#define IDM_EXTENSIONS             1556
+#define IDM_SQLITE_HOMEPAGE        1557
+#define IDM_TUTORIAL1              1558
+#define IDM_TUTORIAL2              1559
 
 #define IDM_NEXT_RESULT            1590
 #define IDM_CHANGE_FOCUS           1591
-#define IDM_PROCESS_TAB            1592
+#define IDM_PROCESS_INDENT         1592
 #define IDM_ESCAPE                 1593
 
 #define IDM_OPEN_EDITOR            1595
@@ -489,11 +495,12 @@
 #define WMU_UPDATE_MINMAX          WM_USER + 28
 #define WMU_RESORT_DATA            WM_USER + 29
 #define WMU_CREATE_VALUE_SELECTOR  WM_USER + 30
-#define WMU_CTLCOLOREDIT           WM_USER + 31
-#define WMU_GET_CURRENT_RESULTSET  WM_USER + 32
-#define WMU_UPDATE_SIZES           WM_USER + 33
-#define WMU_UPDATE_PREVIEW         WM_USER + 34
-#define WMU_RESET_CACHE            WM_USER + 35
+#define WMU_OPEN_FK_VALUE_SELECTOR WM_USER + 31
+#define WMU_CTLCOLOREDIT           WM_USER + 32
+#define WMU_GET_CURRENT_RESULTSET  WM_USER + 33
+#define WMU_UPDATE_SIZES           WM_USER + 34
+#define WMU_UPDATE_PREVIEW         WM_USER + 35
+#define WMU_RESET_CACHE            WM_USER + 36
 #define WMU_FUNCTION_SAVE          WM_USER + 40
 #define WMU_REGISTER_FUNCTION      WM_USER + 41
 #define WMU_UNREGISTER_FUNCTION    WM_USER + 42

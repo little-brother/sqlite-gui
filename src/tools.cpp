@@ -1,4 +1,10 @@
 #include <stdlib.h>
+
+#include <shobjidl.h>
+#include <objidl.h>
+#include <shlguid.h>
+#include <shlobj.h>
+
 #include "global.h"
 #include "resource.h"
 #include "tools.h"
@@ -2040,6 +2046,94 @@ namespace tools {
 			case WM_SYSKEYDOWN: {
 				if (wParam == VK_ESCAPE)
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	BOOL CALLBACK cbDlgDesktopShortcut (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				ComboBox_AddString(hTable, TEXT("<<Entire database>>"));
+				ComboBox_SetCurSel(hTable, 0);
+
+				sqlite3_stmt *stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type in ('table', 'view') order by type, name", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hTable, name16);
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+					HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+
+					TCHAR linkName16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_LINK_NAME, linkName16, 1023);
+					if (!_tcslen(linkName16))
+						return MessageBox(hWnd, TEXT("The link name is mandatory"), NULL, MB_OK);
+
+					HRESULT hres;
+					IShellLink* psl;
+
+					hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID*)&psl);
+					if (SUCCEEDED(hres)) {
+						IPersistFile* ppf;
+
+						TCHAR appPath16[MAX_PATH];
+						GetModuleFileName(NULL, appPath16, MAX_PATH);
+						psl->SetPath(appPath16);
+
+						const char* dbPath8 = sqlite3_db_filename(db, 0);
+						TCHAR* dbPath16 = utils::utf8to16(dbPath8);
+						TCHAR arguments[MAX_TEXT_LENGTH] = {0};
+
+						int idx = ComboBox_GetCurSel(hTable);
+						if (idx == 0) {
+							_tcscpy(arguments, dbPath16);
+						} else {
+							TCHAR tblname16[1024];
+							ComboBox_GetText(hTable, tblname16, 1023);
+							_sntprintf(arguments, MAX_TEXT_LENGTH, TEXT("\"%ls\" \"%ls\""), dbPath16, tblname16);
+						}
+						psl->SetArguments(arguments);
+						delete [] dbPath16;
+
+						hres = psl->QueryInterface(IID_IPersistFile, (LPVOID*)&ppf);
+						if (SUCCEEDED(hres)) {
+							TCHAR linkPath16[MAX_PATH];
+							SHGetSpecialFolderPath(HWND_DESKTOP, linkPath16, CSIDL_DESKTOP, FALSE);
+							_tcscat(linkPath16, TEXT("\\"));
+							_tcscat(linkPath16, linkName16);
+							_tcscat(linkPath16, TEXT(".lnk"));
+
+							hres = ppf->Save(linkPath16, TRUE);
+							ppf->Release();
+							EndDialog(hWnd, DLG_OK);
+						}
+
+						psl->Release();
+					}
+
+					if (!SUCCEEDED(hres))
+						MessageBox(hWnd, TEXT("Can't create a link"), NULL, MB_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
 			}
 			break;
 
