@@ -5825,6 +5825,7 @@ namespace dialogs {
 					DeleteObject(hBitmap);
 				}
 			}
+			break;
 
 			case WM_LBUTTONDOWN: {
 				SetFocus(hWnd);
