@@ -2512,7 +2512,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				hEditorWnd = tabNo != -1 ? tabs[tabNo].hEditorWnd : cli.hEditorWnd;
 				hTabWnd = tabNo != - 1 ? tabs[tabNo].hTabWnd : 0;
-				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, tabNo != -1 ? (LPARAM)tabs[tabNo].queryElapsedTimes[TabCtrl_GetCurSel(hTabWnd)] : 0);
+				int sel = TabCtrl_GetCurSel(hTabWnd);
+				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, tabNo != -1 && sel != -1 ? (LPARAM)tabs[tabNo].queryElapsedTimes[sel] : 0);
 				SendMessage(hWnd, WMU_UPDATE_ROWNO, 0, 0);
 
 				ShowWindow(hEditorWnd, SW_SHOW);
