@@ -47,7 +47,7 @@ HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
 HTREEITEM treeItems[5]; // 0 - current
 TCHAR treeEditName[255];
-HMENU treeMenus[IDC_MENU_DISABLED]{0};
+HMENU treeMenus[IDC_MENU_TEMP+1]{0};
 
 TCHAR searchString[255]{0};
 TCHAR resultSearchString[255]{0};
