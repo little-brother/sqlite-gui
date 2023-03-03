@@ -47,7 +47,7 @@ HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
 HTREEITEM treeItems[5]; // 0 - current
 TCHAR treeEditName[255];
-HMENU treeMenus[IDC_MENU_DISABLED]{0};
+HMENU treeMenus[IDC_MENU_TEMP + 1]{0};
 
 TCHAR searchString[255]{0};
 TCHAR resultSearchString[255]{0};
@@ -933,11 +933,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_OPEN) {
 				TCHAR path16[MAX_PATH]{0};
-				if (HIWORD(GetKeyState(VK_SHIFT)))
-					return openDb(TEXT("file::memory:?cache=shared"));
+				bool rc = HIWORD(GetKeyState(VK_SHIFT)) ?
+					DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_URI_DB_PATH), hMainWnd, (DLGPROC)dialogs::cbDlgUriDbPath, (LPARAM)&path16) :
+					utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd);
 
-				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd))
-					return openDb(path16);
+				if (rc)
+					openDb(path16);
 			}
 
 			if (cmd == IDM_SAVE_AS) {
@@ -987,7 +988,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					return false;
 
 				TCHAR path16[MAX_PATH]{0};
-				if (utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd)) {
+				bool rc = HIWORD(GetKeyState(VK_SHIFT)) ?
+					DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_URI_DB_PATH), hMainWnd, (DLGPROC)dialogs::cbDlgUriDbPath, (LPARAM)&path16) :
+					utils::openFile(path16, TEXT("Databases (*.sqlite, *.sqlite3, *.db, *.db3)\0*.sqlite;*.sqlite3;*.db;*.db3\0All\0*.*\0"), hWnd);
+
+				if (rc) {
 					char* path8 = utils::utf16to8(path16);
 					attachDb(&db, path8);
 					delete [] path8;
@@ -999,7 +1004,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				DeleteObject(hFont);
 				hFont = loadFont();
 				SendMessage(hTreeWnd, WM_SETFONT, (LPARAM)hFont, false);
-				EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETFONT);
+				if (hTabWnd)
+					EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETFONT);
 
 				for (int i = 0; i < MAX_DIALOG_COUNT; i++) {
 					HWND hDlg = hDialogs[i];
@@ -1126,8 +1132,16 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 								singleLineSpaceCount++;
 
 							if (!isOut) {
-								if (dir == 1)
-									SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)indent);
+								if (dir == 1) {
+									// https://github.com/little-brother/sqlite-gui/issues/128#issuecomment-1221265601
+									if (start == end && indent[0] != TEXT('\t')) {
+										int reducedIndentLen = (start - currLineIdx) % singleLineIndentLen;
+										for (int i = 0; i < 4 - reducedIndentLen; i++)
+											SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)TEXT(" "));
+									} else {
+										SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)indent);
+									}
+								}
 
 								SendMessage(hWnd, EM_SETSCROLLPOS, 0, (LPARAM)&scrollPos);
 								SetWindowRedraw(hEditorWnd, true);
@@ -1149,6 +1163,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					}
 
 					SendMessage(hEditorWnd, EM_SETSEL, currLineIdx, currLineIdx + shift);
+
 					// issue #128
 					if (start == end && indent[0] != TEXT('\t')) {
 						TCHAR singleLineIndent[singleLineIndentLen + 1] = {0};
@@ -1805,12 +1820,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				#endif
 
 				TCHAR buf[1024];
-				_sntprintf(buf, 1023, TEXT("SQLite database editor\n\nGUI version: %ls\nArchitecture: %ls\nSQLite version: %hs\nEncryption support: %ls\nBuild date: %ls\n\nOS: %i.%i.%i %ls %ls"),
+				_sntprintf(buf, 1023, TEXT(" SQLite database editor\n\nGUI version: %ls\nArchitecture: %ls\nSQLite version: %hs\nEncryption support: %ls\nBuild date: %ls\nGCC: %i.%i.%i\n\nOS: %i.%i.%i %ls %ls"),
 					TEXT(GUI_VERSION),
 					GUI_PLATFORM == 32 ? TEXT("x86") : TEXT("x86-64"),
 					sqlite3_libversion(),
 					isCipherSupport ? TEXT("Yes") : TEXT("No"),
 					TEXT(__DATE__),
+					__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__,
 					vi.dwMajorVersion, vi.dwMinorVersion, vi.dwBuildNumber, vi.szCSDVersion,
 					isWin64 ? TEXT("x64") : TEXT("x32")
 				);
@@ -2512,7 +2528,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				hEditorWnd = tabNo != -1 ? tabs[tabNo].hEditorWnd : cli.hEditorWnd;
 				hTabWnd = tabNo != - 1 ? tabs[tabNo].hTabWnd : 0;
-				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, tabNo != -1 ? (LPARAM)tabs[tabNo].queryElapsedTimes[TabCtrl_GetCurSel(hTabWnd)] : 0);
+				int resultNo = TabCtrl_GetCurSel(hTabWnd);
+				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, tabNo != -1 && resultNo != -1 ? (LPARAM)tabs[tabNo].queryElapsedTimes[resultNo] : 0);
 				SendMessage(hWnd, WMU_UPDATE_ROWNO, 0, 0);
 
 				ShowWindow(hEditorWnd, SW_SHOW);
@@ -3635,7 +3652,7 @@ unsigned int __stdcall processCliQuery (void* data) {
 	if (rc == SQLITE_OK && cli.isPlan && !sqlite3_stmt_isexplain(stmt)) {
 		sqlite3_finalize(stmt);
 		char* new8 = new char[strlen(sql8) + strlen("explain query plan ") + 1]{0};
-		sprintf(new8, "explain query plan %s", sql8);
+		sprintf(new8, prefs::get("extended-query-plan") ? "explain %s" : "explain query plan %s", sql8);
 		delete [] sql8;
 		sql8 = new8;
 		rc = sqlite3_prepare_v2(cli.db, sql8, -1, &stmt, 0);
@@ -4064,7 +4081,7 @@ unsigned int __stdcall processEditorQuery (void* data) {
 			if (rc == SQLITE_OK && _tab.isPlan && !sqlite3_stmt_isexplain(stmt)) {
 				sqlite3_finalize(stmt);
 				char* new8 = new char[strlen(sql8) + strlen("explain query plan ") + 1]{0};
-				sprintf(new8, "explain query plan %s", sql8);
+				sprintf(new8, prefs::get("extended-query-plan") ? "explain %s" : "explain query plan %s", sql8);
 				delete [] sql8;
 				sql8 = new8;
 				rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
@@ -4634,7 +4651,30 @@ bool attachDb(sqlite3** _db, const char* path8, const char* _name8) {
 bool openConnection(sqlite3** _db, const char* path8, bool isReadOnly) {
 	int mode = (db == *_db && isReadOnly) || (db != *_db && sqlite3_db_readonly(db, 0)) ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
 	SendMessage(hMainWnd, WMU_SET_ICON, 0, 0);
+
 	sqlite3_open_v2(path8 && strlen(path8) > 0 ? path8 : "file::memory:?cache=shared", _db, mode | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI, NULL);
+	sqlite3_enable_load_extension(*_db, true);
+
+	// load VFS
+	TCHAR searchPath[MAX_PATH + 1]{0};
+	_sntprintf(searchPath, MAX_PATH, TEXT("%ls\\extensions\\vfs\\*.dll"), APP_PATH);
+
+	WIN32_FIND_DATA ffd;
+	HANDLE hFind = FindFirstFile(searchPath, &ffd);
+
+	if (hFind != INVALID_HANDLE_VALUE) {
+		do {
+			TCHAR file16[MAX_PATH + 1]{0};
+			_sntprintf(file16, MAX_PATH, TEXT("%ls/extensions/vfs/%ls"), APP_PATH, ffd.cFileName);
+			char* file8 = utils::utf16to8(file16);
+			if (SQLITE_OK != sqlite3_load_extension(*_db, file8, NULL, NULL))
+				MessageBoxA(hMainWnd, sqlite3_errmsg(*_db), "Can't load extension", MB_OK);
+			delete [] file8;
+		} while (FindNextFile(hFind, &ffd));
+	}
+	FindClose(hFind);
+
+	// load ciphers
 	if (SQLITE_OK != sqlite3_exec(*_db, "select 1 from sqlite_master limit 1", 0, 0, 0)) {
 		bool rc = false;
 		if (isCipherSupport) {
@@ -4672,7 +4712,6 @@ bool openConnection(sqlite3** _db, const char* path8, bool isReadOnly) {
 	}
 
 	// load extensions
-	sqlite3_enable_load_extension(*_db, true);
 	if (prefs::get("autoload-extensions")) {
 		TCHAR extensions[2048] = TEXT(" Loaded extensions: ");
 		TCHAR searchPath[MAX_PATH + 1]{0};
@@ -6770,7 +6809,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 					TCHAR* p = _tcsstr(text, tbl_a);
 					isSuitable = p && // found
 						(_tcslen(p) == tLen || _tcschr(breakers, (p - 1)[0])) && // not xxxtablename alias
-						(p + tbl_aLen == 0 || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : j < 5 ? 3 : j == 5 ? 4 : 6))[0])); // not tablename aliasxxx
+						((p + tbl_aLen)[0] == 0 || _tcschr(breakers, (p + tbl_aLen + (j == 0 ? 1 : j < 5 ? 3 : j == 5 ? 4 : 6))[0])); // not tablename aliasxxx
 				}
 
 				if (isSuitable) {

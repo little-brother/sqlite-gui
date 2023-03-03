@@ -191,6 +191,7 @@ namespace http {
 
 		char* status = (char *) calloc(200, sizeof(char));
 		char* content = (char *) calloc(DEF_RESPONSE_LENGTH, sizeof(char));
+		sprintf(status, "%i", 200);
 
 		char table8[MAX_URL_LENGTH]{0};
 		char id8[MAX_URL_LENGTH]{0};

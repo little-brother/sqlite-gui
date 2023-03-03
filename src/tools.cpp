@@ -2160,7 +2160,7 @@ namespace tools {
 			int pos = 0;
 			for (int i = 0; i < (int)strlen(input); i++) {
 				char c = input[i];
-				if (strchr("<>&\"'", c) > 0) {
+				if (strchr("<>&\"'", c) != 0) {
 					strncpy(output + pos,
 						c == '<' ? "&#60;" :
 						c == '>' ? "&#62;" :

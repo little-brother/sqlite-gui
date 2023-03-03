@@ -22,7 +22,10 @@ namespace utils {
 
 	int openFile(TCHAR* path, const TCHAR* filter, HWND hWnd = 0);
 	int saveFile(TCHAR* path, const TCHAR* filter, const TCHAR* defExt, HWND hWnd = 0);
+
 	bool isFileExists(const TCHAR* path);
+	bool isFileExists(const char* path);
+
 	char* readFile(const char* path);
 	char* getFileName(const char* path, bool noExt = false);
 	TCHAR* getFileName(const TCHAR* path16, bool noExt = false);

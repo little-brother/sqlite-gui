@@ -5,18 +5,18 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 79;
+	const int ICOUNT = 81;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
 		"cli-font-size", "cli-row-limit", "cli-preserve-inja",
-		"backup-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-autocomplete", "autocomplete-by-tab", "use-legacy-rename", "editor-indent",
+		"backup-prefs", "ignore-readonly-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-autocomplete", "autocomplete-by-tab", "use-legacy-rename", "editor-indent",
 		"editor-tab-count", "editor-tab-current", "highlight-delay",
 		"ask-delete", "word-wrap", "clear-values", "recent-count",
 		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "csv-import-is-create-table", "csv-import-is-truncate", "csv-import-is-replace", "csv-import-trim-values", "csv-import-skip-empty", "csv-import-abort-on-error",
 		"odbc-strategy",
-		"sql-export-multiple-insert",
+		"sql-export-multiple-insert", "extended-query-plan",
 		"row-limit", "show-preview", "preview-width", "show-filters", "max-column-width",
 		"chart-grid-size-x", "chart-grid-size-y",
 		"cipher-legacy", "retain-passphrase",
@@ -35,13 +35,13 @@ namespace prefs {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1, 3000, 1,
 		8, 10, 1,
-		0, 1, 1, 1, 1, 1, 0, 0, 0,
+		0, 0, 1, 1, 1, 1, 1, 0, 0, 0,
 		1, 0, 30,
 		0, 0, 0, 10,
 		0, 0, 1,
 		0, 0, 1, 1, 0, 1, 1, 1, 0, // csv-import
 		0,
-		0,
+		0, 0,
 		10000, 0, 200, 0, 400,
 		100, 50,
 		0, 0,
@@ -108,13 +108,36 @@ namespace prefs {
 		return res;
 	}
 
+	bool loadSqlResource(int id) {
+		bool res = false;
+		HMODULE hInstance = GetModuleHandle(0);
+		HRSRC rc = FindResource(hInstance, MAKEINTRESOURCE(id), RT_RCDATA);
+		HGLOBAL rcData = LoadResource(hInstance, rc);
+		int len = SizeofResource(hInstance, rc);
+		LPVOID data = LockResource(rcData);
+		if (len > 0 && data) {
+			char* sql8 = new char[len + 1]{0};
+			memcpy(sql8, (const char*)data, len);
+			res = SQLITE_OK == sqlite3_exec(db, "begin;", 0, 0, 0);
+			res = res && (SQLITE_OK == sqlite3_exec(db, sql8, 0, 0, 0));
+			if (!res)
+				MessageBoxA(0, sqlite3_errmsg(db), 0, 0);
+
+			sqlite3_exec(db, res ? "commit;" : "rollback;", 0, 0, 0);
+
+			delete [] sql8;
+		}
+		FreeResource(rcData);
+
+		return res;
+	}
+
 	bool load(char* path) {
 		bool isOpen = SQLITE_OK == sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 0);
 		bool isReadWrite = isOpen && !sqlite3_db_readonly(db, 0);
 		if (!isOpen || !isReadWrite) {
 			sqlite3_close_v2(db);
 			sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, 0);
-			MessageBox(0, TEXT("Can't open prefs.sqlite for writing.\nSettings will not be saved."), 0, 0);
 
 			if (isOpen) {
 				sqlite3* file;
@@ -129,48 +152,11 @@ namespace prefs {
 			}
 		}
 
-		char sql8[] = "" \
-			"begin;\n" \
-			"create table if not exists prefs (name text not null, value text, primary key (name));" \
-			"create table if not exists recents (path text not null, time real not null, primary key (path));" \
-			"create table if not exists history (query text not null, time real not null, primary key (query));" \
-			"create table if not exists gists (query text not null, time real not null, primary key (query));" \
-			"create table if not exists generators (type text, value text);" \
-			"create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, refname text, query text, primary key (dbname, schema, tblname, colname)); " \
-			"create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); " \
-			"create table if not exists pinned (dbname text not null, name text not null, primary key (dbname, name));" \
-			"create table if not exists cli (\"time\" real, dbname text not null, query text not null, elapsed integer, result text); " \
-			"create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));" \
-			"create table if not exists main.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
-			"create table if not exists temp.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));" \
-			"create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));" \
-			"create table if not exists search_history (\"time\" real, what text, type integer, primary key (what, type));" \
-			"create index if not exists idx_cli on cli (\"time\" desc, dbname);" \
-			"create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);" \
-			"create table if not exists functions (id integer primary key autoincrement, name text, type integer default 0, language text default 'sql', code text, code2 text, code3 text, description text);" \
-			"create table if not exists shortcuts as " \
-			"select cast('Alt + F1' as text) name, cast(0x70 as integer) key, cast(0 as integer) ctrl, cast(1 as integer) alt, cast(' "\
-				"-- Columns\npragma table_info(''$SUB$'');\n\n" \
-				"-- Foreign keys\npragma foreign_key_list(''$SUB$'');\n\n" \
-				"-- DDL\nselect * from sqlite_master where tbl_name = ''$SUB$'';\n\n" \
-				"-- First 10 rows\nselect * from (\"$SUB$\") limit 10;\n\n" \
-				"-- Memory usage\nselect tosize(SUM(payload)) payload, tosize(SUM(pgsize)) total from dbstat where name = ''$SUB$'';" \
-			"' as text) query " \
-			"union select 'Ctrl + 1', 0x31, 1, 0, '-- $SUB$\nselect * from \"$SUB$\" limit 100' " \
-			"union select 'Ctrl + 2', 0x32, 1, 0, '-- $SUB$\nselect count(*) from \"$SUB$\"' " \
-			"union select 'Ctrl + 3', 0x33, 1, 0, NULL " \
-			"union select 'Ctrl + 4', 0x34, 1, 0, NULL " \
-			"union select 'Ctrl + 5', 0x35, 1, 0, NULL " \
-			"union select 'Ctrl + 6', 0x36, 1, 0, NULL " \
-			"union select 'Ctrl + 7', 0x37, 1, 0, NULL " \
-			"union select 'Ctrl + 8', 0x38, 1, 0, NULL " \
-			"union select 'Ctrl + 9', 0x39, 1, 0, NULL " \
-			"union select 'Ctrl + 0', 0x30, 1, 0, NULL "
-			";"
-			"commit;";
-
-		if (SQLITE_OK != sqlite3_exec(db, sql8, 0, 0, 0))
+		if (!loadSqlResource(IDR_INIT))
 			return false;
+
+		if (HELP_VERSION != get("help-version") && loadSqlResource(IDR_HELP))
+			set("help-version", HELP_VERSION);
 
 		// migration from 1.7.1 and earlier versions
 		if (SQLITE_OK != sqlite3_exec(db, "select refname from refs where 1 = 2", 0, 0, 0)) {
@@ -186,23 +172,8 @@ namespace prefs {
 		}
 		sqlite3_finalize(stmt);
 
-		// Load help table from resource
-		if (HELP_VERSION != get("help-version")) {
-			HMODULE hInstance = GetModuleHandle(0);
-			HRSRC rc = FindResource(hInstance, MAKEINTRESOURCE(IDR_HELP), RT_RCDATA);
-			HGLOBAL rcData = LoadResource(hInstance, rc);
-			int size = SizeofResource(hInstance, rc);
-			LPVOID data = LockResource(rcData);
-			if (size > 0 && data) {
-				char sql8[size + 1]{0};
-				memcpy(sql8, (const char*)data, size);
-				if (SQLITE_OK == sqlite3_exec(db, sql8, 0, 0, 0))
-					set("help-version", HELP_VERSION);
-				else
-					MessageBoxA(0, sqlite3_errmsg(db), 0, 0);
-			}
-			FreeResource(rcData);
-		}
+		if (!isReadWrite && !get("ignore-readonly-prefs"))
+				MessageBox(0, TEXT("Can't open prefs.sqlite for writing.\nSettings will not be saved."), 0, 0);
 
 		return true;
 	}

@@ -35,11 +35,11 @@
 /*
 ** Un|Comment to provide additional unicode support to SQLite3 or adjust size for unused features
 */
-#define SQLITE3_UNICODE_FOLD      // ~ 10KB increase
+//#define SQLITE3_UNICODE_FOLD      // ~ 10KB increase
 #define SQLITE3_UNICODE_LOWER     // ~ 10KB increase
 #define SQLITE3_UNICODE_UPPER     // ~ 10KB increase
-#define SQLITE3_UNICODE_TITLE     // ~ 10KB increase
-#define SQLITE3_UNICODE_UNACC     // ~ 30KB increase
+//#define SQLITE3_UNICODE_TITLE     // ~ 10KB increase
+//#define SQLITE3_UNICODE_UNACC     // ~ 30KB increase
                                   // _______________
                                   // ~ 70KB increase
 
@@ -3029,13 +3029,13 @@ SQLITE_EXPORT int sqlite3_unicode_init(sqlite3 *db){
   {"fold",            1,  SQLITE_ANY,  (void*)sqlite3_unicode_fold, caseFunc   },
 #endif  
 #ifdef SQLITE3_UNICODE_LOWER
-  {"lower",           1,  SQLITE_ANY, (void*)sqlite3_unicode_lower, caseFunc   },
+  {"lower",           1,  SQLITE_ANY | SQLITE_DETERMINISTIC, (void*)sqlite3_unicode_lower, caseFunc   },
 #endif
 #ifdef SQLITE3_UNICODE_UPPER
-  {"upper",           1,  SQLITE_ANY, (void*)sqlite3_unicode_upper, caseFunc   },
+  {"upper",           1,  SQLITE_ANY | SQLITE_DETERMINISTIC, (void*)sqlite3_unicode_upper, caseFunc   },
 #endif
 #ifdef SQLITE3_UNICODE_TITLE
-  {"title",           1,  SQLITE_ANY, (void*)sqlite3_unicode_title, caseFunc   },
+  {"title",           1,  SQLITE_ANY | SQLITE_DETERMINISTIC, (void*)sqlite3_unicode_title, caseFunc   },
 #endif
 #ifdef SQLITE3_UNICODE_UNACC
   {"unaccent",        1,  SQLITE_ANY,                            0, unaccFunc  },

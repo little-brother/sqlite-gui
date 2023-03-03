@@ -26,6 +26,7 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgCustomFunctions (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgResultFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgTextComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	BOOL CALLBACK cbDlgUriDbPath (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	LRESULT CALLBACK cbNewScroll(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 }

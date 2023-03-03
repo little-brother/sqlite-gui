@@ -30,7 +30,6 @@
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
 					<Add option="-m32" />
-					<Add option="-U__STRICT_ANSI__" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
@@ -50,7 +49,6 @@
 					<Add option="-Os" />
 					<Add option="-std=c++11" />
 					<Add option="-m64" />
-					<Add option="-U__STRICT_ANSI__" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
@@ -106,6 +104,7 @@
 		<Extensions>
 			<code_completion />
 			<debugger />
+			<envvars />
 		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
+#include <io.h>
 #include "utils.h"
 
 namespace utils {
@@ -280,13 +281,11 @@ namespace utils {
 	}
 
 	bool isFileExists(const TCHAR* path) {
-		WIN32_FIND_DATA FindFileData;
-		HANDLE hFile = FindFirstFile(path, &FindFileData) ;
-		int isFound = hFile != INVALID_HANDLE_VALUE;
-		if (isFound)
-			FindClose(hFile);
+		return _taccess(path, 0) == 0;
+	}
 
-		return isFound;
+	bool isFileExists(const char* path) {
+		return _access(path, 0) == 0;
 	}
 
 	char* readFile(const char* path) {

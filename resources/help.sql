@@ -87,6 +87,7 @@ The unlikely(x) is equivalent to likelihood(x, 0.0625). ', 'select unlikely(3);'
 ('upper', 'function', 'upper (str)', 'Returns a copy of a string with all letter characters converted to uppercase. 
 Doesn''t work for non-ANSI symbols without icu extension.', 'select upper(''SQLite''); --> SQLITE', '', null, 1),
 ('zeroblob', 'function', 'zeroblob(n)', 'Returns a BLOB consisting of n bytes of 0x00.', 'select zeroblob(5);', '', null, 1),
+('unhex', 'function', 'unhex(x, y)', 'Returns a BLOB value which is the decoding of the hexadecimal string x. Hexadecimal digits in Y have no affect on the translation of x. Only characters in y that are not hexadecimal digits are ignored in x.', 'select unhex(0xABC);', '', null, 1),
 
 -- MATH
 ('acos', 'function', 'acos (n)', 'Returns the arc cosine of N (in the range of 0 to pi, expressed in radians).

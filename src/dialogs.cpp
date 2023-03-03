@@ -17,7 +17,6 @@ namespace dialogs {
 	LRESULT CALLBACK cbNewAddTableHeader(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewRowEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewChart(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewChartOptions(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgFKSelector (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -3656,6 +3655,56 @@ namespace dialogs {
 		return false;
 	}
 
+	// lParam, USERDATA = IN-OUT buffer
+	BOOL CALLBACK cbDlgUriDbPath (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+
+				HWND hComboxWnd	= GetDlgItem(hWnd, IDC_DLG_DATABASE);
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select path from recents where path like 'file:%' order by time desc limit 20", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* path16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hComboxWnd, path16);
+						delete [] path16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				SetFocus(hComboxWnd);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK) {
+					TCHAR* path16 = (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+
+					TCHAR buf16[MAX_PATH + 1];
+					HWND hComboxWnd	= GetDlgItem(hWnd, IDC_DLG_DATABASE);
+					GetWindowText(hComboxWnd, buf16, MAX_PATH);
+					TCHAR* trimmed16 = utils::trim(buf16);
+					_sntprintf(path16, MAX_PATH, TEXT("%ls"), _tcslen(trimmed16) ? trimmed16 : TEXT("file::memory:?cache=shared"));
+					delete [] trimmed16;
+					EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+
 	#define CHART_LINES     0
 	#define CHART_DOTS      1
 	#define CHART_AREAS     2
@@ -4638,18 +4687,20 @@ namespace dialogs {
 					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
 				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
 
-				HBRUSH* brushes = new HBRUSH[5]{0};
-				brushes[0] = CreateSolidBrush(prefs::get("color-text"));
-				brushes[1] = CreateSolidBrush(prefs::get("color-null"));
-				brushes[2] = CreateSolidBrush(prefs::get("color-blob"));
-				brushes[3] = CreateSolidBrush(prefs::get("color-integer"));
-				brushes[4] = CreateSolidBrush(prefs::get("color-real"));
-				SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
+				HBRUSH* brushes = new HBRUSH[11]{0};
+				brushes[0] = CreateSolidBrush(prefs::get("color-keyword"));
+				brushes[1] = CreateSolidBrush(prefs::get("color-function"));
+				brushes[2] = CreateSolidBrush(prefs::get("color-quoted"));
+				brushes[3] = CreateSolidBrush(prefs::get("color-comment"));
+				brushes[4] = CreateSolidBrush(prefs::get("color-parenthesis"));
+				brushes[5] = CreateSolidBrush(prefs::get("color-pragma"));
 
-				HWND hEdit = GetDlgItem(hWnd, IDC_DLG_GRID_COLOR_EDIT);
-				cbOldGridColorEdit = (WNDPROC)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)cbNewGridColorEdit);
-				SendMessage(hEdit, WM_SETFONT, (LPARAM)hDefFont, true);
-				SetWindowPos(hEdit, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+				brushes[6] = CreateSolidBrush(prefs::get("color-text"));
+				brushes[7] = CreateSolidBrush(prefs::get("color-null"));
+				brushes[8] = CreateSolidBrush(prefs::get("color-blob"));
+				brushes[9] = CreateSolidBrush(prefs::get("color-integer"));
+				brushes[10] = CreateSolidBrush(prefs::get("color-real"));
+				SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
 			}
 			break;
 
@@ -4696,11 +4747,18 @@ namespace dialogs {
 					delete [] startup8;
 
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					prefs::set("color-text", GetBrushColor(brushes[0]));
-					prefs::set("color-null", GetBrushColor(brushes[1]));
-					prefs::set("color-blob", GetBrushColor(brushes[2]));
-					prefs::set("color-integer", GetBrushColor(brushes[3]));
-					prefs::set("color-real", GetBrushColor(brushes[4]));
+					prefs::set("color-keyword", GetBrushColor(brushes[0]));
+					prefs::set("color-function", GetBrushColor(brushes[1]));
+					prefs::set("color-quoted", GetBrushColor(brushes[2]));
+					prefs::set("color-comment", GetBrushColor(brushes[3]));
+					prefs::set("color-parenthesis", GetBrushColor(brushes[4]));
+					prefs::set("color-pragma", GetBrushColor(brushes[5]));
+
+					prefs::set("color-text", GetBrushColor(brushes[6]));
+					prefs::set("color-null", GetBrushColor(brushes[7]));
+					prefs::set("color-blob", GetBrushColor(brushes[8]));
+					prefs::set("color-integer", GetBrushColor(brushes[9]));
+					prefs::set("color-real", GetBrushColor(brushes[10]));
 
 					EndDialog(hWnd, DLG_OK);
 				}
@@ -4711,44 +4769,51 @@ namespace dialogs {
 				if (HIWORD(wParam) == STN_CLICKED && LOWORD(wParam) == IDC_DLG_HTTP_SERVER)
 					EnableWindow(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER_PORT), Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
 
-				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_GRID_COLOR && LOWORD(wParam) <= IDC_DLG_GRID_COLOR + 10)) {
-					SetFocus(0); // trigger WM_KILLFOCUS if edit is visible
-					HWND hEdit = GetDlgItem(hWnd, IDC_DLG_GRID_COLOR_EDIT);
-					RECT rc{0};
-					GetWindowRect((HWND)lParam, &rc);
-					POINT p{rc.left, rc.top};
-					ScreenToClient(hWnd, &p);
-					SetWindowPos(hEdit, 0, p.x, p.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_COLOR && LOWORD(wParam) <= IDC_DLG_COLOR + 10)) {
+					COLORREF colors[16] = {GetSysColor(COLOR_BTNFACE)}; // Fix bug: sometimes dialog has filled background as the first custom color.
 
-					int no = LOWORD(wParam) - IDC_DLG_GRID_COLOR;
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					TCHAR color[11];
-					COLORREF c = GetBrushColor(brushes[no]);
-					_sntprintf(color, 10, TEXT("%02x%02x%02x"), GetRValue(c), GetGValue(c), GetBValue(c));
-					SetWindowText(hEdit, color);
-					SetWindowLongPtr(hEdit, GWLP_USERDATA, no);
+					int brushNo = LOWORD(wParam) - IDC_DLG_COLOR;
+					CHOOSECOLOR cc = {0};
+					cc.lStructSize = sizeof(cc);
+					cc.hwndOwner = hWnd;
+					cc.lpCustColors = colors;
+					cc.rgbResult = GetBrushColor(brushes[brushNo]);
+					cc.lpTemplateName = MAKEINTRESOURCE(IDD_COLOR_PICKER);
+					cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLETEMPLATE;
 
-					ShowWindow(hEdit, SW_SHOW);
-					SetFocus(hEdit);
+					if (ChooseColor(&cc)) {
+						DeleteObject(brushes[brushNo]);
+						brushes[brushNo] = CreateSolidBrush(cc.rgbResult);
+						InvalidateRect((HWND)lParam, NULL, TRUE);
+					}
 				}
 			}
 			break;
 
 			case WM_CTLCOLORSTATIC: {
 				int id = GetDlgCtrlID((HWND)lParam);
-				if (id >= IDC_DLG_GRID_COLOR && id < IDC_DLG_GRID_COLOR + 5) {
+				if (id >= IDC_DLG_COLOR && id < IDC_DLG_COLOR + 11) {
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					HBRUSH hBrush = brushes[id - IDC_DLG_GRID_COLOR];
+					int brushNo = id - IDC_DLG_COLOR;
+					HBRUSH hBrush = brushes[brushNo];
+					HDC hDC = (HDC)wParam;
 
-					SetBkColor((HDC)wParam, GetBrushColor(hBrush));
-					return (INT_PTR)hBrush;
+					if (brushNo < 6) {
+						SetTextColor(hDC, GetBrushColor(brushes[brushNo]));
+						SetBkColor(hDC, RGB(255, 255, 255));
+						return (INT_PTR)GetStockObject(WHITE_BRUSH);
+					} else {
+						SetBkColor(hDC, GetBrushColor(hBrush));
+						return (INT_PTR)hBrush;
+					}
 				}
 			}
 			break;
 
 			case WM_CLOSE: {
 				HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-				for (int i = 0; i < 5; i++)
+				for (int i = 0; i < 11; i++)
 					DeleteObject(brushes[i]);
 				delete [] brushes;
 				RemoveProp(hWnd, TEXT("BRUSHES"));
@@ -5555,49 +5620,6 @@ namespace dialogs {
 		return CallWindowProc(cbOldRowEdit, hWnd, msg, wParam, lParam);
 	}
 
-	// USERDATA = MAKELPARAM(iItem, iSubItem)
-	LRESULT CALLBACK cbNewGridColorEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if (msg == WM_GETDLGCODE)
-			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldEditDataEdit, hWnd, msg, wParam, lParam));
-
-		switch(msg){
-			case WM_KILLFOCUS: {
-				ShowWindow(hWnd, SW_HIDE);
-				int no = (int)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-				if (no == -1 || no > 4)
-					return true;
-
-				HWND hDlg = GetParent(hWnd);
-				HBRUSH* brushes = (HBRUSH*)GetProp(hDlg, TEXT("BRUSHES"));
-				if (!brushes)
-					return true;
-				DeleteObject(brushes[no]);
-
-				TCHAR buf[32]{0};
-				GetWindowText(hWnd, buf, 32);
-				int c = (int)_tcstol(buf, NULL, 16);
-				brushes[no] = CreateSolidBrush(RGB(GetBValue(c), GetGValue(c), GetRValue(c))); // reverse
-			}
-			break;
-
-			case WM_KEYDOWN: {
-				if (wParam == VK_RETURN) {
-					ShowWindow(hWnd, SW_HIDE);
-					return true;
-				}
-
-				if (wParam == VK_ESCAPE) {
-					SetWindowLongPtr(hWnd, GWLP_USERDATA, -1);
-					ShowWindow(hWnd, SW_HIDE);
-					return true;
-				}
-			}
-			break;
-		}
-
-		return CallWindowProc(cbOldGridColorEdit, hWnd, msg, wParam, lParam);
-	}
-
 	bool ListView_UpdateCell(HWND hListWnd, int rowNo, int colNo, TCHAR* value16) {
 		HWND hHeader = (HWND)ListView_GetHeader(hListWnd);
 		TCHAR column16[256]{0};
@@ -5825,6 +5847,7 @@ namespace dialogs {
 					DeleteObject(hBitmap);
 				}
 			}
+			break;
 
 			case WM_LBUTTONDOWN: {
 				SetFocus(hWnd);
