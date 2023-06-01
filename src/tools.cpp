@@ -2086,6 +2086,8 @@ namespace tools {
 					if (!_tcslen(linkName16))
 						return MessageBox(hWnd, TEXT("The link name is mandatory"), NULL, MB_OK);
 
+					bool isReadOnly = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_READ_ONLY)) == BST_CHECKED;
+
 					HRESULT hres;
 					IShellLink* psl;
 
@@ -2107,7 +2109,7 @@ namespace tools {
 						} else {
 							TCHAR tblname16[1024];
 							ComboBox_GetText(hTable, tblname16, 1023);
-							_sntprintf(arguments, MAX_TEXT_LENGTH, TEXT("\"%ls\" \"%ls\""), dbPath16, tblname16);
+							_sntprintf(arguments, MAX_TEXT_LENGTH, TEXT("\"%ls\" \"%ls\" %ls"), dbPath16, tblname16, isReadOnly ? TEXT("--readonly") : TEXT(""));
 						}
 						psl->SetArguments(arguments);
 						delete [] dbPath16;

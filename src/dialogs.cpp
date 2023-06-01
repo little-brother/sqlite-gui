@@ -896,7 +896,7 @@ namespace dialogs {
 					sprintf(query8, "select * from \"%s\".\"%s\" where 1 = 2", schema8, tablename8);
 					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 						sqlite3_step(stmt);
-						for (int colNo = 0; colNo < colCount; colNo++)
+						for (int colNo = 0; colNo < sqlite3_column_count(stmt); colNo++)
 							decltypes[colNo + 1] = utils::sqlite3_type(sqlite3_column_decltype(stmt, colNo));
 					}
 					sqlite3_finalize(stmt);
@@ -999,20 +999,6 @@ namespace dialogs {
 				sqlite3_stmt *stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					int colCount = sqlite3_column_count(stmt);
-					if (GetProp(hWnd, TEXT("BLOBS")) == NULL) {
-						bool* blobs = new bool[colCount]{0};
-						for (int i = 0; i < colCount; i++)
-							blobs[i] = utils::sqlite3_type(sqlite3_column_decltype(stmt, i)) == SQLITE_BLOB;
-						SetProp(hWnd, TEXT("BLOBS"), (HANDLE)blobs);
-					}
-
-					if (GetProp(hWnd, TEXT("TEXTS")) == NULL) {
-						bool* texts = new bool[colCount]{0};
-						for (int i = 0; i < colCount; i++)
-							texts[i] = utils::sqlite3_type(sqlite3_column_decltype(stmt, i)) == SQLITE_TEXT;
-						SetProp(hWnd, TEXT("TEXTS"), (HANDLE)texts);
-					}
-
 					int bindNo = 0;
 					for (int colNo = 1; (colNo < colCount) && strlen(where8); colNo++) {
 						HWND hEdit = GetDlgItem(hHeader, IDC_HEADER_EDIT + colNo);
@@ -1081,11 +1067,13 @@ namespace dialogs {
 
 			case WMU_SET_CURRENT_CELL: {
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ROWS);
-				RECT rect;
+				RECT rc, rc2;
+
+				// Reset previous position
 				int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 				int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
-				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
-				InvalidateRect(hListWnd, &rect, false);
+				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rc);
+				InvalidateRect(hListWnd, &rc, false);
 
 				currRow = wParam;
 				currCol = lParam;
@@ -1093,8 +1081,15 @@ namespace dialogs {
 				SetProp(hWnd, TEXT("CURRENTROW"), IntToPtr(currRow));
 				SetProp(hWnd, TEXT("CURRENTCOLUMN"), IntToPtr(currCol));
 
-				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rect);
-				InvalidateRect(hListWnd, &rect, false);
+				ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rc);
+				GetClientRect(hListWnd, &rc2);
+				int w = rc.right - rc.left;
+				int dx = rc2.right < rc.right ? rc.left - rc2.right + w : rc.left < 0 ? rc.left : 0;
+				ListView_Scroll(hListWnd, currCol > 0 ? dx : 0, 0);
+
+				ListView_EnsureVisible(hListWnd, currRow, FALSE);
+
+				InvalidateRect(hListWnd, &rc, false);
 			}
 			break;
 
@@ -1217,8 +1212,8 @@ namespace dialogs {
 					TCHAR buf[10];
 					ListView_GetItemText(hListWnd, ia->iItem, ia->iSubItem, buf, 10);
 
-					bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
-					HMENU hMenu = !canUpdate ? hViewDataMenu : blobs[ia->iSubItem - 1] || _tcsstr(buf, TEXT("(BLOB:")) == buf ? hBlobMenu : hEditDataMenu;
+					byte* decltypes = (byte*)GetProp(hWnd, TEXT("DECLTYPES"));
+					HMENU hMenu = !canUpdate ? hViewDataMenu : decltypes[ia->iSubItem] == SQLITE_BLOB || _tcsstr(buf, TEXT("(BLOB:")) == buf ? hBlobMenu : hEditDataMenu;
 
 					if (hMenu == hEditDataMenu) {
 						bool* generated = (bool*)GetProp(GetParent(hListWnd), TEXT("GENERATED"));
@@ -1283,9 +1278,8 @@ namespace dialogs {
 						int currRow = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 						int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 						if (pCustomDraw->nmcd.dwItemSpec == (DWORD)currRow && (GetFocus() == hListWnd) && currCol > 0) {
-							HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 255, 0));
 							HDC hDC = pCustomDraw->nmcd.hdc;
-							SelectObject(hDC, hPen);
+							HPEN hOldPen = (HPEN)SelectObject(hDC, hCurrentCellPen);
 
 							RECT rc {0};
 							ListView_GetSubItemRect(hListWnd, currRow, currCol, LVIR_BOUNDS, &rc);
@@ -1294,7 +1288,7 @@ namespace dialogs {
 							LineTo(hDC, rc.right - 1, rc.bottom - 2);
 							LineTo(hDC, rc.left + 1, rc.bottom - 2);
 							LineTo(hDC, rc.left + 1, rc.top);
-							DeleteObject(hPen);
+							SelectObject(hDC, hOldPen);
 						}
 					}
 
@@ -1368,6 +1362,13 @@ namespace dialogs {
 						ListView_SetItemState(hListWnd, rowNo, LVIS_SELECTED, LVIS_SELECTED);
 						SetWindowLongPtr(hWnd, DWLP_MSGRESULT, true);
 						return true;
+					}
+
+					if (kd->wVKey == 0x49) { // Ctrl + I
+						for (int rowNo = 0; rowNo < ListView_GetItemCount(hListWnd); rowNo++) {
+							BOOL isSelected = ListView_GetItemState(hListWnd, rowNo, LVIS_SELECTED) & LVIS_SELECTED;
+							ListView_SetItemState(hListWnd, rowNo, isSelected ? 0 : LVIS_SELECTED, LVIS_SELECTED);
+						}
 					}
 
 					if (canUpdate && (kd->wVKey == VK_LEFT || kd->wVKey == VK_RIGHT)) {
@@ -1508,6 +1509,8 @@ namespace dialogs {
 					char sql8[1024 + strlen(tablename8) + strlen(schema8) + (hasRowid ? 0 : strlen(md5keys8)) + count * 2]{0};
 					sprintf(sql8, "delete from \"%s\".\"%s\" where %s in (%s)", schema8, tablename8, hasRowid ? "rowid" : md5keys8,  placeholders8);
 
+					bool isForceUpdate = GetProp(hWnd, TEXT("FORCEUPDATE"));
+
 					sqlite3_stmt *stmt;
 					if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
 						int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd));
@@ -1521,38 +1524,50 @@ namespace dialogs {
 							delete [] buf8;
 						}
 
-						if (SQLITE_DONE == sqlite3_step(stmt)) {
+						if (SQLITE_DONE == sqlite3_step(stmt) && !isForceUpdate) {
+							// This dialog doesn't store BLOBs
+							int vCount = (int)(LONG_PTR)GetProp(hListWnd, TEXT("VALUECOUNT"));
 							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-							if (datatypes) {
-								int rowCount = ListView_GetItemCount(hListWnd);
-								int colCount2 = colCount - 1;
-								byte* datatypes2 = new byte[rowCount * colCount2 + 1000]{0};
-								int delCount = 0;
-								for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-									if (ListView_GetItemState(hListWnd, rowNo, LVIS_SELECTED) & LVIS_SELECTED) {
-										delCount++;
-									} else {
-										for (int colNo = 0; colNo < colCount2; colNo++)
-											datatypes2[colNo + colCount2 * (rowNo - delCount)] = datatypes[colNo + colCount2 * rowNo];
+
+							int rowCount = ListView_GetItemCount(hListWnd);
+							int colCount2 = colCount - 1;
+							byte* datatypes2 = (byte*)calloc(vCount, sizeof(byte));
+
+							int firstRow = ListView_GetNextItem(hListWnd, 0, LVNI_SELECTED);
+
+							int delCount = 0;
+							for (int rowNo = 0; rowNo < rowCount; rowNo++) {
+								if (ListView_GetItemState(hListWnd, rowNo, LVIS_SELECTED) & LVIS_SELECTED) {
+									delCount++;
+								} else {
+									for (int colNo = 0; colNo < colCount2; colNo++) {
+										datatypes2[colNo + colCount2 * (rowNo - delCount)] = datatypes[colNo + colCount2 * rowNo];
 									}
 								}
-								delete [] datatypes;
-								SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes2);
 							}
+							free(datatypes);
+
+							vCount = (rowCount - delCount) * (colCount + 1);
+							datatypes2 = (byte*)realloc(datatypes2, vCount * sizeof(byte));
+							SetProp(hListWnd, TEXT("VALUECOUNT"), IntToPtr(vCount));
+							SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes2);
 
 							pos = -1;
 							while((pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED)) != -1)
 								ListView_DeleteItem(hListWnd, pos);
 							ListView_SetItemState (hListWnd, pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
 							InvalidateRect(hListWnd, 0, 0);
-							PostMessage(hWnd, WMU_SET_CURRENT_CELL, 0, 0);
+							int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
+							if (firstRow - 1 > 0)
+								ListView_SetItemState (hListWnd, firstRow - 1, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+							PostMessage(hWnd, WMU_SET_CURRENT_CELL, MAX(0, firstRow - 1), currCol);
 						} else {
 							showDbError(hWnd);
 						}
 					}
 					sqlite3_finalize(stmt);
 
-					if (GetProp(hWnd, TEXT("FORCEUPDATE")))
+					if (isForceUpdate)
 						SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
 				}
 
@@ -1741,18 +1756,6 @@ namespace dialogs {
 				char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
 				delete [] schema8;
 				RemoveProp(hWnd, TEXT("SCHEMA8"));
-
-				bool* blobs = (bool*)GetProp(hWnd, TEXT("BLOBS"));
-				if (blobs != NULL) {
-					delete [] blobs;
-					RemoveProp(hWnd, TEXT("BLOBS"));
-				}
-
-				bool* texts = (bool*)GetProp(hWnd, TEXT("TEXTS"));
-				if (texts != NULL) {
-					delete [] texts;
-					RemoveProp(hWnd, TEXT("TEXTS"));
-				}
 
 				bool* generated = (bool*)GetProp(hWnd, TEXT("GENERATED"));
 				if (generated != NULL) {
@@ -2186,17 +2189,18 @@ namespace dialogs {
 					TCHAR buf[MAX_TEXT_LENGTH]{0};
 					GetWindowText(hEdit, buf, MAX_TEXT_LENGTH);
 
-					if (mode != ROW_VIEW) {
+					if (mode == ROW_VIEW) {
+						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_VIEWDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf);
+					} else {
 						byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-						int rc = datatypes && datatypes[colNo] == SQLITE_BLOB ?
+						byte* decltypes = (byte*)GetProp(GetParent(hListWnd), TEXT("DECLTYPES"));
+
+						int rc = (datatypes && datatypes[colNo] == SQLITE_BLOB) || (decltypes && decltypes[colNo] == SQLITE_BLOB) ?
 							utils::openFile(buf, NULL, hWnd) :
 							DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf);
 						if (rc)
 							SetWindowText(hEdit, buf);
 					}
-
-					if (mode == ROW_VIEW)
-						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_VIEWDATA_VALUE), hWnd, (DLGPROC)&cbDlgViewEditDataValue, (LPARAM)buf);
 
 					SetFocus(hEdit);
 				}
@@ -2338,7 +2342,7 @@ namespace dialogs {
 					sqlite3_stmt *stmt;
 					bool rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
 					if (rc) {
-						bool* texts = (bool*)GetProp(GetParent(hListWnd), TEXT("TEXTS"));
+						byte* decltypes = (byte*)GetProp(GetParent(hListWnd), TEXT("DECLTYPES"));
 						int valNo = 1;
 						for (int i = 1; i < colCount; i++) {
 							HWND hEdit = GetDlgItem(hColumnsWnd, IDC_ROW_EDIT + i);
@@ -2363,7 +2367,7 @@ namespace dialogs {
 										delete [] data8;
 									}
 								} else
-									utils::sqlite3_bind_variant(stmt, valNo, values8[i], texts != 0 && texts[i - 1]);
+									utils::sqlite3_bind_variant(stmt, valNo, values8[i], decltypes != 0 && decltypes[i - 1] == SQLITE_TEXT);
 								valNo++;
 							}
 						}
@@ -2425,6 +2429,13 @@ namespace dialogs {
 
 						if (SQLITE_ROW == sqlite3_step(stmt)) {
 							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+
+							if (mode == ROW_ADD) {
+								int vCount = (int)(LONG_PTR)GetProp(hListWnd, TEXT("VALUECOUNT"));
+								vCount += colCount + 1;
+								datatypes = (byte*)realloc(datatypes, vCount * sizeof(byte));
+								SetProp(hListWnd, TEXT("VALUECOUNT"), IntToPtr(vCount));
+							}
 
 							int rowNo = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currRow;
 							for (int i = 0; i < sqlite3_column_count(stmt); i++) {
@@ -2491,14 +2502,11 @@ namespace dialogs {
 				int colCount = HIWORD(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 				int id = GetDlgCtrlID((HWND)lParam);
 				if (id >= IDC_ROW_EDIT && id < IDC_ROW_EDIT + colCount) {
-					HWND hListWnd = (HWND)GetProp(hWnd, TEXT("LISTVIEW"));
-					byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					int colNo = id - IDC_ROW_EDIT;
-
-					if (!brushes || !datatypes)
+					if (!brushes)
 						return 0;
 
+					int colNo = id - IDC_ROW_EDIT;
 					HBRUSH hBrush = brushes[colNo];
 					SetBkColor((HDC)wParam, GetBrushColor(hBrush));
 					return (INT_PTR)hBrush;
@@ -4617,6 +4625,8 @@ namespace dialogs {
 		return lbr.lbColor;
 	}
 
+	const int SETTING_COLOR_COUNT = 12;
+
 	BOOL CALLBACK cbDlgSettings (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -4687,7 +4697,7 @@ namespace dialogs {
 					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
 				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
 
-				HBRUSH* brushes = new HBRUSH[11]{0};
+				HBRUSH* brushes = new HBRUSH[SETTING_COLOR_COUNT]{0};
 				brushes[0] = CreateSolidBrush(prefs::get("color-keyword"));
 				brushes[1] = CreateSolidBrush(prefs::get("color-function"));
 				brushes[2] = CreateSolidBrush(prefs::get("color-quoted"));
@@ -4700,6 +4710,7 @@ namespace dialogs {
 				brushes[8] = CreateSolidBrush(prefs::get("color-blob"));
 				brushes[9] = CreateSolidBrush(prefs::get("color-integer"));
 				brushes[10] = CreateSolidBrush(prefs::get("color-real"));
+				brushes[11] = CreateSolidBrush(prefs::get("color-current-cell"));
 				SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
 			}
 			break;
@@ -4760,6 +4771,11 @@ namespace dialogs {
 					prefs::set("color-integer", GetBrushColor(brushes[9]));
 					prefs::set("color-real", GetBrushColor(brushes[10]));
 
+					COLORREF cellColor = GetBrushColor(brushes[11]);
+					prefs::set("color-current-cell", cellColor);
+					DeleteObject(hCurrentCellPen);
+					hCurrentCellPen = CreatePen(PS_SOLID, 1, cellColor);
+
 					EndDialog(hWnd, DLG_OK);
 				}
 
@@ -4769,7 +4785,7 @@ namespace dialogs {
 				if (HIWORD(wParam) == STN_CLICKED && LOWORD(wParam) == IDC_DLG_HTTP_SERVER)
 					EnableWindow(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER_PORT), Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
 
-				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_COLOR && LOWORD(wParam) <= IDC_DLG_COLOR + 10)) {
+				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_COLOR && LOWORD(wParam) < IDC_DLG_COLOR + SETTING_COLOR_COUNT)) {
 					COLORREF colors[16] = {GetSysColor(COLOR_BTNFACE)}; // Fix bug: sometimes dialog has filled background as the first custom color.
 
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
@@ -4793,7 +4809,7 @@ namespace dialogs {
 
 			case WM_CTLCOLORSTATIC: {
 				int id = GetDlgCtrlID((HWND)lParam);
-				if (id >= IDC_DLG_COLOR && id < IDC_DLG_COLOR + 11) {
+				if (id >= IDC_DLG_COLOR && id < IDC_DLG_COLOR + SETTING_COLOR_COUNT) {
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
 					int brushNo = id - IDC_DLG_COLOR;
 					HBRUSH hBrush = brushes[brushNo];
@@ -4813,7 +4829,7 @@ namespace dialogs {
 
 			case WM_CLOSE: {
 				HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-				for (int i = 0; i < 11; i++)
+				for (int i = 0; i < SETTING_COLOR_COUNT; i++)
 					DeleteObject(brushes[i]);
 				delete [] brushes;
 				RemoveProp(hWnd, TEXT("BRUSHES"));
@@ -5640,20 +5656,20 @@ namespace dialogs {
 			char* md5keys8 = (char*)GetProp(hParentWnd, TEXT("MD5KEYS8"));
 			bool hasRowid = GetProp(hParentWnd, TEXT("HASROWID"));
 			byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-			bool* texts = (bool*)GetProp(hParentWnd, TEXT("TEXTS"));
+			byte* decltypes = (byte*)GetProp(hParentWnd, TEXT("DECLTYPES"));
 			char query8[256 + 2 * strlen(schema8) + strlen(tablename8) + strlen(column8) + (hasRowid ? 0 : strlen(md5keys8))];
 			sprintf(query8, "update \"%s\".\"%s\" set \"%s\" = ?1 where %s = ?2", schema8, tablename8, column8, hasRowid ? "rowid" : md5keys8);
 
 			sqlite3_stmt *stmt;
 			if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
-				utils::sqlite3_bind_variant(stmt, 1, value8, texts && texts[colNo - 1]);
+				utils::sqlite3_bind_variant(stmt, 1, value8, decltypes && decltypes[colNo - 1] == SQLITE_TEXT);
 				sqlite3_bind_text(stmt, 2, oldValue8, strlen(oldValue8), SQLITE_TRANSIENT);
 				if (SQLITE_DONE == sqlite3_step(stmt)) {
 					ListView_SetItemText(hListWnd, rowNo, colNo, value16);
 					if (datatypes) {
 						double d = 0;
 						byte type = isNull ? SQLITE_NULL :
-							!utils::isNumber(value8, &d) || (texts && texts[colNo - 1]) ? SQLITE_TEXT :
+							!utils::isNumber(value8, &d) || (decltypes && decltypes[colNo - 1] == SQLITE_TEXT) ? SQLITE_TEXT :
 							d == round(d) ? SQLITE_INTEGER :
 							SQLITE_FLOAT;
 						datatypes[colNo + (colCount - 1) * rowNo] = type;

@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.8"
-#define GUI_VERSION2               1, 7, 8, 0
+#define GUI_VERSION                "1.7.9"
+#define GUI_VERSION2               1, 7, 9, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -204,6 +204,7 @@
 #define IDC_DLG_SKIP_EMPTY         434
 #define IDC_DLG_ANORT_ON_ERROR     435
 #define IDC_DLG_LINK_NAME          436
+#define IDC_DLG_READ_ONLY          437
 
 #define IDC_DLG_FONT_LABEL         440
 #define IDC_DLG_ESCAPE_LABEL       441

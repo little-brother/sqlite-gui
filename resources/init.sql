@@ -6,6 +6,7 @@ create table if not exists generators (type text, value text);
 create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, refname text, query text, primary key (dbname, schema, tblname, colname)); 
 create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); 
 create table if not exists pinned (dbname text not null, name text not null, primary key (dbname, name));
+create table if not exists pinned_results (id integer primary key autoincrement, tab_no integer, caption text, query text, elapsed_time text);
 create table if not exists cli ("time" real, dbname text not null, query text not null, elapsed integer, result text); 
 create table if not exists diagrams (dbname text, tblname text, x integer, y integer, width integer, height integer, primary key (dbname, tblname));
 create table if not exists main.encryption (dbpath text, param text, idc integer, value text, no integer, primary key (dbpath, param));

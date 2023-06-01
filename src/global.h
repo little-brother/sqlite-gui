@@ -77,6 +77,8 @@ extern COLORREF GRIDCOLORS[8];
 
 extern HFONT hDefFont;
 extern HFONT hFont;
+extern HPEN hCurrentCellPen;
+
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
