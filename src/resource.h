@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.7.9"
-#define GUI_VERSION2               1, 7, 9, 0
+#define GUI_VERSION                "1.8.0"
+#define GUI_VERSION2               1, 8, 0, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -31,7 +31,7 @@
 #define IDD_TEXT_COMPARISON        32
 #define IDD_FK_SELECTOR            33
 #define IDD_COLOR_PICKER           34
-#define IDD_URI_DB_PATH           35
+#define IDD_URI_DB_PATH            35
 
 #define IDD_TOOL_IMPORT_CSV        55
 #define IDD_TOOL_IMPORT_JSON       56

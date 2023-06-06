@@ -1466,6 +1466,8 @@ namespace dialogs {
 					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ROW), hWnd, (DLGPROC)&cbDlgRow, MAKELPARAM(ROW_ADD, 0));
 					int currRow = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
 					SendMessage(hWnd, WMU_SET_CURRENT_CELL, currRow, currCol);
+
+					ListView_SetSelectionMark(hListWnd, currRow);
 				}
 
 				if (cmd == IDM_ROW_REFRESH)
@@ -1560,7 +1562,9 @@ namespace dialogs {
 							int currCol = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
 							if (firstRow - 1 > 0)
 								ListView_SetItemState (hListWnd, firstRow - 1, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
-							PostMessage(hWnd, WMU_SET_CURRENT_CELL, MAX(0, firstRow - 1), currCol);
+							int currRow = MAX(0, firstRow - 1);
+							PostMessage(hWnd, WMU_SET_CURRENT_CELL, currRow, currCol);
+							PostMessage(hListWnd, LVM_SETSELECTIONMARK, 0, currRow);
 						} else {
 							showDbError(hWnd);
 						}
@@ -2435,6 +2439,7 @@ namespace dialogs {
 								vCount += colCount + 1;
 								datatypes = (byte*)realloc(datatypes, vCount * sizeof(byte));
 								SetProp(hListWnd, TEXT("VALUECOUNT"), IntToPtr(vCount));
+								SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes);
 							}
 
 							int rowNo = mode == ROW_ADD ? ListView_GetItemCount(hListWnd) : currRow;
@@ -2472,6 +2477,9 @@ namespace dialogs {
 						if (mode == ROW_EDIT)
 							SendMessage(hWnd, WMU_SET_DLG_ROW_DATA, 0, 0);
 						SetFocus(GetDlgItem(hColumnsWnd, IDC_ROW_EDIT + 1));
+
+						for (int i = 1; prefs::get("clear-values") && (mode == ROW_ADD) && (i <= colCount); i++)
+							SetDlgItemText(hColumnsWnd, IDC_ROW_EDIT + i, TEXT(""));
 					} else
 						showDbError(hWnd);
 
@@ -2488,9 +2496,6 @@ namespace dialogs {
 						if (values8[i])
 							delete [] values8[i];
 					}
-
-					for (int i = 1; prefs::get("clear-values") && (mode == ROW_ADD) && (i <= colCount); i++)
-						SetDlgItemText(hColumnsWnd, IDC_ROW_EDIT + i, TEXT(""));
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)

@@ -1111,6 +1111,7 @@ BEGIN
 		"Ctrl + Tab - Toggle to a next result\n" \
 		"Ctrl + 1, Ctrl + 2, ... - Sort by column 1, 2, ... \n" \
 		"Ctrl + I - Invert row selection\n" \
+		"Ctrl + P - Show/Hide a preview\n" \
 		"Ctrl + Shift + C - Copy selected rows to clipboard with a header\n" \
 		"Alt + Click - Show referenced data\n" \
 		"Alt + Double Click - Drill-down by referenced value\n" \

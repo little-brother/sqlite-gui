@@ -2272,6 +2272,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							}
 						}
 
+						if (kd->wVKey == 0x50) { // Ctrl + P
+							SendMessage(hWnd, WM_COMMAND, IDM_RESULT_PREVIEW, 0);
+							return 0;
+						}
+
 						bool isNum = kd->wVKey >= 0x31 && kd->wVKey <= 0x39;
 						bool isNumPad = kd->wVKey >= 0x61 && kd->wVKey <= 0x69;
 						if ((isNum || isNumPad) && GetKeyState(VK_CONTROL)) // Ctrl + 1-9
@@ -5897,14 +5902,6 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		ListView_SetColumn(hListWnd, colNo, &lvc);
 	}
 
-	int vCount = (colCount + 1) * rowCount;
-	SetProp(hListWnd, TEXT("VALUECOUNT"), IntToPtr(vCount));
-	datatypes = (byte*)realloc(datatypes, vCount * sizeof(byte));
-	SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes);
-
-
-	SetProp(hListWnd, TEXT("ORDERBY"), new int(0));
-
 	ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_LABELTIP);
 	if ((WNDPROC)GetWindowLongPtr(hListWnd, GWLP_WNDPROC) != cbNewListView)
 		SetProp(hListWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hListWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewListView));
@@ -5918,28 +5915,45 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		delete [] err16;
 
 		if (!isVirtual) {
+			TCHAR rowLength16[64];
+			_sntprintf(rowLength16, 63, TEXT("%i"), _tcslen(msg16));
 			LVITEM lvi = {0};
 			lvi.mask = LVIF_TEXT;
+			lvi.iItem = rowNo;
 			lvi.iSubItem = 0;
-			lvi.iItem = 0;
+			lvi.pszText = rowLength16;
+			lvi.cchTextMax = _tcslen(rowLength16) + 1;
+			ListView_InsertItem(hListWnd, &lvi);
+
+			lvi.iSubItem = 1;
+			lvi.mask = LVIF_TEXT;
 			lvi.pszText = msg16;
 			lvi.cchTextMax = _tcslen(msg16) + 1;
-			ListView_InsertItem(hListWnd, &lvi);
+			ListView_SetItem(hListWnd, &lvi);
 		} else {
 			cache[rowNo] = (TCHAR**)calloc (colCount + 1, sizeof (TCHAR*));
 			cache[rowNo][1] = _tcsdup(msg16); // malloc!
-			rowNo++;
 		}
 		delete [] msg16;
+
+		datatypes[1 + rowNo * colCount] = SQLITE_TEXT;
+		rowCount++;
 	}
+
+	int vCount = (colCount + 1) * rowCount;
+	SetProp(hListWnd, TEXT("VALUECOUNT"), IntToPtr(vCount));
+	datatypes = (byte*)realloc(datatypes, vCount * sizeof(byte));
+	SetProp(hListWnd, TEXT("DATATYPES"), (HANDLE)datatypes);
+
+	SetProp(hListWnd, TEXT("ORDERBY"), new int(0));
 
 	if (isVirtual) {
 		cache = (TCHAR***)realloc(cache, vCount * sizeof(TCHAR**));
 		blobs = (unsigned char**)realloc(blobs, vCount * sizeof(unsigned char*));
 		SetProp(hListWnd, TEXT("CACHE"), cache);
 		SetProp(hListWnd, TEXT("BLOBS"), (HANDLE)blobs);
-		SetProp(hListWnd, TEXT("ROWCOUNT"), new int(rowNo));
-		SetProp(hListWnd, TEXT("TOTALROWCOUNT"), new int(rowNo));
+		SetProp(hListWnd, TEXT("ROWCOUNT"), new int(rowCount));
+		SetProp(hListWnd, TEXT("TOTALROWCOUNT"), new int(rowCount));
 
 		ListView_SetItemCount(hListWnd, 0);
 		SendMessage(hListWnd, WMU_UPDATE_RESULTSET, 0, 0);
@@ -5948,7 +5962,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 	SendMessage(hListWnd, WMU_AUTO_COLUMN_SIZE, 0, 0);
 	ListView_EnsureVisible(hListWnd, 0, 0);
 
-	return isStopByLimit ? -rowNo : rowNo;
+	return isStopByLimit ? -rowCount : rowCount;
 }
 
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo) {
