@@ -7,7 +7,6 @@
 #include "dialogs.h"
 
 #include <process.h>
-#include <wininet.h>
 
 #include "tom.h"
 #include <richole.h>
@@ -398,9 +397,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			MessageBox(hMainWnd, TEXT("Import-Export menu bug"), 0, MB_OK);
 	}
 
-	EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
-	SendMessage(hTreeWnd, WM_SETFONT, (LPARAM)hFont, false);
-
 	if (dbArgNo) {
 		openDb(args[dbArgNo], readOnlyArgNo);
 	} else if (isFirstRun) {
@@ -512,8 +508,10 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hDefFont, true);
 	SetProp(hAutoComplete, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hAutoComplete, GWLP_WNDPROC, (LONG_PTR)&cbNewAutoComplete));
 
-	setEditorFont(hEditorWnd);
+	EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+	SendMessage(hMainWnd, WMU_SET_THEME, 0, 0);
 	setEditorFont(cli.hResultWnd);
+
 	ShowWindow (hMainWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 	SetFocus(hEditorWnd);
 
@@ -697,9 +695,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
-		case WM_ACTIVATEAPP: {
-			if (wParam)
+		case WM_ACTIVATEAPP:
+		case WM_KILLFOCUS: {
+			if (msg == WM_ACTIVATEAPP && (!wParam || msg == WM_KILLFOCUS))
 				ShowWindow(hAutoComplete, SW_HIDE);
+
 		}
 		break;
 
@@ -1151,19 +1151,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 
-			if (cmd == IDM_SETTINGS && DLG_OK == DialogBox(GetModuleHandle(0), MAKEINTRESOURCE(IDD_SETTINGS), hMainWnd, (DLGPROC)&dialogs::cbDlgSettings)) {
-				setEditorFont(hEditorWnd);
-				DeleteObject(hFont);
-				hFont = loadFont();
-				SendMessage(hTreeWnd, WM_SETFONT, (LPARAM)hFont, false);
-				if (hTabWnd)
-					EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETFONT);
-
-				for (int i = 0; i < MAX_DIALOG_COUNT; i++) {
-					HWND hDlg = hDialogs[i];
-					if (hDlg)
-						setEditorFont(GetDlgItem(hDlg, IDC_DLG_EDITOR));
-				}
+			if (cmd == IDM_SETTINGS && DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_SETTINGS), hMainWnd, (DLGPROC)&dialogs::cbDlgSettings, lParam)) {
+				SendMessage(hMainWnd, WMU_SET_THEME, 0, 0);
 
 				if (!prefs::get("use-highlight")) {
 					for (int i = 0; i < MAX_TAB_COUNT; i++) {
@@ -2063,6 +2052,24 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						updateTree(TABLE, path16);
 						SetFocus(hTreeWnd);
 					}
+				}
+			}
+
+			if (cmd == IDM_IMPORT_GOOGLE_SHEETS) {
+				char* googleApiKey = prefs::get("google-api-key", "");
+				bool isKeyEmpty = strlen(googleApiKey) == 0;
+				delete [] googleApiKey;
+				if (isKeyEmpty) {
+					MessageBox(hMainWnd, TEXT("Google API key is not set in Settings.\nCheck Wiki to find out how to get the key."), TEXT(" Error"), MB_ICONERROR);
+					SendMessage(hMainWnd, WM_COMMAND, IDM_SETTINGS, 2);
+					return 0;
+				}
+
+				TCHAR tablename16[1024]{0};
+				if (DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_IMPORT_SHEET), hMainWnd, (DLGPROC)tools::cbDlgImportSheet, (LPARAM)tablename16) == DLG_OK) {
+					updateTree(TABLE, tablename16);
+					MessageBox(hMainWnd, TEXT("Done"), TEXT("Info"), MB_OK);
+					SetFocus(hTreeWnd);
 				}
 			}
 
@@ -2995,6 +3002,26 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
+		case WMU_SET_THEME: {
+			DeleteObject(hFont);
+			hFont = loadFont();
+
+			setEditorFont(hEditorWnd);
+			SendMessage(hTreeWnd, WM_SETFONT, (LPARAM)hFont, FALSE);
+			SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hFont, FALSE);
+			SendMessage(hTooltipWnd, WM_SETFONT, (LPARAM)hFont, FALSE);
+
+			if (hTabWnd)
+				EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETFONT);
+
+			for (int i = 0; i < MAX_DIALOG_COUNT; i++) {
+				HWND hDlg = hDialogs[i];
+				if (hDlg)
+					setEditorFont(GetDlgItem(hDlg, IDC_DLG_EDITOR));
+			}
+		}
+		break;
+
 		// wParam = name8, lParam = code8
 		case WMU_REGISTER_FUNCTION: {
 			const char* name8 = (const char*)wParam;
@@ -3519,16 +3546,22 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 
 			int* resultset = (int*)GetProp(hWnd, TEXT("RESULTSET"));
-			if (resultset)
+			if (resultset) {
+				SetProp(hWnd, TEXT("RESULTSET"), (HANDLE)0);
 				free(resultset);
+			}
 
 			byte* datatypes = (byte*)GetProp(hWnd, TEXT("DATATYPES"));
-			if (datatypes)
+			if (datatypes) {
+				SetProp(hWnd, TEXT("DATATYPES"), (HANDLE)0);
 				free(datatypes);
+			}
 
 			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
-			if (heatmap)
+			if (heatmap) {
+				SetProp(hWnd, TEXT("HEATMAP"), (HANDLE)0);
 				delete [] heatmap;
+			}
 
 			int vCount = (int)(LONG_PTR)GetProp(hWnd, TEXT("VALUECOUNT"));
 			unsigned char** blobs = (unsigned char**)GetProp(hWnd, TEXT("BLOBS"));
@@ -5911,6 +5944,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		TCHAR* err16 = utils::utf8to16(err8);
 		int len = _tcslen(err16) + 256;
 		TCHAR* msg16 = new TCHAR[len + 1]{0};
+
 		_sntprintf(msg16, len, TEXT("*** Terminate with error: %ls"), err16);
 		delete [] err16;
 
@@ -6580,6 +6614,8 @@ int ListView_Sort(HWND hListWnd, int colNo) {
 }
 
 int ListView_Reset(HWND hListWnd) {
+	SendMessage(hListWnd, WMU_RESET_CACHE, 0, 0);
+
 	ListView_DeleteAllItems(hListWnd);
 	HWND hHeader = ListView_GetHeader(hListWnd);
 	int cnt = Header_GetItemCount(hHeader);
@@ -6775,6 +6811,14 @@ bool processEditorEvents(MSGFILTER* pF) {
 			pF->wParam = 0;
 			return true;
 		}
+
+		if (pF->msg == WM_CHAR && _tcschr(TEXT("(){}\"'"), key)) {
+			if (wrapSelectedText(hWnd, key)) {
+				pF->wParam = 0;
+				return true;
+			}
+		}
+
 
 		bool res = processAutoComplete(hWnd, key, isKeyDown);
 		if (res)
@@ -8142,6 +8186,31 @@ HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
 	return hDlg;
 }
 
+bool wrapSelectedText(HWND hEditorWnd, int key) {
+	CHARRANGE range;
+	SendMessage(hEditorWnd, EM_EXGETSEL, 0, (LPARAM)&range);
+	if (range.cpMin == range.cpMax)
+		return false;
+
+	SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
+
+	TCHAR l[2] = {0};
+	TCHAR r[2] = {0};
+	_sntprintf(l, 2, TEXT("%c"), key == TEXT('"') || key == TEXT('\'') ? key : TEXT('('));
+	_sntprintf(r, 2, TEXT("%c"), key == TEXT('"') || key == TEXT('\'') ? key : TEXT(')'));
+
+	SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMin);
+	SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (WPARAM)l);
+	SendMessage(hEditorWnd, EM_SETSEL, range.cpMax + 1, range.cpMax + 1);
+	SendMessage(hEditorWnd, EM_REPLACESEL, TRUE, (WPARAM)r);
+	SendMessage(hEditorWnd, EM_SETSEL, range.cpMax + 2, range.cpMax + 2);
+
+	SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
+	processHighlight(hEditorWnd, true, true, true);
+
+	return true;
+}
+
 bool toggleWordWrap(HWND hEditorWnd) {
 	bool isWordWrap = true;
 	for (int i = 0; i < MAX_TAB_COUNT + MAX_DIALOG_COUNT; i++) {
@@ -8486,38 +8555,27 @@ unsigned int __stdcall checkUpdate (void* data) {
 	time_t t = time(0);
 	tm* now = localtime(&t);
 	int date = (now->tm_year + 1900) * 10000 + (now->tm_mon + 1) * 100 + now->tm_mday;
+
 	if (date != prefs::get("last-update-check")) {
-		DWORD read;
-		char buf8[1001]{0};
+		char* buf8 = utils::httpRequest("GET", "api.github.com", "repos/little-brother/sqlite-gui/commits/master");
+		if (buf8 == 0)
+			return 0;
 
-		char uri[] = "api.github.com";
-		char path[] = "repos/little-brother/sqlite-gui/commits/master";
-		char headers[] = "Accept: application/vnd.github.v3+json";
+		TCHAR* buf16 = utils::utf8to16(buf8);
+		TCHAR* message = _tcsstr(buf16, TEXT("\"message\""));
+		TCHAR* tree = _tcsstr(buf16, TEXT("\"tree\""));
 
-		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
-		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 1u);
-		HINTERNET hRequest = HttpOpenRequestA(hSession, "GET", path, NULL, uri, 0, INTERNET_FLAG_SECURE, 1);
-		if (HttpSendRequestA(hRequest, headers, strlen(headers), 0, 0)) {
-			InternetReadFile(hRequest, &buf8, 1000, &read);
-
-			TCHAR* buf16 = utils::utf8to16(buf8);
-			TCHAR* message = _tcsstr(buf16, TEXT("\"message\""));
-			TCHAR* tree = _tcsstr(buf16, TEXT("\"tree\""));
-
-			if (message && _tcsstr(message, TEXT(GUI_VERSION)) == 0) {
-				TCHAR msg[1024]{0};
-				_tcsncpy(msg, message + 11, _tcslen(message) - _tcslen(tree) - 13);
-				TCHAR* msg2 = utils::replaceAll(msg, TEXT("\\n"), TEXT("\n"));
-				_sntprintf(msg, 1023, TEXT("%ls\n\nWould you like to download it?"), msg2);
-				if (IDYES == MessageBox(hMainWnd, msg, TEXT("New version was released"), MB_YESNO))
-					ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/releases/latest"), 0, 0 , SW_SHOW);
-				delete [] msg2;
-			}
-			delete [] buf16;
+		if (message && _tcsstr(message, TEXT(GUI_VERSION)) == 0) {
+			TCHAR msg[strlen(buf8)]{0};
+			_tcsncpy(msg, message + 11, _tcslen(message) - _tcslen(tree) - 13);
+			TCHAR* msg2 = utils::replaceAll(msg, TEXT("\\n"), TEXT("\n"));
+			_sntprintf(msg, 1023, TEXT("%ls\n\nWould you like to download it?"), msg2);
+			if (IDYES == MessageBox(hMainWnd, msg, TEXT("New version was released"), MB_YESNO))
+				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/releases/latest"), 0, 0 , SW_SHOW);
+			delete [] msg2;
 		}
-		InternetCloseHandle(hRequest);
-		InternetCloseHandle(hSession);
-		InternetCloseHandle(hInet);
+		delete [] buf16;
+		delete [] buf8;
 
 		prefs::set("last-update-check", date);
 	}

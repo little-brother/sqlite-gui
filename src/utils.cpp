@@ -2,6 +2,7 @@
 #include <gdiplus.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <wininet.h>
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
@@ -707,5 +708,77 @@ namespace utils {
 			mergeSort(indexes, data, m + 1, r, isBackward, isNums);
 			mergeSortJoiner(indexes, data, l, m, r, isBackward, isNums);
 		}
+	}
+
+
+	// http://www.geekhideout.com/urlcode.shtml
+	char *url_encode(const char *str) {
+		auto toHex = [](char code) -> char {
+			static char hex[] = "0123456789abcdef";
+			return hex[code & 15];
+		};
+
+		const char *pstr = str;
+		char* buf = (char*)malloc(strlen(str) * 3 + 1);
+		char* pbuf = buf;
+		while (*pstr) {
+			if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~')
+				*pbuf++ = *pstr;
+			else if (*pstr == ' ')
+				*pbuf++ = '+';
+			else
+				*pbuf++ = '%', *pbuf++ = toHex(*pstr >> 4), *pbuf++ = toHex(*pstr & 15);
+			pstr++;
+		}
+		*pbuf = '\0';
+
+		return buf;
+	}
+
+	char* httpRequest(const char* method, const char* uri, const char* path, const char* data) {
+		DWORD resSize = 1;
+		char* res8 = 0;
+
+		char headers[1024];
+		char* encoded_data = 0;
+		if (strcmp(method, "PUT") == 0 || strcmp(method, "POST") == 0) {
+			encoded_data = url_encode(data);
+			strcpy(headers,	"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n");
+		} else {
+			strcpy(headers,	"Accept: application/json\r\n");
+		}
+
+		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
+		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 1u);
+		HINTERNET hRequest = HttpOpenRequestA(hSession, method, path, NULL, uri, 0, INTERNET_FLAG_SECURE, 1);
+
+		if (hRequest && HttpSendRequestA(hRequest, headers, strlen(headers), encoded_data, encoded_data ? strlen(encoded_data) : 0)) {
+			bool isDone = false;
+			while (!isDone) {
+				DWORD read = 0;
+				char* buf8 = new char[32000]{0};
+				InternetReadFile(hRequest, buf8, 32000, &read);
+
+				resSize += read;
+				res8 = res8 ? (char*)realloc(res8, resSize) : new char[resSize]{0};
+				for (DWORD i = 0; i < read; i++)
+					res8[resSize - read + i - 1] = buf8[i];
+				delete [] buf8;
+
+				isDone = read == 0;
+			}
+		}
+		InternetCloseHandle(hRequest);
+		InternetCloseHandle(hSession);
+		InternetCloseHandle(hInet);
+
+		if (encoded_data)
+			free(encoded_data);
+
+		// The last char is 0. Hmmm...
+		if (res8)
+			res8[resSize - 1] = 0;
+
+		return res8;
 	}
 }

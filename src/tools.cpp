@@ -14,6 +14,7 @@
 
 namespace tools {
 	const TCHAR* DELIMITERS[4] = {TEXT(","), TEXT(";"), TEXT("\t"), TEXT("|")};
+	WNDPROC cbOldEditSheetRange;
 
 	BOOL CALLBACK cbDlgExportCSV (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -616,6 +617,270 @@ namespace tools {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_SYSKEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+	LRESULT CALLBACK cbNewEditSheetRange(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_GETDLGCODE: {
+				return DLGC_WANTALLKEYS | CallWindowProc(cbOldEditSheetRange, hWnd, msg, wParam, lParam);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_RETURN) {
+					SendMessage(GetParent(hWnd), WMU_UPDATE_SHEET_PREVIEW, 0, 0);
+					return true;
+				}
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldEditSheetRange, hWnd, msg, wParam, lParam);
+	}
+
+	// lParam = USERDATA = tablename
+	BOOL CALLBACK cbDlgImportSheet (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+				cbOldEditSheetRange = (WNDPROC)SetWindowLongPtr(GetDlgItem(hWnd, IDC_DLG_SHEET_RANGE), GWLP_WNDPROC, (LONG_PTR)cbNewEditSheetRange);
+				PostMessage(hWnd, WMU_UPDATE_SHEET_IDS, 0, 0);
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hSheetIdWnd = GetDlgItem(hWnd, IDC_DLG_SHEET_ID);
+				HWND hSheetNameWnd = GetDlgItem(hWnd, IDC_DLG_SHEET_NAME);
+
+				if (LOWORD(wParam) == IDC_DLG_ISCOLUMNS && HIWORD(wParam) == BN_CLICKED)
+					PostMessage(hWnd, WMU_UPDATE_SHEET_PREVIEW, 0, 0);
+
+				if (LOWORD(wParam) == IDC_DLG_SHEET_NAME && HIWORD(wParam) == CBN_SELCHANGE)
+					PostMessage(hWnd, WMU_UPDATE_SHEET_PREVIEW, 0, 0);
+
+				if (LOWORD(wParam) == IDC_DLG_SHEET_ID && HIWORD(wParam) == CBN_SELCHANGE) {
+					TCHAR sheetId16[1024]{0};
+
+					ComboBox_ResetContent(hSheetNameWnd);
+
+					int idx = ComboBox_GetCurSel(hSheetIdWnd);
+					if (idx != 0) {
+						ComboBox_GetLBText(hSheetIdWnd, idx, sheetId16);
+					} else {
+						TCHAR* clipboard16 = utils::getClipboardText();
+						TCHAR* pos16 = _tcsstr(clipboard16, TEXT("/d/"));
+						if (pos16) {
+							pos16 += 3;
+
+							int i = 0;
+							while (pos16[i] != 0 && pos16[i] != TEXT('/')) {
+								sheetId16[i] = pos16[i];
+								i++;
+							}
+						} else {
+							_tcsncpy(sheetId16, clipboard16, 1023);
+						}
+
+						delete [] clipboard16;
+					}
+					ComboBox_SetCurSel(hSheetIdWnd, -1);
+
+					char path8[1024];
+					char* sheetId8 = utils::utf16to8(sheetId16);
+					char* googleApiKey8 = prefs::get("google-api-key", "");
+					sprintf(path8, "v4/spreadsheets/%s?key=%s", sheetId8, googleApiKey8);
+					delete [] sheetId8;
+					delete [] googleApiKey8;
+
+					char* data8 = utils::httpRequest("GET", "sheets.googleapis.com", path8);
+					if (data8) {
+						sqlite3_stmt *stmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select json_extract(value, '$.properties.title') from json_each(?1, '$.sheets')", -1, &stmt, 0)) {
+							sqlite3_bind_text(stmt, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+							while (SQLITE_ROW == sqlite3_step(stmt)) {
+								TCHAR* sheet16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+								ComboBox_AddString(hSheetNameWnd, sheet16);
+								delete [] sheet16;
+							}
+						}
+						sqlite3_finalize(stmt);
+						delete [] data8;
+					}
+
+					if (ComboBox_GetCount(hSheetNameWnd) > 0) {
+						sqlite3_stmt *stmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into sheets (sheet_id, \"time\") values (?1, ?2)", -1, &stmt, 0)) {
+							char* sheetId8 = utils::utf16to8(sheetId16);
+							sqlite3_bind_text(stmt, 1, sheetId8, strlen(sheetId8),  SQLITE_TRANSIENT);
+							delete [] sheetId8;
+							sqlite3_bind_int(stmt, 2, std::time(0));
+							sqlite3_step(stmt);
+						}
+						sqlite3_finalize(stmt);
+						SendMessage(hWnd, WMU_UPDATE_SHEET_IDS, 0, 0);
+						int idx = ComboBox_FindStringExact(hSheetIdWnd, 0, sheetId16);
+						ComboBox_SetCurSel(hSheetIdWnd, idx);
+
+						ComboBox_SetCurSel(hSheetNameWnd, 0);
+						SetFocus(hSheetNameWnd);
+
+						PostMessage(hWnd, WMU_UPDATE_SHEET_PREVIEW, 0, 0);
+					} else {
+						TCHAR msg16[2048]{0};
+						_sntprintf(msg16, 2047, TEXT("The ID or url is invalid:\n%ls\n\nThe spreadsheets should be public with \"Anyone with the link\"-access."), sheetId16);
+						MessageBox(hWnd, msg16, NULL, MB_OK);
+					}
+				}
+
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+						TCHAR table16[1024];
+						GetDlgItemText(hWnd, IDC_DLG_TABLENAME, table16, 1023);
+
+						if (_tcslen(table16) == 0)
+							return MessageBox(hWnd, TEXT("The target table is empty"), NULL, MB_OK);
+
+						TCHAR* schema16 = utils::getTableName(table16, true);
+						TCHAR* tablename16 = utils::getTableName(table16, false);
+
+						TCHAR query16[2048];
+						_sntprintf(query16, 2047, TEXT("create table \"%ls\".\"%ls\" as select * from temp.googlesheet"), schema16, tablename16);
+						char* query8 = utils::utf16to8(query16);
+
+						bool rc = SQLITE_OK == sqlite3_exec(db, query8, NULL, NULL, NULL);
+
+						if (rc) {
+							TCHAR* outname16 = (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+							if (_tcscmp(schema16, TEXT("main")) == 0)
+								_tcscpy(outname16, tablename16);
+						}
+
+						delete [] schema16;
+						delete [] tablename16;
+						delete [] query8;
+
+						if (rc) {
+							EndDialog(hWnd, DLG_OK);
+						} else
+							showDbError(hWnd);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
+
+			case WMU_UPDATE_SHEET_IDS: {
+				HWND hSheetIdWnd = GetDlgItem(hWnd, IDC_DLG_SHEET_ID);
+
+				ComboBox_ResetContent(hSheetIdWnd);
+				ComboBox_AddString(hSheetIdWnd, TEXT("<<Paste spreadsheets ID or url from clipboard>>"));
+
+				sqlite3_stmt *stmt;
+				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select sheet_id from sheets order by \"time\" desc limit 20", -1, &stmt, 0);
+				while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+					TCHAR* sheetId16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+					ComboBox_AddString(hSheetIdWnd, sheetId16);
+					delete [] sheetId16;
+				}
+				sqlite3_finalize(stmt);
+			}
+			break;
+
+			case WMU_UPDATE_SHEET_PREVIEW: {
+				HWND hPreviewWnd = GetDlgItem(hWnd, IDC_DLG_PREVIEW);
+				ListView_Reset(hPreviewWnd);
+
+				TCHAR sheetId16[1024];
+				GetDlgItemText(hWnd, IDC_DLG_SHEET_ID, sheetId16, 1023);
+
+				TCHAR sheet16[1024];
+				GetDlgItemText(hWnd, IDC_DLG_SHEET_NAME, sheet16, 1023);
+
+				TCHAR range16[1024];
+				GetDlgItemText(hWnd, IDC_DLG_SHEET_RANGE, range16, 1023);
+
+				bool isColumns = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISCOLUMNS));
+
+				char path8[2048];
+				char* sheetId8 = utils::utf16to8(sheetId16);
+				char* sheet8 = utils::utf16to8(sheet16);
+				char* range8 = utils::utf16to8(range16);
+				char* googleApiKey8 = prefs::get("google-api-key", "");
+				sprintf(path8, "v4/spreadsheets/%s/values/%s%s%s?key=%s", sheetId8, sheet8, strlen(range8) ? "!" : "", range8, googleApiKey8);
+				delete [] sheetId8;
+				delete [] sheet8;
+				delete [] range8;
+				delete [] googleApiKey8;
+
+				char* create8 = new char[MAX_TEXT_LENGTH]{0};
+				char* data8 = utils::httpRequest("GET", "sheets.googleapis.com", path8);
+				if (data8) {
+					if (SQLITE_OK != sqlite3_exec(db, "drop table if exists temp.googlesheet", NULL, NULL, NULL))
+						showDbError(hWnd);
+
+					int colCount = 0;
+					sqlite3_stmt *stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, isColumns ?
+							"select json_array_length(t.value), '\"' || group_concat(t2.value, '\", \"') || '\"' from json_each(t.value, '$') t2, json_each(?1, '$.values') t where t.key = 0" :
+							"select max(json_array_length(t.value)), '\"col' || group_concat(t2.key, '\", \"col') || '\"' from json_each(t.value, '$') t2, json_each(?1, '$.values') t group by t.key order by 1 desc limit 1",
+							-1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+						sqlite3_step(stmt);
+						colCount = sqlite3_column_int(stmt, 0);
+						const char* columns = (const char*)sqlite3_column_text(stmt, 1);
+
+						if (colCount > 0) {
+							sprintf(create8, "create table temp.googlesheet as with res (%s) as (select ", columns);
+							for (int colNo = 0; colNo < colCount; colNo++) {
+								char buf8[64]{0};
+								sprintf(buf8, " json_extract(value, '$[%i]')", colNo);
+								strcat(create8, buf8);
+								if (colNo != colCount - 1)
+									strcat(create8, ", ");
+							}
+							strcat(create8, " from json_each(?1, '$.values')");
+							if (isColumns)
+								strcat(create8, " where key > 0");
+							strcat(create8, ") select * from res");
+						} else {
+							MessageBox(hWnd, TEXT("The sheet is empty"), NULL, MB_OK);
+						}
+					}
+					sqlite3_finalize(stmt);
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, create8, -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+						sqlite3_step(stmt);
+					}
+					sqlite3_finalize(stmt);
+
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select * from temp.googlesheet", -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, data8, strlen(data8),  SQLITE_TRANSIENT);
+						ListView_SetData(hPreviewWnd, stmt);
+					}
+					sqlite3_finalize(stmt);
+
+					delete [] create8;
+					delete [] data8;
+				} else {
+					MessageBox(hWnd, TEXT("Can't fetch data"), NULL, MB_OK);
+				}
 			}
 			break;
 

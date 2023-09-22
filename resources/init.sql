@@ -16,6 +16,7 @@ create table if not exists search_history ("time" real, what text, type integer,
 create index if not exists idx_cli on cli ("time" desc, dbname);
 create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);
 create table if not exists functions (id integer primary key autoincrement, name text, type integer default 0, language text default 'sql', code text, code2 text, code3 text, description text);
+create table if not exists sheets (sheet_id text primary key, "time" real);
 create table if not exists shortcuts as 
 select cast('Alt + F1' as text) name, cast(0x70 as integer) key, cast(0 as integer) ctrl, cast(1 as integer) alt, 
 '-- Columns

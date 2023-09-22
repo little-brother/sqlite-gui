@@ -8,7 +8,7 @@
 #include "tools.h"
 
 namespace dialogs {
-	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldAddTableComboboxEdit, cbOldAddTableHeader, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions;
+	WNDPROC cbOldEditDataEdit, cbOldEditDataCombobox, cbOldAddTableCell, cbOldAddTableComboboxEdit, cbOldAddTableHeader, cbOldHeaderEdit, cbOldRowEdit, cbOldGridColorEdit, cbOldChartOptions, cbOldTabSettings;
 	LRESULT CALLBACK cbNewEditDataEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewEditDataCombobox(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	LRESULT CALLBACK cbNewEditDataComboboxEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -843,7 +843,7 @@ namespace dialogs {
 					btnCount++;
 				}
 				if (isTable && IsWindow(hMainWnd) && !isReadOnly) {
-					tbButtons[btnCount] = {3, IDM_GENERATE_DATA, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Generate data")};
+					tbButtons[btnCount] = {3, IDM_GENERATE_DATA, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Generate")};
 					btnCount++;
 				}
 
@@ -4632,10 +4632,119 @@ namespace dialogs {
 
 	const int SETTING_COLOR_COUNT = 12;
 
+	bool CALLBACK cbEnumChildrenReparent (HWND hWnd, HWND hParentWnd) {
+		if (hWnd != hParentWnd) {
+			int id = GetDlgCtrlID(hWnd);
+			if (id == IDC_DLG_OK || id == IDC_DLG_CANCEL)
+				return true;
+
+			RECT rc;
+			GetWindowRect(hWnd, &rc);
+			POINT p = {rc.left, rc.top};
+			ScreenToClient(hParentWnd, &p);
+
+			GetWindowRect(hParentWnd, &rc);
+			TabCtrl_AdjustRect(hParentWnd, FALSE, &rc);
+			POINT p2 = {rc.left, rc.top};
+			ScreenToClient(hParentWnd, &p2);
+
+			GetWindowRect(hParentWnd, &rc);
+			MapWindowPoints(HWND_DESKTOP, GetParent(hParentWnd), (LPPOINT) &rc, 2);
+
+			SetParent(hWnd, hParentWnd);
+			SetWindowPos(hWnd, 0, rc.left + p2.x + p.x, rc.top + p2.y + p.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+		}
+
+		return true;
+	}
+
+	LRESULT CALLBACK cbNewTabSettings(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_GETDLGCODE: {
+				return DLGC_WANTALLKEYS | CallWindowProc(cbOldTabSettings, hWnd, msg, wParam, lParam);
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(GetParent(hWnd), WM_COMMAND, IDC_DLG_CANCEL, 0);
+
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_COLOR && LOWORD(wParam) < IDC_DLG_COLOR + SETTING_COLOR_COUNT)) {
+					COLORREF colors[16] = {GetSysColor(COLOR_BTNFACE)}; // Fix bug: sometimes dialog has filled background as the first custom color.
+
+					HBRUSH* brushes = (HBRUSH*)GetProp(GetParent(hWnd), TEXT("BRUSHES"));
+					int brushNo = LOWORD(wParam) - IDC_DLG_COLOR;
+					CHOOSECOLOR cc = {0};
+					cc.lStructSize = sizeof(cc);
+					cc.hwndOwner = hWnd;
+					cc.lpCustColors = colors;
+					cc.rgbResult = GetBrushColor(brushes[brushNo]);
+					cc.lpTemplateName = MAKEINTRESOURCE(IDD_COLOR_PICKER);
+					cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLETEMPLATE;
+
+					if (ChooseColor(&cc)) {
+						DeleteObject(brushes[brushNo]);
+						brushes[brushNo] = CreateSolidBrush(cc.rgbResult);
+						InvalidateRect((HWND)lParam, NULL, TRUE);
+					}
+				}
+
+				if (HIWORD(wParam) == STN_CLICKED && LOWORD(wParam) == IDC_DLG_HTTP_SERVER)
+					EnableWindow(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER_PORT), Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
+			}
+			break;
+
+			case WM_CTLCOLORSTATIC: {
+				int id = GetDlgCtrlID((HWND)lParam);
+				if (id >= IDC_DLG_COLOR && id < IDC_DLG_COLOR + SETTING_COLOR_COUNT) {
+					HBRUSH* brushes = (HBRUSH*)GetProp(GetParent(hWnd), TEXT("BRUSHES"));
+					int brushNo = id - IDC_DLG_COLOR;
+					HBRUSH hBrush = brushes[brushNo];
+					HDC hDC = (HDC)wParam;
+
+					if (brushNo < 6) {
+						SetTextColor(hDC, GetBrushColor(brushes[brushNo]));
+						SetBkColor(hDC, RGB(255, 255, 255));
+						return (INT_PTR)GetStockObject(WHITE_BRUSH);
+					} else {
+						SetBkColor(hDC, GetBrushColor(hBrush));
+						return (INT_PTR)hBrush;
+					}
+				}
+			}
+			break;
+		}
+
+		return CallWindowProc(cbOldTabSettings, hWnd, msg, wParam, lParam);
+	}
+
+
+	// lParam = init tabNo
 	BOOL CALLBACK cbDlgSettings (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
-				HWND hFontSize = GetDlgItem(hWnd, IDC_DLG_FONT_SIZE);
+				HWND hTabWnd = GetDlgItem(hWnd, IDC_DLG_SETTING_TAB);
+				TCITEM tci;
+				tci.mask = TCIF_TEXT | TCIF_IMAGE;
+				tci.iImage = 0;
+				tci.pszText = TEXT("General");
+				tci.cchTextMax = 10;
+				TabCtrl_InsertItem(hTabWnd, 0, &tci);
+				tci.pszText = TEXT("Appearance");
+				tci.cchTextMax = 20;
+				TabCtrl_InsertItem(hTabWnd, 1, &tci);
+				tci.pszText = TEXT("Extra");
+				tci.cchTextMax = 20;
+				TabCtrl_InsertItem(hTabWnd, 2, &tci);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildrenReparent, (LPARAM)hTabWnd);
+				cbOldTabSettings = (WNDPROC)SetWindowLongPtr(hTabWnd, GWLP_WNDPROC, (LONG_PTR)cbNewTabSettings);
+
+				HWND hFontSize = GetDlgItem(hTabWnd, IDC_DLG_FONT_SIZE);
 				int fontSize = prefs::get("font-size");
 				int sizes[] = {8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24};
 				int idx = 0;
@@ -4647,13 +4756,26 @@ namespace dialogs {
 				}
 				ComboBox_SetCurSel(hFontSize, idx);
 
-				HWND hExitByEscape = GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE);
+				HWND hExitByEscape = GetDlgItem(hTabWnd, IDC_DLG_EXIT_BY_ESCAPE);
 				ComboBox_AddString(hExitByEscape, TEXT("Do nothing"));
 				ComboBox_AddString(hExitByEscape, TEXT("Close application"));
 				ComboBox_AddString(hExitByEscape, TEXT("Ask before closing the app"));
 				ComboBox_SetCurSel(hExitByEscape, prefs::get("exit-by-escape"));
 
-				HWND hFontFamily = GetDlgItem(hWnd, IDC_DLG_FONT_FAMILY);
+				HWND hFontFamily = GetDlgItem(hTabWnd, IDC_DLG_FONT_FAMILY);
+
+				// There is a some issue for edit after the combobox reparenting
+				// So just recreate it
+				RECT rc;
+				GetWindowRect(hFontFamily, &rc);
+				POINT pos{rc.left, rc.top}, dims {rc.right - rc.left, rc.bottom - rc.top};
+				ScreenToClient(hTabWnd, &pos);
+				DestroyWindow(hFontFamily);
+
+				hFontFamily = CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWN | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP,
+					pos.x, pos.y, dims.x, 200, hTabWnd, (HMENU)IDC_DLG_FONT_FAMILY, GetModuleHandle(0), NULL);
+				SendMessage(hFontFamily, WM_SETFONT, (LPARAM)hDefFont, TRUE);
+
 				HDC hDC = GetDC(hMainWnd);
 				LOGFONT lf = {0};
 				lf.lfFaceName[0] = TEXT('\0');
@@ -4666,38 +4788,44 @@ namespace dialogs {
 				delete [] fontFamily16;
 				delete [] fontFamily8;
 
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_AUTOLOAD), prefs::get("autoload-extensions") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_DB), prefs::get("restore-db") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_EDITOR), prefs::get("restore-editor") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ASK_DELETE), prefs::get("ask-delete") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP), prefs::get("word-wrap") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER), prefs::get("http-server") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES), prefs::get("check-update") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_TAB_AUTOCOMPLETE), prefs::get("autocomplete-by-tab") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
-				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_AUTOLOAD), prefs::get("autoload-extensions") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_DB), prefs::get("restore-db") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_EDITOR), prefs::get("restore-editor") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_ASK_DELETE), prefs::get("ask-delete") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_WORD_WRAP), prefs::get("word-wrap") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_HTTP_SERVER), prefs::get("http-server") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_CHECK_UPDATES), prefs::get("check-update") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_TAB_AUTOCOMPLETE), prefs::get("autocomplete-by-tab") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[256];
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("row-limit"));
-				SetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf);
+				SetDlgItemText(hTabWnd, IDC_DLG_ROW_LIMIT, buf);
 
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("cli-row-limit"));
-				SetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf);
+				SetDlgItemText(hTabWnd, IDC_DLG_CLI_ROW_LIMIT, buf);
 
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("beep-query-duration"));
-				SetDlgItemText(hWnd, IDC_DLG_BEEP_ON_QUERY_END, buf);
+				SetDlgItemText(hTabWnd, IDC_DLG_BEEP_ON_QUERY_END, buf);
 
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("http-server-port"));
-				SetDlgItemText(hWnd, IDC_DLG_HTTP_SERVER_PORT, buf);
-				EnableWindow(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER_PORT), prefs::get("http-server"));
+				SetDlgItemText(hTabWnd, IDC_DLG_HTTP_SERVER_PORT, buf);
+				EnableWindow(GetDlgItem(hTabWnd, IDC_DLG_HTTP_SERVER_PORT), prefs::get("http-server"));
 
 				char* startup8 = prefs::get("startup", "");
 				TCHAR* startup16 = utils::utf8to16(startup8);
-				SetDlgItemText(hWnd, IDC_DLG_STARTUP, startup16);
+				SetDlgItemText(hTabWnd, IDC_DLG_STARTUP, startup16);
 				delete [] startup16;
 				delete [] startup8;
 
-				HWND hIndent = GetDlgItem(hWnd, IDC_DLG_INDENT);
+				char* googleApiKey8 = prefs::get("google-api-key", "");
+				TCHAR* googleApiKey16 = utils::utf8to16(googleApiKey8);
+				SetDlgItemText(hTabWnd, IDC_DLG_GOOGLE_KEY, googleApiKey16);
+				delete [] googleApiKey16;
+				delete [] googleApiKey8;
+
+				HWND hIndent = GetDlgItem(hTabWnd, IDC_DLG_INDENT);
 				for (int i = 0; i < 3; i++)
 					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
 				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
@@ -4717,50 +4845,60 @@ namespace dialogs {
 				brushes[10] = CreateSolidBrush(prefs::get("color-real"));
 				brushes[11] = CreateSolidBrush(prefs::get("color-current-cell"));
 				SetProp(hWnd, TEXT("BRUSHES"), (HANDLE)brushes);
+
+				SendMessage(hWnd, WMU_TAB_CHANGED, lParam < TabCtrl_GetItemCount(hTabWnd) ? lParam : 0, 0);
 			}
 			break;
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK) {
+					HWND hTabWnd = GetDlgItem(hWnd, IDC_DLG_SETTING_TAB);
+
 					TCHAR buf[255];
-					GetDlgItemText(hWnd, IDC_DLG_FONT_FAMILY, buf, 255);
+					GetDlgItemText(hTabWnd, IDC_DLG_FONT_FAMILY, buf, 255);
 					char* fontFamily8 = utils::utf16to8(buf);
 					prefs::set("font-family", fontFamily8);
 					delete [] fontFamily8;
-					GetDlgItemText(hWnd, IDC_DLG_FONT_SIZE, buf, 255);
-					prefs::set("font-size", _tcstol(buf, NULL, 10));
-					prefs::set("autoload-extensions", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_AUTOLOAD)));
-					prefs::set("restore-db", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_DB)));
-					prefs::set("restore-editor", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RESTORE_EDITOR)));
-					prefs::set("ask-delete", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ASK_DELETE)));
-					prefs::set("word-wrap", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_WORD_WRAP)));
-					prefs::set("http-server", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
-					prefs::set("check-update", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_CHECK_UPDATES)));
-					prefs::set("autocomplete-by-tab", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_TAB_AUTOCOMPLETE)));
-					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_RETAIN_PASSPHRASE)));
-					prefs::set("exit-by-escape", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_EXIT_BY_ESCAPE)));
-					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_SYNC_OFF)));
-					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_INDENT)));
 
-					GetDlgItemText(hWnd, IDC_DLG_ROW_LIMIT, buf, 255);
+					GetDlgItemText(hTabWnd, IDC_DLG_FONT_SIZE, buf, 255);
+					prefs::set("font-size", _tcstol(buf, NULL, 10));
+					prefs::set("autoload-extensions", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_AUTOLOAD)));
+					prefs::set("restore-db", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_DB)));
+					prefs::set("restore-editor", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_EDITOR)));
+					prefs::set("ask-delete", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_ASK_DELETE)));
+					prefs::set("word-wrap", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_WORD_WRAP)));
+					prefs::set("http-server", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_HTTP_SERVER)));
+					prefs::set("check-update", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_CHECK_UPDATES)));
+					prefs::set("autocomplete-by-tab", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_TAB_AUTOCOMPLETE)));
+					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RETAIN_PASSPHRASE)));
+					prefs::set("exit-by-escape", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_EXIT_BY_ESCAPE)));
+					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_SYNC_OFF)));
+					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_INDENT)));
+
+					GetDlgItemText(hTabWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
 
-					GetDlgItemText(hWnd, IDC_DLG_CLI_ROW_LIMIT, buf, 255);
+					GetDlgItemText(hTabWnd, IDC_DLG_CLI_ROW_LIMIT, buf, 255);
 					prefs::set("cli-row-limit", (int)_tcstod(buf, NULL));
 
-					GetDlgItemText(hWnd, IDC_DLG_BEEP_ON_QUERY_END, buf, 255);
+					GetDlgItemText(hTabWnd, IDC_DLG_BEEP_ON_QUERY_END, buf, 255);
 					prefs::set("beep-query-duration", (int)_tcstod(buf, NULL));
 
-					GetDlgItemText(hWnd, IDC_DLG_HTTP_SERVER_PORT, buf, 255);
+					GetDlgItemText(hTabWnd, IDC_DLG_HTTP_SERVER_PORT, buf, 255);
 					prefs::set("http-server-port", (int)_tcstod(buf, NULL));
 
 					sqlite3_exec(db, prefs::get("use-legacy-rename") ? "pragma legacy_alter_table = 1" : "pragma legacy_alter_table = 0", 0, 0, 0);
 
 					TCHAR startup16[MAX_TEXT_LENGTH]{0};
-					GetDlgItemText(hWnd, IDC_DLG_STARTUP, startup16, MAX_TEXT_LENGTH - 1);
+					GetDlgItemText(hTabWnd, IDC_DLG_STARTUP, startup16, MAX_TEXT_LENGTH - 1);
 					char* startup8 = utils::utf16to8(startup16);
 					prefs::set("startup", startup8);
 					delete [] startup8;
+
+					GetDlgItemText(hTabWnd, IDC_DLG_GOOGLE_KEY, buf, 254);
+					char* googleApiKey8 = utils::utf16to8(buf);
+					prefs::set("google-api-key", googleApiKey8);
+					delete [] googleApiKey8;
 
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
 					prefs::set("color-keyword", GetBrushColor(brushes[0]));
@@ -4786,47 +4924,42 @@ namespace dialogs {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
-
-				if (HIWORD(wParam) == STN_CLICKED && LOWORD(wParam) == IDC_DLG_HTTP_SERVER)
-					EnableWindow(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER_PORT), Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_HTTP_SERVER)));
-
-				if (HIWORD(wParam) == STN_CLICKED && (LOWORD(wParam) >= IDC_DLG_COLOR && LOWORD(wParam) < IDC_DLG_COLOR + SETTING_COLOR_COUNT)) {
-					COLORREF colors[16] = {GetSysColor(COLOR_BTNFACE)}; // Fix bug: sometimes dialog has filled background as the first custom color.
-
-					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					int brushNo = LOWORD(wParam) - IDC_DLG_COLOR;
-					CHOOSECOLOR cc = {0};
-					cc.lStructSize = sizeof(cc);
-					cc.hwndOwner = hWnd;
-					cc.lpCustColors = colors;
-					cc.rgbResult = GetBrushColor(brushes[brushNo]);
-					cc.lpTemplateName = MAKEINTRESOURCE(IDD_COLOR_PICKER);
-					cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLETEMPLATE;
-
-					if (ChooseColor(&cc)) {
-						DeleteObject(brushes[brushNo]);
-						brushes[brushNo] = CreateSolidBrush(cc.rgbResult);
-						InvalidateRect((HWND)lParam, NULL, TRUE);
-					}
-				}
 			}
 			break;
 
-			case WM_CTLCOLORSTATIC: {
-				int id = GetDlgCtrlID((HWND)lParam);
-				if (id >= IDC_DLG_COLOR && id < IDC_DLG_COLOR + SETTING_COLOR_COUNT) {
-					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
-					int brushNo = id - IDC_DLG_COLOR;
-					HBRUSH hBrush = brushes[brushNo];
-					HDC hDC = (HDC)wParam;
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
 
-					if (brushNo < 6) {
-						SetTextColor(hDC, GetBrushColor(brushes[brushNo]));
-						SetBkColor(hDC, RGB(255, 255, 255));
-						return (INT_PTR)GetStockObject(WHITE_BRUSH);
-					} else {
-						SetBkColor(hDC, GetBrushColor(hBrush));
-						return (INT_PTR)hBrush;
+				if (pHdr->idFrom == IDC_DLG_SETTING_TAB && pHdr->code == TCN_SELCHANGE)
+					SendMessage(hWnd, WMU_TAB_CHANGED, TabCtrl_GetCurSel(pHdr->hwndFrom), 0);
+			}
+			break;
+
+			// wParam = tabNo
+			case WMU_TAB_CHANGED: {
+				int idcs[3][30] = {
+					{
+						IDC_DLG_AUTOLOAD, IDC_DLG_RESTORE_DB, IDC_DLG_RESTORE_EDITOR, IDC_DLG_WORD_WRAP, IDC_DLG_TAB_AUTOCOMPLETE,
+						IDC_DLG_ASK_DELETE, IDC_DLG_SYNC_OFF, IDC_DLG_RETAIN_PASSPHRASE, IDC_DLG_HTTP_SERVER, IDC_DLG_HTTP_SERVER_PORT,
+						IDC_DLG_CHECK_UPDATES
+					},
+					{
+						IDC_DLG_FONT_LABEL, IDC_DLG_FONT_FAMILY, IDC_DLG_FONT_SIZE, IDC_DLG_EDITOR_LABEL, IDC_DLG_COLOR, IDC_DLG_GRID_LABEL,
+						IDC_DLG_COLOR + 1, IDC_DLG_COLOR + 2, IDC_DLG_COLOR + 3, IDC_DLG_COLOR + 4, IDC_DLG_COLOR + 5,
+						IDC_DLG_COLOR + 6, IDC_DLG_COLOR + 7, IDC_DLG_COLOR + 8, IDC_DLG_COLOR + 9, IDC_DLG_COLOR + 10,
+						IDC_DLG_COLOR + 11, IDC_DLG_ESCAPE_LABEL, IDC_DLG_EXIT_BY_ESCAPE, IDC_DLG_INDENT_LABEL, IDC_DLG_INDENT,
+						IDC_DLG_ROW_LIMIT_LABEL, IDC_DLG_ROW_LIMIT, IDC_DLG_CLI_ROW_LIMIT_LABEL, IDC_DLG_CLI_ROW_LIMIT,
+						IDC_DLG_BEEP_LABEL, IDC_DLG_BEEP_ON_QUERY_END
+					},
+					{IDC_DLG_STARTUP_LABEL, IDC_DLG_STARTUP, IDC_DLG_GOOGLE_KEY_LABEL, IDC_DLG_GOOGLE_KEY}
+				};
+
+				HWND hTabWnd = GetDlgItem(hWnd, IDC_DLG_SETTING_TAB);
+				int tabNo = (int)wParam;
+				for (int i = 0; i < 3; i++) {
+					for (int idc : idcs[i]) {
+						if (idc)
+							ShowWindow(GetDlgItem(hTabWnd, idc), i == tabNo ? SW_SHOW : SW_HIDE);
 					}
 				}
 			}

@@ -1,11 +1,11 @@
-#define GUI_VERSION                "1.8.0"
-#define GUI_VERSION2               1, 8, 0, 0
+#define GUI_VERSION                "1.8.1"
+#define GUI_VERSION2               1, 8, 1, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
 #define GUI_PLATFORM               32
 #endif
-#define HELP_VERSION               4
+#define HELP_VERSION               5
 
 #define IDD_ADDVIEWEDIT            11
 #define IDD_EDITDATA               12
@@ -35,17 +35,18 @@
 
 #define IDD_TOOL_IMPORT_CSV        55
 #define IDD_TOOL_IMPORT_JSON       56
-#define IDD_TOOL_EXPORT_CSV        57
-#define IDD_TOOL_EXPORT_JSON       58
-#define IDD_TOOL_EXPORT_SQL        59
-#define IDD_TOOL_EXPORT_IMPORT_ODBC 60
-#define IDD_TOOL_GENERATE_DATA     61
-#define IDD_TOOL_DATABASE_DIAGRAM  62
-#define IDD_TOOL_COMPARE_DATABASE  63
-#define IDD_TOOL_DATABASE_SEARCH   64
-#define IDD_TOOL_STATISTICS        65
-#define IDD_TOOL_FOREIGN_KEY_CHECK 66
-#define IDD_TOOL_DESKTOP_SHORTCUT  67
+#define IDD_TOOL_IMPORT_SHEET      57
+#define IDD_TOOL_EXPORT_CSV        60
+#define IDD_TOOL_EXPORT_JSON       61
+#define IDD_TOOL_EXPORT_SQL        62
+#define IDD_TOOL_EXPORT_IMPORT_ODBC 63
+#define IDD_TOOL_GENERATE_DATA     71
+#define IDD_TOOL_DATABASE_DIAGRAM  72
+#define IDD_TOOL_COMPARE_DATABASE  73
+#define IDD_TOOL_DATABASE_SEARCH   74
+#define IDD_TOOL_STATISTICS        75
+#define IDD_TOOL_FOREIGN_KEY_CHECK 76
+#define IDD_TOOL_DESKTOP_SHORTCUT  77
 
 
 #define IDC_MENU_MAIN              100
@@ -133,6 +134,7 @@
 #define IDC_DLG_IDXNAME            335
 #define IDC_DLG_IDXWHERE           336
 #define IDC_DLG_INDEXED_COLUMNS    337
+#define IDC_DLG_SETTING_TAB        338
 
 #define IDC_DLG_COLNAME            340
 #define IDC_DLG_COLTYPE            341
@@ -229,6 +231,11 @@
 #define IDC_DLG_NAME               473
 #define IDC_DLG_NAME_LABEL         474
 #define IDC_DLG_CODE_LABEL         475
+#define IDC_DLG_SHEET_ID           476
+#define IDC_DLG_SHEET_NAME         477
+#define IDC_DLG_SHEET_RANGE        478
+#define IDC_DLG_GOOGLE_KEY         479
+#define IDC_DLG_GOOGLE_KEY_LABEL   480
 
 #define IDC_DLG_CIPHER_KEY                  601
 #define IDC_DLG_CIPHER_STORE_KEY            602
@@ -300,24 +307,25 @@
 #define IDM_IMPORT_SQL             1520
 #define IDM_IMPORT_CSV             1521
 #define IDM_IMPORT_JSON            1522
-#define IDM_IMPORT_ODBC            1523
-#define IDM_EXPORT_SQL             1524
-#define IDM_EXPORT_CSV             1525
-#define IDM_EXPORT_JSON            1526
-#define IDM_EXPORT_EXCEL           1527
-#define IDM_EXPORT_ODBC            1528
-#define IDM_CHECK_INTEGRITY        1529
-#define IDM_FOREIGN_KEY_CHECK      1530
-#define IDM_VACUUM                 1531
-#define IDM_REINDEX                1532
-#define IDM_DESKTOP_SHORTCUT       1533
-#define IDM_LOCATE_FILE            1534
-#define IDM_STATISTICS             1535
-#define IDM_GENERATE_DATA          1536
-#define IDM_DATABASE_DIAGRAM       1537
-#define IDM_COMPARE_DATABASE       1538
-#define IDM_DATABASE_SEARCH        1539
-#define IDM_CUSTOM_FUNCTIONS       1540
+#define IDM_IMPORT_GOOGLE_SHEETS   1523
+#define IDM_IMPORT_ODBC            1524
+#define IDM_EXPORT_SQL             1530
+#define IDM_EXPORT_CSV             1531
+#define IDM_EXPORT_JSON            1532
+#define IDM_EXPORT_EXCEL           1533
+#define IDM_EXPORT_ODBC            1534
+#define IDM_CHECK_INTEGRITY        1535
+#define IDM_FOREIGN_KEY_CHECK      1536
+#define IDM_VACUUM                 1537
+#define IDM_REINDEX                1538
+#define IDM_DESKTOP_SHORTCUT       1539
+#define IDM_LOCATE_FILE            1540
+#define IDM_STATISTICS             1541
+#define IDM_GENERATE_DATA          1542
+#define IDM_DATABASE_DIAGRAM       1543
+#define IDM_COMPARE_DATABASE       1544
+#define IDM_DATABASE_SEARCH        1545
+#define IDM_CUSTOM_FUNCTIONS       1546
 
 #define IDM_HELP                   1550
 #define IDM_ABOUT                  1551
@@ -526,10 +534,14 @@
 #define WMU_RESULT_SEARCH          WM_USER + 51
 #define WMU_COMPARE                WM_USER + 52
 #define WMU_HEATMAP                WM_USER + 53
+#define WMU_UPDATE_SHEET_IDS       WM_USER + 54
+#define WMU_UPDATE_SHEET_PREVIEW   WM_USER + 55
+#define WMU_SET_THEME              WM_USER + 56
 
 #define WMU_HIGHLIGHT              WM_USER + 60
 #define WMU_SELECTION_CHANGED      WM_USER + 61
 #define WMU_TEXT_CHANGED           WM_USER + 62
+#define WMU_TAB_CHANGED            WM_USER + 63
 
 #define WMU_TAB_ADD                WM_USER + 140
 #define WMU_TAB_DELETE             WM_USER + 141

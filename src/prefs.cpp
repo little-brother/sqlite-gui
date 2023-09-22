@@ -155,9 +155,6 @@ namespace prefs {
 		if (!loadSqlResource(IDR_INIT))
 			return false;
 
-		if (HELP_VERSION != get("help-version") && loadSqlResource(IDR_HELP))
-			set("help-version", HELP_VERSION);
-
 		// migration from 1.7.1 and earlier versions
 		if (SQLITE_OK != sqlite3_exec(db, "select refname from refs where 1 = 2", 0, 0, 0)) {
 			sqlite3_exec(db, "alter table refs add column refname text", 0, 0, 0);
@@ -171,6 +168,9 @@ namespace prefs {
 				set((char*) sqlite3_column_text(stmt, 0), sqlite3_column_int(stmt, 1));
 		}
 		sqlite3_finalize(stmt);
+
+		if (HELP_VERSION != get("help-version") && loadSqlResource(IDR_HELP))
+			set("help-version", HELP_VERSION);
 
 		if (!isReadWrite && !get("ignore-readonly-prefs"))
 				MessageBox(0, TEXT("Can't open prefs.sqlite for writing.\nSettings will not be saved."), 0, 0);

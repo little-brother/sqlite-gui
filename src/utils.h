@@ -51,5 +51,7 @@ namespace utils {
 	UINT crc32(const BYTE* data, int size);
 
 	void mergeSort(int indexes[], void* data, int l, int r, BOOL isBackward, BOOL isNums);
+
+	char* httpRequest(const char* method, const char* uri, const char* path, const char* data = 0);
 }
 #endif

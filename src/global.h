@@ -95,6 +95,7 @@ bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 TCHAR* getCurrentText(HWND hWnd);
+bool wrapSelectedText(HWND hEditorWnd, int key);
 bool toggleWordWrap(HWND hEditorWnd);
 bool toggleTextCase (HWND hEditorWnd);
 bool toggleComment (HWND hEditorWnd);
