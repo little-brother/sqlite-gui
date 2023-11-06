@@ -5,12 +5,13 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 82;
+	const int ICOUNT = 84;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
 		"cli-font-size", "cli-row-limit", "cli-preserve-inja",
-		"backup-prefs", "ignore-readonly-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight", "use-autocomplete", "autocomplete-by-tab", "use-legacy-rename", "editor-indent",
+		"backup-prefs", "ignore-readonly-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight",
+		"use-autocomplete", "autocomplete-by-tab", "disable-autocomplete-help", "use-foreign-keys", "use-legacy-rename", "editor-indent",
 		"editor-tab-count", "editor-tab-current", "highlight-delay",
 		"ask-delete", "word-wrap", "clear-values", "recent-count",
 		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
@@ -35,7 +36,8 @@ namespace prefs {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1, 3000, 1,
 		8, 10, 1,
-		0, 0, 1, 1, 1, 1, 1, 0, 0, 0,
+		0, 0, 1, 1, 1, 1,
+		1, 0, 0, 0, 0, 0, // use
 		1, 0, 30,
 		0, 0, 0, 10,
 		0, 0, 1,

@@ -3,10 +3,6 @@
 	Returns a row number starting from a passed argument
 	select *, rownum(0) from mytable
 
-	concat(str1, str2, ...)
-	Concatenates strings. Equals to str1 || str2 || ...
-	select concat(1, 'a', 2.5) --> 1a2.5
-
 	decode(expr, key1, value1, ke2, value2, ..., defValue)
 	Compares expr to each key one by one. If expr is equal to a key, then returns the corresponding value. 
 	If no match is found, then returns defValue. If defValue is omitted, then returns null.
@@ -78,27 +74,6 @@ static void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv){
 	}
 	
 	sqlite3_result_int(ctx, *pCounter);
-}
-
-static void concat (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
-	if (argc == 0)
-		return sqlite3_result_null(ctx);
-
-	for(int i = 0; i < argc; i++) {
-		if(sqlite3_value_type(argv[i]) == SQLITE_NULL) 
-			return sqlite3_result_null(ctx);
-	}
-	
-	size_t len = 0;
-	for(int i = 0; i < argc; i++) 
-		len += strlen(sqlite3_value_text(argv[i]));
-	
-	char* all = (char*)calloc(sizeof(char), len + 1);	
-	for(int i = 0; i < argc; i++) 
-		strcat(all, sqlite3_value_text(argv[i]));
-	
-	sqlite3_result_text(ctx, all, -1, SQLITE_TRANSIENT);
-	free(all);
 }
 
 static void decode (sqlite3_context *ctx, int argc, sqlite3_value **argv) {
@@ -729,7 +704,6 @@ int sqlite3_ora_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *p
 	(void)pzErrMsg;  /* Unused parameter */
 	return SQLITE_OK == sqlite3_create_function(db, "rownum", 0, SQLITE_UTF8, 0, rownum, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "rownum", 1, SQLITE_UTF8, 0, rownum, 0, 0) &&
-		SQLITE_OK == sqlite3_create_function(db, "concat", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, concat, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "decode", -1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, decode, 0, 0) &&
 		SQLITE_OK == sqlite3_create_function(db, "crc32", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, crc32, 0, 0) && 
 		SQLITE_OK == sqlite3_create_function(db, "md5", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0, md5, 0, 0) && 

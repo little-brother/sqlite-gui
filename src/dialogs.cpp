@@ -4744,17 +4744,41 @@ namespace dialogs {
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildrenReparent, (LPARAM)hTabWnd);
 				cbOldTabSettings = (WNDPROC)SetWindowLongPtr(hTabWnd, GWLP_WNDPROC, (LONG_PTR)cbNewTabSettings);
 
-				HWND hFontSize = GetDlgItem(hTabWnd, IDC_DLG_FONT_SIZE);
+				// There is a some issue for edit after the combobox reparenting
+				// So just recreate it. Use for font family and size
+ 				auto recreateDropDown = [hTabWnd](int idc) {
+ 					HWND hWnd = GetDlgItem(hTabWnd, idc);
+
+					RECT rc;
+					GetWindowRect(hWnd, &rc);
+					POINT pos{rc.left, rc.top}, dims {rc.right - rc.left, rc.bottom - rc.top};
+					ScreenToClient(hTabWnd, &pos);
+					DestroyWindow(hWnd);
+
+					hWnd = CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWN | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP,
+						pos.x, pos.y, dims.x, 200, hTabWnd, (HMENU)(LONG_PTR)idc, GetModuleHandle(0), NULL);
+					SendMessage(hWnd, WM_SETFONT, (LPARAM)hDefFont, TRUE);
+
+					return hWnd;
+				};
+
+				HWND hFontSize = recreateDropDown(IDC_DLG_FONT_SIZE);
 				int fontSize = prefs::get("font-size");
 				int sizes[] = {8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24};
-				int idx = 0;
+				int idx = -1;
 				for (int i = 0; i < 11; i++) {
 					idx = fontSize == sizes[i] ? i : idx;
 					TCHAR buf[4];
 					_sntprintf(buf, 3, TEXT("%i"), sizes[i]);
 					ComboBox_AddString(hFontSize, buf);
 				}
-				ComboBox_SetCurSel(hFontSize, idx);
+				if (idx != -1) {
+					ComboBox_SetCurSel(hFontSize, idx);
+				} else {
+					TCHAR fs[10];
+					_sntprintf(fs, 9, TEXT("%i"), fontSize);
+					ComboBox_SetText(hFontSize, fs);
+				}
 
 				HWND hExitByEscape = GetDlgItem(hTabWnd, IDC_DLG_EXIT_BY_ESCAPE);
 				ComboBox_AddString(hExitByEscape, TEXT("Do nothing"));
@@ -4762,20 +4786,7 @@ namespace dialogs {
 				ComboBox_AddString(hExitByEscape, TEXT("Ask before closing the app"));
 				ComboBox_SetCurSel(hExitByEscape, prefs::get("exit-by-escape"));
 
-				HWND hFontFamily = GetDlgItem(hTabWnd, IDC_DLG_FONT_FAMILY);
-
-				// There is a some issue for edit after the combobox reparenting
-				// So just recreate it
-				RECT rc;
-				GetWindowRect(hFontFamily, &rc);
-				POINT pos{rc.left, rc.top}, dims {rc.right - rc.left, rc.bottom - rc.top};
-				ScreenToClient(hTabWnd, &pos);
-				DestroyWindow(hFontFamily);
-
-				hFontFamily = CreateWindow(WC_COMBOBOX, NULL, CBS_DROPDOWN | CBS_HASSTRINGS | WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-					pos.x, pos.y, dims.x, 200, hTabWnd, (HMENU)IDC_DLG_FONT_FAMILY, GetModuleHandle(0), NULL);
-				SendMessage(hFontFamily, WM_SETFONT, (LPARAM)hDefFont, TRUE);
-
+				HWND hFontFamily = recreateDropDown(IDC_DLG_FONT_FAMILY);
 				HDC hDC = GetDC(hMainWnd);
 				LOGFONT lf = {0};
 				lf.lfFaceName[0] = TEXT('\0');
@@ -4796,8 +4807,11 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_HTTP_SERVER), prefs::get("http-server") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_CHECK_UPDATES), prefs::get("check-update") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_TAB_AUTOCOMPLETE), prefs::get("autocomplete-by-tab") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_DISABLE_HELP), prefs::get("disable-autocomplete-help") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_SYNC_OFF), prefs::get("synchronous-off") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_FOREIGN_KEYS), prefs::get("use-foreign-keys") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_LEGACY_RENAME), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[256];
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("row-limit"));
@@ -4861,7 +4875,7 @@ namespace dialogs {
 					delete [] fontFamily8;
 
 					GetDlgItemText(hTabWnd, IDC_DLG_FONT_SIZE, buf, 255);
-					prefs::set("font-size", _tcstol(buf, NULL, 10));
+					prefs::set("font-size", MAX(8, _tcstol(buf, NULL, 10)));
 					prefs::set("autoload-extensions", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_AUTOLOAD)));
 					prefs::set("restore-db", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_DB)));
 					prefs::set("restore-editor", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RESTORE_EDITOR)));
@@ -4870,10 +4884,13 @@ namespace dialogs {
 					prefs::set("http-server", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_HTTP_SERVER)));
 					prefs::set("check-update", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_CHECK_UPDATES)));
 					prefs::set("autocomplete-by-tab", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_TAB_AUTOCOMPLETE)));
+					prefs::set("disable-autocomplete-help", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_DISABLE_HELP)));
 					prefs::set("retain-passphrase", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_RETAIN_PASSPHRASE)));
 					prefs::set("exit-by-escape", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_EXIT_BY_ESCAPE)));
 					prefs::set("synchronous-off", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_SYNC_OFF)));
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_INDENT)));
+					prefs::set("use-foreign-keys", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_FOREIGN_KEYS)));
+					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_LEGACY_RENAME)));
 
 					GetDlgItemText(hTabWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
@@ -4886,8 +4903,6 @@ namespace dialogs {
 
 					GetDlgItemText(hTabWnd, IDC_DLG_HTTP_SERVER_PORT, buf, 255);
 					prefs::set("http-server-port", (int)_tcstod(buf, NULL));
-
-					sqlite3_exec(db, prefs::get("use-legacy-rename") ? "pragma legacy_alter_table = 1" : "pragma legacy_alter_table = 0", 0, 0, 0);
 
 					TCHAR startup16[MAX_TEXT_LENGTH]{0};
 					GetDlgItemText(hTabWnd, IDC_DLG_STARTUP, startup16, MAX_TEXT_LENGTH - 1);
@@ -4940,8 +4955,8 @@ namespace dialogs {
 				int idcs[3][30] = {
 					{
 						IDC_DLG_AUTOLOAD, IDC_DLG_RESTORE_DB, IDC_DLG_RESTORE_EDITOR, IDC_DLG_WORD_WRAP, IDC_DLG_TAB_AUTOCOMPLETE,
-						IDC_DLG_ASK_DELETE, IDC_DLG_SYNC_OFF, IDC_DLG_RETAIN_PASSPHRASE, IDC_DLG_HTTP_SERVER, IDC_DLG_HTTP_SERVER_PORT,
-						IDC_DLG_CHECK_UPDATES
+						IDC_DLG_DISABLE_HELP, IDC_DLG_ASK_DELETE, IDC_DLG_SYNC_OFF, IDC_DLG_RETAIN_PASSPHRASE, IDC_DLG_HTTP_SERVER,
+						IDC_DLG_HTTP_SERVER_PORT, IDC_DLG_CHECK_UPDATES
 					},
 					{
 						IDC_DLG_FONT_LABEL, IDC_DLG_FONT_FAMILY, IDC_DLG_FONT_SIZE, IDC_DLG_EDITOR_LABEL, IDC_DLG_COLOR, IDC_DLG_GRID_LABEL,
@@ -4951,7 +4966,10 @@ namespace dialogs {
 						IDC_DLG_ROW_LIMIT_LABEL, IDC_DLG_ROW_LIMIT, IDC_DLG_CLI_ROW_LIMIT_LABEL, IDC_DLG_CLI_ROW_LIMIT,
 						IDC_DLG_BEEP_LABEL, IDC_DLG_BEEP_ON_QUERY_END
 					},
-					{IDC_DLG_STARTUP_LABEL, IDC_DLG_STARTUP, IDC_DLG_GOOGLE_KEY_LABEL, IDC_DLG_GOOGLE_KEY}
+					{
+						IDC_DLG_STARTUP_LABEL, IDC_DLG_STARTUP, IDC_DLG_FOREIGN_KEYS, IDC_DLG_LEGACY_RENAME, IDC_DLG_GOOGLE_KEY_LABEL,
+						IDC_DLG_GOOGLE_KEY
+					}
 				};
 
 				HWND hTabWnd = GetDlgItem(hWnd, IDC_DLG_SETTING_TAB);
@@ -5679,8 +5697,8 @@ namespace dialogs {
 
 			case WM_PAINT: {
 				cbOldHeaderEdit(hWnd, msg, wParam, lParam);
-			    if (GetDlgCtrlID(hWnd) == IDC_DLG_FILTER)
-                    return TRUE;
+				if (GetDlgCtrlID(hWnd) == IDC_DLG_FILTER)
+					return TRUE;
 
 				RECT rc;
 				GetClientRect(hWnd, &rc);

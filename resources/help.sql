@@ -89,6 +89,8 @@ The unlikely(x) is equivalent to likelihood(x, 0.0625). ', 'select unlikely(3);'
 Doesn''t work for non-ANSI symbols without icu extension.', 'select upper(''SQLite''); --> SQLITE', '', null, 1),
 ('zeroblob', 'function', 'zeroblob(n)', 'Returns a BLOB consisting of n bytes of 0x00.', 'select zeroblob(5);', '', null, 1),
 ('unhex', 'function', 'unhex(x, y)', 'Returns a BLOB value which is the decoding of the hexadecimal string x. Hexadecimal digits in Y have no affect on the translation of x. Only characters in y that are not hexadecimal digits are ignored in x.', 'select unhex(0xABC);', '', null, 1),
+('concat', 'function', 'concat ([str, ...])', 'Returns a string which is the concatenation of the string representation of all of its non-NULL arguments. If all arguments are NULL, then concat() returns an empty string.', 'select concat(''a'', ''b''); --> ab', '', 'Str|Str2|Str3|Str4|Str5', -1),
+('concat_ws', 'function', 'concat_ws (sep, str [, str, ...])', 'Returns a string that is the concatenation of all non-null arguments beyond the first argument, using the text value of the first argument as a separator. If the first argument is NULL, then concat_ws() returns NULL. If all arguments other than the first are NULL, then concat_ws() returns an empty string. ', 'select concat_ws('','', ''a'', ''b''); --> a,b', '', 'Sep|Str|Str2|Str3|Str4|Str5', -1),
 
 -- MATH
 ('acos', 'function', 'acos (n)', 'Returns the arc cosine of N (in the range of 0 to pi, expressed in radians).
@@ -165,7 +167,7 @@ If there are no non-NULL input rows then returns NULL.', 'select sum(price) from
 If there are no non-NULL input rows then returns 0.0.', 'select sum(price) from books;', '', null, 1),
 ('count', 'function', 'count (val)', 'An aggregate SQL function that returns a count of the number of times that Val is not NULL in a group. 
 The count(*) function (with no arguments) returns the total number of rows in the group.', 'select count(*) from books;', '', null, 1),
-('group_concat', 'function', 'group_concat (expr [, separator = ''''])', 'An aggregate SQL function that returns a string that is the concatenation of all non-NULL values of the input Expr separated by the Separator', 'select iif(price >= 5, ''expensive'', ''cheap'') "group", group_concat(title, '', '') titles from books group by price >= 5', '', 'Expr|Separator', 2),
+('group_concat', 'function', 'group_concat (expr [, separator = '',''])', 'Returns a string that is the concatenation of all non-NULL values of the input Expr separated by the Separator', 'select iif(price >= 5, ''expensive'', ''cheap'') "group", group_concat(title, '', '') titles from books group by price >= 5', 'string_agg', 'Expr|Separator', 2),
 
 -- REGEXP
 ('regexp', 'function', 'regexp (pattern, str)', 'Returns 1 if Str is matched to Pattern and returns 0 otherwise.
@@ -264,7 +266,6 @@ Otherwise, query columns should be complete the same with target coiumns.',
 
 -- ORA
 ('rownum', 'function', 'rownum ([start])', 'Returns a row number in the result.', 'select rownum() from books;', '', 'Start', 1),
-('concat', 'function', 'concat ([str, ...])', 'Concatenates input strings. Equals to str1 || str2 || ...', 'select concat(1, ''a'', 2.5) --> 1a2.5', '', 'Str|Str2|Str3|Str4|Str5', -1),
 ('decode', 'function', 'decode (expr [, search, result, ...], def)', 'Compares expr to each Search one by one.
 If expr is equal to a Search, then returns the corresponding Result. 
 If no match is found, then returns Def. 
@@ -317,7 +318,8 @@ select xml_remove(''<a>A</a><a id="1">B</a><a id="2">C</a>'', ''a/@id''); --> <a
 
 -- PRAGMAS
 ('analysis_limit', 'pragma', 'pragma analysis_limit = N', 'Query or change a limit on the approximate ANALYZE setting. This is approximate number of rows examined in each index by the ANALYZE command. If the argument N is omitted, then the analysis limit is unchanged. If the limit is zero, then the analysis limit is disabled and the ANALYZE command will examine all rows of each index. If N is greater than zero, then the analysis limit is set to N and subsequent ANALYZE commands will stop analyzing each index after it has examined approximately N rows. If N is a negative number or something other than an integer value, then the pragma behaves as if the N argument was omitted. In all cases, the value returned is the new analysis limit used for subsequent ANALYZE commands.', '', 'pragma_analysis_limit', null, 0),
-('application_id', 'pragma', 'pragma schema.application_id = N', 'Query or set the 32-bit signed big-endian "Application ID" integer located at offset 68 into the database header', '', 'pragma_application_id', null, 0),
+
+('application_id', 'pragma', 'pragma schema.application_id = N', 'Query or set the 32-bit signed big-endian "Application ID" integer located at offset 68 into the database header.', '', 'pragma_application_id', null, 0),
 
 ('auto_vacuum', 'pragma', 'schema.auto_vacuum = 0 | NONE | 1 | FULL | 2 | INCREMENTAL', 'Query or set the auto-vacuum status in the database.
 
@@ -332,11 +334,13 @@ When the value of auto-vacuum is 2 or "incremental" then the additional informat
 ('busy_timeout', 'pragma', 'pragma busy_timeout = N', 'Query or change the setting of the busy timeout in milliseconds.', '', 'pragma_busy_timeout', null, 0),
 
 ('cache_size', 'pragma', 'pragma schema.cache_size = N', 'Query or change the suggested maximum number of database disk pages that SQLite will hold in memory at once per open database file. If the argument N is positive then the suggested cache size is set to N. If the argument N is negative, then the number of cache pages is adjusted to be a number of pages that would use approximately abs(N*1024) bytes of memory based on the current page size.', 'select * from temp.pragma_cache_size', 'pragma_cache_size', null, 0),
+
 ('cache_spill', 'pragma', 'pragma schema.cache_spill = 0 | 1 | N', 'Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction. The N-form sets a minimum cache size threshold required for spilling to occur. The number of pages in cache must exceed both the cache_spill threshold and the maximum cache size set by the PRAGMA cache_size statement in order for spilling to occur.', '', 'pragma_cache_spill', null, 0),
 
-('case_sensitive_like', 'pragma', 'pragma case_sensitive_like = 0 | 1', 'The default behavior of the LIKE operator is to ignore case for ASCII characters. Hence, by default ''a'' LIKE ''A'' is true. The case_sensitive_like pragma installs a new application-defined LIKE function that is either case sensitive or insensitive depending on the value of the case_sensitive_like pragma. When case_sensitive_like is disabled, the default LIKE behavior is expressed. When case_sensitive_like is enabled, case becomes significant.', 'select * from pragma_case_sensitive_like', 'pragma_case_sensitive_like', null, 0),
+('case_sensitive_like', 'pragma', 'pragma case_sensitive_like = 0 | 1
+DEPRECATED', 'The default behavior of the LIKE operator is to ignore case for ASCII characters. Hence, by default ''a'' LIKE ''A'' is true. The case_sensitive_like pragma installs a new application-defined LIKE function that is either case sensitive or insensitive depending on the value of the case_sensitive_like pragma. When case_sensitive_like is disabled, the default LIKE behavior is expressed. When case_sensitive_like is enabled, case becomes significant.', 'select * from pragma_case_sensitive_like', 'pragma_case_sensitive_like', null, 0),
 
-('cell_size_check ', 'pragma', 'pragma cell_size_check = 0 | 1', 'Enables or disables additional sanity checking on database b-tree pages as they are initially read from disk. With cell size checking enabled, database corruption is detected earlier and is less likely to "spread". However, there is a small performance hit for doing the extra checks and so cell size checking is turned off by default. ', '', 'pragma_cell_size_check', null, 0),
+('cell_size_check', 'pragma', 'pragma cell_size_check = 0 | 1', 'Enables or disables additional sanity checking on database b-tree pages as they are initially read from disk. With cell size checking enabled, database corruption is detected earlier and is less likely to "spread". However, there is a small performance hit for doing the extra checks and so cell size checking is turned off by default.', '', 'pragma_cell_size_check', null, 0),
 
 ('checkpoint_fullfsync', 'pragma', 'pragma checkpoint_fullfsync = 0 | 1', 'Query or change the fullfsync flag for checkpoint operations. If this flag is set, then the F_FULLFSYNC syncing method is used during checkpoint operations on systems that support F_FULLFSYNC. The default value is off. Only Mac OS-X supports F_FULLFSYNC.', '', 'pragma_checkpoint_fullfsync', null, 0),
 
@@ -344,27 +348,23 @@ When the value of auto-vacuum is 2 or "incremental" then the additional informat
 
 ('compile_options', 'pragma', 'pragma compile_options', 'Returns the names of compile-time options used when building SQLite, one option per row. The "SQLITE_" prefix is omitted from the returned option names.', '', 'pragma_compile_options', null, 0),
 
-('count_changes', 'pragma', 'pragma count_changes = 0 | 1', 'DEPRECATED
+('count_changes', 'pragma', 'pragma count_changes = 0 | 1
+DEPRECATED', 'Query or change the count-changes flag. Normally, when the count-changes flag is not set, INSERT, UPDATE and DELETE statements return no data. When count-changes is set, each of these commands returns a single row of data consisting of one integer value - the number of rows inserted, modified or deleted by the command. The returned change count does not include any insertions, modifications or deletions performed by triggers, any changes made automatically by foreign key actions, or updates caused by an upsert.', '', 'pragma_count_changes', null, 0),
 
-Query or change the count-changes flag. Normally, when the count-changes flag is not set, INSERT, UPDATE and DELETE statements return no data. When count-changes is set, each of these commands returns a single row of data consisting of one integer value - the number of rows inserted, modified or deleted by the command. The returned change count does not include any insertions, modifications or deletions performed by triggers, any changes made automatically by foreign key actions, or updates caused by an upsert.', '', 'pragma_count_changes', null, 0),
-
-('data_store_directory', 'pragma', 'pragma data_store_directory = Path', 'DEPRECATED
-
-Query or change the value of the sqlite3_data_directory global variable, which windows operating-system interface backends use to determine where to store database files specified using a relative pathname.', '', 'pragma_data_store_directory', null, 0),
+('data_store_directory', 'pragma', 'pragma data_store_directory = Path
+DEPRECATED', 'Query or change the value of the sqlite3_data_directory global variable, which windows operating-system interface backends use to determine where to store database files specified using a relative pathname.', '', 'pragma_data_store_directory', null, 0),
 
 ('data_version', 'pragma', 'pragma schema.data_version', 'Provides an indication that the database file has been modified. Interactive programs that hold database content in memory or that display database content on-screen can use the PRAGMA data_version command to determine if they need to flush and reload their memory or update the screen display.', '', 'pragma_data_version', null, 0),
 
 ('database_list', 'pragma', 'pragma database_list', 'Returns one row for each database attached to the current database connection.', '', 'pragma_database_list', null, 0),
 
-('default_cache_size', 'pragma', 'pragma schema.default_cache_size', 'DEPRECATED
-
-This pragma queries or sets the suggested maximum number of pages of disk cache that will be allocated per open database file. The difference between this pragma and cache_size is that the value set here persists across database connections. The value of the default cache size is stored in the 4-byte big-endian integer located at offset 48 in the header of the database file.', '', 'pragma_default_cache_size', null, 0),
+('default_cache_size', 'pragma', 'pragma schema.default_cache_size
+DEPRECATED', 'This pragma queries or sets the suggested maximum number of pages of disk cache that will be allocated per open database file. The difference between this pragma and cache_size is that the value set here persists across database connections. The value of the default cache size is stored in the 4-byte big-endian integer located at offset 48 in the header of the database file.', '', 'pragma_default_cache_size', null, 0),
 
 ('defer_foreign_keys', 'pragma', 'pragma defer_foreign_keys = 0 | 1', 'When is on, enforcement of all foreign key constraints is delayed until the outermost transaction is committed. The pragma defaults to OFF so that foreign key constraints are only deferred if they are created as "DEFERRABLE INITIALLY DEFERRED". The defer_foreign_keys pragma is automatically switched off at each COMMIT or ROLLBACK. Hence, the defer_foreign_keys pragma must be separately enabled for each transaction. This pragma is only meaningful if foreign key constraints are enabled.', '', 'pragma_defer_foreign_keys', null, 0),
 
-('empty_result_callbacks', 'pragma', 'pragma empty_result_callbacks = 0 | 1', 'DEPRECATED
-
-Query or change the empty-result-callbacks flag.', '', 'pragma_empty_result_callbacks', null, 0),
+('empty_result_callbacks', 'pragma', 'pragma empty_result_callbacks = 0 | 1
+DEPRECATED', 'Query or change the empty-result-callbacks flag.', '', 'pragma_empty_result_callbacks', null, 0),
 
 ('encoding', 'pragma', 'pragma encoding = ''UTF-8'' | ''UTF-16'' | ''UTF-16le'' | ''UTF-16be''', 'Returns or set the text encoding used by the main database. The ''UTF-16'' is interpreted as "UTF-16 encoding using native machine byte-ordering". Once an encoding has been set for a database, it cannot be changed.', '', 'pragma_encoding', null, 0),
 
@@ -377,9 +377,8 @@ This pragma is a no-op within a transaction; foreign key constraint enforcement 
 
 ('freelist_count', 'pragma', 'pragma schema.freelist_count', 'Returns the number of unused pages in the database file', '', 'pragma_freelist_count', null, 0),
 
-('full_column_names', 'pragma', 'pragma full_column_names = 0 | 1', 'DEPRECATED
-
-Query or change the full_column_names flag. This flag together with the short_column_names flag determine the way SQLite assigns names to result columns of SELECT statements.', '', 'pragma_full_column_names', null, 0),
+('full_column_names', 'pragma', 'pragma full_column_names = 0 | 1
+DEPRECATED', 'Query or change the full_column_names flag. This flag together with the short_column_names flag determine the way SQLite assigns names to result columns of SELECT statements.', '', 'pragma_full_column_names', null, 0),
 
 ('fullfsync', 'pragma', 'pragma fullfsync = 0 | 1', 'Queries or changes the fullfsync flag. This flag determines whether or not the F_FULLFSYNC syncing method is used on systems that support it. The default value is off. Only Mac OS X supports F_FULLFSYNC.', '', 'pragma_fullfsync', null, 0),
 
@@ -417,7 +416,11 @@ Query or change the full_column_names flag. This flag together with the short_co
 
 ('page_count', 'pragma', 'pragma schema.page_count = N', 'Queries or sets the page size of the database. The page size must be a power of two between 512 and 65536 inclusive. When a new database is created, SQLite assigns a page size to the database based on platform and filesystem.', '', 'pragma_page_count', null, 0),
 
+('page_size', 'pragma', 'pragma schema.page_size = N', 'Query or set the page size of the database. The page size must be a power of two between 512 and 65536. The default is 4096. ', '', 'pragma_page_size', null, 0),
+
 ('pragma_list', 'pragma', 'pragma pragma_list', 'Returns a list of PRAGMA commands known to the database connection. ', '', 'pragma_pragma_list', null, 0),
+
+('query_only', 'pragma', 'pragma query_only', 'Prevents data changes on database files when enabled. When this pragma is enabled, any attempt to CREATE, DELETE, DROP, INSERT, or UPDATE will result in an SQLITE_READONLY error. However, the database is not truly read-only. You can still run a checkpoint or a COMMIT.', '', 'pragma_query_only', null, 0),
 
 ('quick_check', 'pragma', 'pragma schema.quick_check(table-name | N)', 'The pragma is like integrity_check except that it does not verify UNIQUE constraints and does not verify that index content matches table content. By skipping UNIQUE and index consistency checks, quick_check is able to run faster. PRAGMA quick_check runs in O(N) time whereas PRAGMA integrity_check requires O(NlogN) time where N is the total number of rows in the database. Otherwise the two pragmas are the same.', '', 'pragma_quick_check', null, 0),
 
@@ -433,9 +436,8 @@ Query or change the full_column_names flag. This flag together with the short_co
 
 The "fast" setting for secure_delete is an intermediate setting in between "on" and "off". When secure_delete is set to "fast", SQLite will overwrite deleted content with zeros only if doing so does not increase the amount of I/O. In other words, the "fast" setting uses more CPU cycles but does not use more I/O. This has the effect of purging all old content from b-tree pages, but leaving forensic traces on freelist pages. ', '', 'pragma_secure_delete', null, 0),
 
-('short_column_names', 'pragma', 'pragma short_column_names = 0 | 1', 'DEPRECATED
-
-Queries or changes the short-column-names flag. This flag affects the way SQLite names columns of data returned by SELECT statements.', '', 'pragma_short_column_names', null, 0),
+('short_column_names', 'pragma', 'pragma short_column_names = 0 | 1
+DEPRECATED', 'Queries or changes the short-column-names flag. This flag affects the way SQLite names columns of data returned by SELECT statements.', '', 'pragma_short_column_names', null, 0),
 
 ('shrink_memory', 'pragma', 'pragma shrink_memory', 'Causes the database connection on which it is invoked to free up as much memory as it can, by calling sqlite3_db_release_memory().', '', 'pragma_shrink_memory', null, 0),
 
@@ -458,9 +460,8 @@ pragma table_list(table-name)', 'Returns information about the tables and views 
 
 ('temp_store', 'pragma', 'pragma temp_store = 0 | DEFAULT | 1 | FILE | 2 | MEMORY', 'Queries or changes the setting of the "temp_store" parameter. When temp_store is DEFAULT (0), the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indices are stored. When temp_store is MEMORY (2) temporary tables and indices are kept in as if they were pure in-memory databases memory. When temp_store is FILE (1) temporary tables and indices are stored in a file.', '', 'pragma_temp_store', null, 0),
 
-('temp_store_directory', 'pragma', 'pragma temp_store_directory = ''dir-name''', 'DEPRECATED
-
-Queries or changes the value of the sqlite3_temp_directory global variable, which many operating-system interface backends use to determine where to store temporary tables and indices.', '', 'pragma_temp_store_directory', null, 0),
+('temp_store_directory', 'pragma', 'pragma temp_store_directory = ''dir-name''
+DEPRECATED', 'Queries or changes the value of the sqlite3_temp_directory global variable, which many operating-system interface backends use to determine where to store temporary tables and indices.', '', 'pragma_temp_store_directory', null, 0),
 
 ('threads', 'pragma', 'pragma threads = N', 'Queries or changes the value of the sqlite3_limit(db, SQLITE_LIMIT_WORKER_THREADS, ...) limit for the current database connection. This limit sets an upper bound on the number of auxiliary threads that a prepared statement is allowed to launch to assist with a query. The default limit is 0.', '', 'pragma_threads', null, 0),
 

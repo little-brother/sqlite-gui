@@ -27,6 +27,7 @@
 #define ACTION_RESIZETAB            4
 #define ACTION_UPDATETAB            5
 #define ACTION_REDRAW               6
+#define ACTION_SET_THEME            7
 
 #define ROW_VIEW                    0
 #define ROW_EDIT                    1

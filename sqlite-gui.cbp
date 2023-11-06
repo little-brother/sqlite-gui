@@ -13,11 +13,14 @@
 				<Option compiler="mingw64_x32" />
 				<Compiler>
 					<Add option="-std=c++11" />
-					<Add option="-g" />
 					<Add option="-U__STRICT_ANSI__" />
+					<Add option="-g" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
+					<Add option="-static-libstdc++" />
+					<Add option="-static" />
+					<Add option="-m32" />
 					<Add library="lib/x32/libsqlite3.a" />
 				</Linker>
 			</Target>
@@ -33,10 +36,10 @@
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
-					<Add option="-s" />
 					<Add option="-static-libstdc++" />
 					<Add option="-static" />
 					<Add option="-m32" />
+					<Add option="-s" />
 					<Add library="lib/x32/libsqlite3.a" />
 				</Linker>
 			</Target>

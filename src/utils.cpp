@@ -781,4 +781,16 @@ namespace utils {
 
 		return res8;
 	}
+
+	SIZE getTextSize(HWND hWnd, const TCHAR* text) {
+		HDC hDC = GetDC(hWnd);
+		HFONT hOldFont = (HFONT)SelectObject(hDC, (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0));
+
+		SIZE s = {0};
+		GetTextExtentPoint32(hDC, text, _tcslen(text), &s);
+		SelectObject(hDC, hOldFont);
+		ReleaseDC(hWnd, hDC);
+
+		return s;
+	}
 }

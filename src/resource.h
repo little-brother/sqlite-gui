@@ -1,11 +1,11 @@
-#define GUI_VERSION                "1.8.1"
-#define GUI_VERSION2               1, 8, 1, 0
+#define GUI_VERSION                "1.8.2"
+#define GUI_VERSION2               1, 8, 2, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
 #define GUI_PLATFORM               32
 #endif
-#define HELP_VERSION               5
+#define HELP_VERSION               6
 
 #define IDD_ADDVIEWEDIT            11
 #define IDD_EDITDATA               12
@@ -135,6 +135,7 @@
 #define IDC_DLG_IDXWHERE           336
 #define IDC_DLG_INDEXED_COLUMNS    337
 #define IDC_DLG_SETTING_TAB        338
+#define IDC_DLG_DISABLE_HELP       339
 
 #define IDC_DLG_COLNAME            340
 #define IDC_DLG_COLTYPE            341
@@ -207,6 +208,8 @@
 #define IDC_DLG_ANORT_ON_ERROR     435
 #define IDC_DLG_LINK_NAME          436
 #define IDC_DLG_READ_ONLY          437
+#define IDC_DLG_FOREIGN_KEYS       438
+#define IDC_DLG_LEGACY_RENAME      439
 
 #define IDC_DLG_FONT_LABEL         440
 #define IDC_DLG_ESCAPE_LABEL       441
@@ -395,20 +398,21 @@
 #define IDM_EDIT                   1703
 #define IDM_DELETE                 1704
 #define IDM_RENAME                 1705
-#define IDM_ADD_COLUMN             1706
-#define IDM_ADD_INDEX              1707
-#define IDM_ERASE_DATA             1708
-#define IDM_DDL                    1709
-#define IDM_ENABLE                 1710
-#define IDM_DISABLE                1711
-#define IDM_VIEW                   1712
-#define IDM_TEMP_EXPLAIN           1713
-#define IDM_PIN_ON_TOP             1714
+#define IDM_DUPLICATE              1706
+#define IDM_ADD_COLUMN             1707
+#define IDM_ADD_INDEX              1708
+#define IDM_ERASE_DATA             1709
+#define IDM_DDL                    1710
+#define IDM_ENABLE                 1711
+#define IDM_DISABLE                1712
+#define IDM_VIEW                   1713
+#define IDM_TEMP_EXPLAIN           1714
+#define IDM_PIN_ON_TOP             1715
 
-#define IDM_ADD                    1715
-#define IDM_REFRESH                1716
-#define IDM_ENABLE_ALL             1717
-#define IDM_DISABLE_ALL            1718
+#define IDM_ADD                    1716
+#define IDM_REFRESH                1717
+#define IDM_ENABLE_ALL             1718
+#define IDM_DISABLE_ALL            1719
 
 #define IDM_VALUE_EDIT             1721
 #define IDM_ROW_ADD                1722
