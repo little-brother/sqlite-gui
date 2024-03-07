@@ -1,7 +1,10 @@
-create table if not exists prefs (name text not null, value text, primary key (name));
-create table if not exists recents (path text not null, time real not null, primary key (path));
-create table if not exists history (query text not null, time real not null, primary key (query));
-create table if not exists gists (query text not null, time real not null, primary key (query));
+create table if not exists prefs (name text primary key, value text);
+create table if not exists recents (path text primary key, time real not null);
+create table if not exists attached_recents (path text primary key, time real not null);
+create table if not exists odbc_recents (alias text primary key, driver text, options text, time real not null);
+create table if not exists extensions (name text primary key, enable integer, version text);
+create table if not exists history (query text primary key, time real not null);
+create table if not exists gists (query text primary key, time real not null);
 create table if not exists generators (type text, value text);
 create table if not exists refs (dbname text not null, schema text not null, tblname text not null, colname text not null, refname text, query text, primary key (dbname, schema, tblname, colname)); 
 create table if not exists disabled (dbpath text not null, type text not null, name text not null, sql text, primary key (dbpath, type, name)); 
@@ -14,8 +17,8 @@ create table if not exists temp.encryption (dbpath text, param text, idc integer
 create table if not exists query_params (dbname text, name text, value text, primary key (dbname, name, value));
 create table if not exists search_history ("time" real, what text, type integer, primary key (what, type));
 create index if not exists idx_cli on cli ("time" desc, dbname);
-create table if not exists help (word text primary key, type text, brief text, description text, example text, alt text, args json, nargs integer);
-create table if not exists functions (id integer primary key autoincrement, name text, type integer default 0, language text default 'sql', code text, code2 text, code3 text, description text);
+create table if not exists help (keyword text, type text, signature text, description text, example text, alias text, args json, nargs integer, source text, primary key (keyword, type));
+create table if not exists functions (id integer primary key autoincrement, name text, type integer default 0, language text default 'sql', code text, code2 text, code3 text, description text, help text);
 create table if not exists sheets (sheet_id text primary key, "time" real);
 create table if not exists shortcuts as 
 select cast('Alt + F1' as text) name, cast(0x70 as integer) key, cast(0 as integer) ctrl, cast(1 as integer) alt, 

@@ -4,11 +4,13 @@
 #include <objidl.h>
 #include <shlguid.h>
 #include <shlobj.h>
+#include "dmp.h"
 
 #include "global.h"
 #include "resource.h"
 #include "tools.h"
 #include "utils.h"
+#include "dbutils.h"
 #include "dialogs.h"
 #include "prefs.h"
 
@@ -125,6 +127,7 @@ namespace tools {
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_MULTIPLE_INSERT), prefs::get("sql-export-multiple-insert") ? BST_CHECKED : BST_UNCHECKED);
 
 				SetFocus(hListWnd);
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -159,7 +162,7 @@ namespace tools {
 							placeholders8[i] = i % 2 ? ',' : '?';
 
 						char sql8[128 + count * 2]{0};
-						sprintf(sql8, "select sql from sqlite_master where rowid in (%s)", placeholders8);
+						sprintf(sql8, "select sql from sqlite_master where rowid in (%s) and name <> 'sqlite_sequence'", placeholders8);
 
 						sqlite3_stmt *stmt;
 						rc = SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0);
@@ -197,31 +200,34 @@ namespace tools {
 								"group_concat('quote(\"' || name || '\")', '|| '', '' || ') || '|| '')'', '', '') || '';'' || char(10) from \"' || ?1 || '\"' " \
 								"from pragma_table_info(?1) order by cid";
 
-							rc = SQLITE_OK == sqlite3_prepare_v2(db, isMultipleInsert ? sql8m : sql8, -1, &stmt, 0);
-							if (rc) {
+
+							if (SQLITE_OK == sqlite3_prepare_v2(db, isMultipleInsert ? sql8m : sql8, -1, &stmt, 0)) {
 								sqlite3_bind_text(stmt, 1, table8, strlen(table8),  SQLITE_TRANSIENT);
 
-								rc = SQLITE_ROW == sqlite3_step(stmt);
-								if (rc) {
+								if (SQLITE_ROW == sqlite3_step(stmt)) {
 									sqlite3_stmt *stmt2;
-									rc = SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0);
+									if (SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0)) {
+										int rowNo = 0;
+										fprintf(f, "-- %s\n", table8);
 
-									int rowNo = 0;
-									fprintf(f, "-- %s\n", table8);
-									while (SQLITE_ROW == sqlite3_step(stmt2)) {
-										fprintf(f, (const char*)sqlite3_column_text(stmt2, 0));
-										rowNo++;
+										while (SQLITE_ROW == sqlite3_step(stmt2)) {
+											const char* row8 = (const char*)sqlite3_column_text(stmt2, 0);
+											if (row8) {
+												fprintf(f, row8);
+												rowNo++;
+											}
+										}
+
+										if (!isMultipleInsert || rowNo == 0)
+											fprintf(f, "-- %i rows\n\n", rowNo);
+										else
+											fprintf(f, "\n\n");
 									}
-
-									if (!isMultipleInsert)
-										fprintf(f, "-- %i rows\n\n", rowNo);
-									else
-										fprintf(f, "\n\n");
-
 									sqlite3_finalize(stmt2);
 								}
 							}
 							sqlite3_finalize(stmt);
+
 							delete [] table8;
 						}
 					}
@@ -313,6 +319,8 @@ namespace tools {
 				SetFocus(GetDlgItem(hWnd, IDC_DLG_TABLENAME));
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION), BST_CHECKED);
 				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISREPLACE), BST_CHECKED);
+
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -428,7 +436,13 @@ namespace tools {
 				}
 
 				fclose(f);
-				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_AUTOSIZECOLUMNS);
+				ListView_SetExtendedListViewStyle(hPreviewWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+				for (int colNo = 0; colNo < ListView_GetColumnCount(hPreviewWnd); colNo++)
+					ListView_SetColumnWidth(hPreviewWnd, colNo, LVSCW_AUTOSIZE);
+
+
+				HWND hHeader = ListView_GetHeader(hPreviewWnd);
+				SetWindowTheme(hHeader, TEXT(" "), TEXT(" "));
 
 				if (Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_IMPORT_ACTION2)) == BST_CHECKED) {
 					HWND hTablesWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAMES);
@@ -454,8 +468,6 @@ namespace tools {
 					int pos = MAX(ComboBox_FindStringExact(hTablesWnd, 0, tblname16), 0);
 					ComboBox_SetCurSel(hTablesWnd, pos);
 					GetWindowText(hTablesWnd, tblname16, 255);
-
-					HWND hHeader = ListView_GetHeader(hPreviewWnd);
 
 					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?1)", -1, &stmt, 0)) {
 						char* tblname8 = utils::utf16to8(tblname16);
@@ -1090,7 +1102,7 @@ namespace tools {
 					ComboBox_SetText(hCSWnd, cs);
 
 					sqlite3_stmt *stmt;
-					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'DSN=' || value from json_each(json_extract(odbc_dsn(), '$.result'))", -1, &stmt, 0);
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'DSN=' || dsn from odbc_dsn", -1, &stmt, 0);
 					while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
 						TCHAR* connectionString16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
 						ComboBox_AddString(hCSWnd, connectionString16);
@@ -1351,19 +1363,40 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hDbWnd = GetDlgItem(hWnd, IDC_DLG_DATABASE);
+
 				sqlite3_stmt *stmt;
-				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select path from recents order by time desc", -1, &stmt, 0);
-				while (rc && SQLITE_ROW == sqlite3_step(stmt) && ComboBox_GetCount(hDbWnd) < 40) {
-					TCHAR* db16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
-					if (utils::isFileExists(db16))
-						ComboBox_AddString(hDbWnd, db16);
-					delete [] db16;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select path from recents order by time desc", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt) && ComboBox_GetCount(hDbWnd) < 40) {
+						TCHAR* db16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+						if (utils::isFileExists(db16))
+							ComboBox_AddString(hDbWnd, db16);
+						delete [] db16;
+					}
 				}
 				sqlite3_finalize(stmt);
 
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF), WM_SETFONT, (WPARAM)hFont, FALSE);
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_DATA_DIFF), WM_SETFONT, (WPARAM)hFont, FALSE);
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS), WM_SETFONT, (WPARAM)hFont, FALSE);
+
 				SetFocus(hDbWnd);
-				setEditorFont(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_DDL));
-				setEditorFont(GetDlgItem(hWnd, IDC_DLG_COMPARED_DDL));
+				utils::alignDialog(hWnd, hMainWnd);
+			}
+			break;
+
+			case WM_SIZE: {
+				int w = LOWORD(lParam);
+				int h = HIWORD(lParam);
+
+				POINTFLOAT s = utils::getDlgScale(hWnd);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_DATABASE), 0, 0, 0, w - 75 * s.x, 1, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_DATABASE_SELECTOR), 0, w - 20 * s.x, 5 * s.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARE_SCHEMA), 0, w/2 - 100 * s.x - 2 * s.x, 25 * s.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARE_DATA), 0, w/2 + 2 * s.x, 25 * s.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF), 0, 0, 0, w - 10 * s.x, h - 50 * s.y, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_DATA_DIFF), 0, 0, 0, w - 10 * s.x, (h - 50 * s.y) * 0.4 - 5 * s.y, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS), 0, 5 * s.x, h - (h - 50 * s.y) * 0.6 - 5 * s.y, w - 10 * s.x, (h - 50 * s.y) * 0.6, SWP_NOZORDER);
+				InvalidateRect(hWnd, NULL, true);
 			}
 			break;
 
@@ -1374,29 +1407,30 @@ namespace tools {
 
 				if (wParam == IDC_DLG_COMPARE_SCHEMA || wParam == IDC_DLG_COMPARE_DATA) {
 					GetDlgItemText(hWnd, IDC_DLG_DATABASE, path16, MAX_PATH);
-					if(!utils::isFileExists(path16))
-						return MessageBox(hWnd, TEXT("Specify a compared database"), NULL, 0);
+					if(!utils::isFileExists(path16)) {
+						MessageBox(hWnd, TEXT("Specify a compared database"), NULL, 0);
+						return false;
+					}
 
 					sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
 					char* path8 = utils::utf16to8(path16);
-					bool rc = attachDb(&db, path8, "compared");
+					if (!attachDb(&db, path8, "compared")) {
+						MessageBox(hWnd, TEXT("Can't attach the compared database"), NULL, 0);
+						return false;
+					}
+
 					BOOL isSchema = wParam == IDC_DLG_COMPARE_SCHEMA;
 
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF), isSchema ? SW_SHOW : SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ORIGINAL), isSchema ? SW_SHOW : SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_COMPARED), isSchema ? SW_SHOW : SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_DDL), isSchema ? SW_SHOW : SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_COMPARED_DDL), isSchema ? SW_SHOW : SW_HIDE);
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_DATA_DIFF), !isSchema ? SW_SHOW : SW_HIDE);
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS), !isSchema ? SW_SHOW : SW_HIDE);
 
-					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, TEXT(""));
-					SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, TEXT(""));
 					ListView_Reset(GetDlgItem(hWnd, IDC_DLG_DIFF_ROWS));
 
-					sqlite3_stmt *stmt;
-					if (rc && isSchema) {
+					if (isSchema) {
 						HWND hDiffWnd = GetDlgItem(hWnd, IDC_DLG_SCHEMA_DIFF);
+
+						sqlite3_stmt *stmt;
 						sqlite3_prepare_v2(db,
 							"with t as (select type, name, sql from sqlite_master), " \
 							"t2 as (select type, name, sql from compared.sqlite_master), " \
@@ -1410,50 +1444,56 @@ namespace tools {
 						if (!rowCount)
 							MessageBox(hWnd, TEXT("Database schemas are the same"), TEXT("Info"), 0);
 						sqlite3_finalize(stmt);
-					}
-
-					if (rc && !isSchema) {
+					} else {
 						HWND hDiffWnd = GetDlgItem(hWnd, IDC_DLG_DATA_DIFF);
 						sqlite3_exec(db, "drop table temp.compare_tables", NULL, NULL, NULL);
-						sqlite3_exec(db,
+
+						sqlite3_stmt *stmt;
+						if (SQLITE_OK == sqlite3_exec(db,
 							"create table temp.compare_tables as " \
 							"select sm.name, null cnt1, null cnt2, null diff from sqlite_master sm inner join compared.sqlite_master sm2 on " \
 							"sm.type = sm2.type and sm.name = sm2.name and sm.type = 'table' where not exists( " \
 							"select name from pragma_table_info(sm.name) except select name from pragma_table_info(sm.name) where schema = 'compared' " \
 							"union all " \
 							"select name from pragma_table_info(sm.name) where schema = 'compared' except select name from pragma_table_info(sm.name))",
-							NULL, NULL, NULL);
-						sqlite3_prepare_v2(db, "select name from temp.compare_tables", -1, &stmt, 0);
-						while (SQLITE_ROW == sqlite3_step(stmt)) {
-							const char* name = (const char*)sqlite3_column_text(stmt, 0);
-							char query[1024 + 3 * strlen(name)];
-							sprintf(query, "update temp.compare_tables set cnt1 = (select count(1) from \"%s\"), cnt2 = (select count(1) from compared.\"%s\") where name = \"%s\"", name, name, name);
-							sqlite3_exec(db, query, NULL, NULL, NULL);
-						}
-						sqlite3_finalize(stmt);
+							NULL, NULL, NULL) ||
+							SQLITE_OK == sqlite3_exec(db,
+							"create table temp.compare_tables as " \
+							"select sm.name, null cnt1, null cnt2, null diff from pragma_table_list sm inner join pragma_table_list sm2 on " \
+							"sm.schema = 'main' and sm2.schema = 'compared' and " \
+							"sm.type = sm2.type and sm.name = sm2.name and sm.type = 'table' and sm.ncol = sm2.ncol",
+							NULL, NULL, NULL)) {
+								sqlite3_prepare_v2(db, "select name from temp.compare_tables", -1, &stmt, 0);
+								while (SQLITE_ROW == sqlite3_step(stmt)) {
+									const char* name = (const char*)sqlite3_column_text(stmt, 0);
+									char query[1024 + 3 * strlen(name)];
+									sprintf(query, "update temp.compare_tables set cnt1 = (select count(1) from \"%s\"), cnt2 = (select count(1) from compared.\"%s\") where name = \"%s\"", name, name, name);
+									sqlite3_exec(db, query, NULL, NULL, NULL);
+								}
+								sqlite3_finalize(stmt);
 
-						sqlite3_prepare_v2(db, "select name from temp.compare_tables where cnt1 = cnt2", -1, &stmt, 0);
-						while (SQLITE_ROW == sqlite3_step(stmt)) {
-							const char* name = (const char*)sqlite3_column_text(stmt, 0);
-							char query[1024 + 3 * strlen(name)];
-							sprintf(query,
-								"with t as (select * from \"%s\" except select * from compared.\"%s\" union all select * from compared.\"%s\" except select * from \"%s\") "\
-								"update temp.compare_tables set diff = (select count(1) from t) where name = \"%s\"", name, name, name, name, name);
-							sqlite3_exec(db, query, NULL, NULL, NULL);
-						}
-						sqlite3_finalize(stmt);
+								sqlite3_prepare_v2(db, "select name from temp.compare_tables where cnt1 = cnt2", -1, &stmt, 0);
+								while (SQLITE_ROW == sqlite3_step(stmt)) {
+									const char* name = (const char*)sqlite3_column_text(stmt, 0);
+									char query[1024 + 3 * strlen(name)];
+									sprintf(query,
+										"with t as (select * from \"%s\" except select * from compared.\"%s\" union all select * from compared.\"%s\" except select * from \"%s\") "\
+										"update temp.compare_tables set diff = (select count(1) from t) where name = \"%s\"", name, name, name, name, name);
+									sqlite3_exec(db, query, NULL, NULL, NULL);
+								}
+								sqlite3_finalize(stmt);
 
-						sqlite3_prepare_v2(db,
-							"select name, iif(cnt1 <> cnt2, 'Rows count: ' || cnt1 || ' vs ' || cnt2, 'Different rows: ' || diff || ' of ' || cnt1) 'Reason' " \
-							"from temp.compare_tables where cnt1 <> cnt2 or coalesce(diff, 0) > 0", -1, &stmt, 0);
-						int rowCount = ListView_SetData(hDiffWnd, stmt);
-						if (!rowCount)
-							MessageBox(hWnd, TEXT("No differences were found in tables with the same structure"), TEXT("Info"), 0);
-						sqlite3_finalize(stmt);
+								sqlite3_prepare_v2(db,
+									"select name, iif(cnt1 <> cnt2, 'Rows count: ' || cnt1 || ' vs ' || cnt2, 'Different rows: ' || diff || ' of ' || cnt1) 'Reason' " \
+									"from temp.compare_tables where cnt1 <> cnt2 or coalesce(diff, 0) > 0", -1, &stmt, 0);
+								int rowCount = ListView_SetData(hDiffWnd, stmt);
+								if (!rowCount)
+									MessageBox(hWnd, TEXT("No differences were found in tables with the same structure"), TEXT("Info"), 0);
+								sqlite3_finalize(stmt);
+						} else {
+							showDbError(hWnd);
+						}
 					}
-
-					if (!rc)
-						showDbError(hWnd);
 				}
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
@@ -1463,17 +1503,16 @@ namespace tools {
 
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (pHdr->idFrom == IDC_DLG_SCHEMA_DIFF && pHdr->code == (DWORD)LVN_ITEMCHANGED) {
+				if (pHdr->idFrom == IDC_DLG_SCHEMA_DIFF && pHdr->code == (DWORD)NM_DBLCLK) {
 					NMITEMACTIVATE* ia = (LPNMITEMACTIVATE) lParam;
 					TCHAR type16[32], name16[1024];
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 2, type16, 32);
 					ListView_GetItemText(pHdr->hwndFrom, ia->iItem, 3, name16, 32);
 
 					sqlite3_stmt *stmt;
-					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db,
+					if (SQLITE_OK == sqlite3_prepare_v2(db,
 						"select (select max(sql) from sqlite_master where type = ?1 and name = ?2)," \
-						"(select max(sql) from compared.sqlite_master where type = ?1 and name = ?2)", -1, &stmt, 0);
-					if (rc) {
+						"(select max(sql) from compared.sqlite_master where type = ?1 and name = ?2)", -1, &stmt, 0)) {
 						char* type8 = utils::utf16to8(type16);
 						char* name8 = utils::utf16to8(name16);
 						sqlite3_bind_text(stmt, 1, type8, strlen(type8), SQLITE_TRANSIENT);
@@ -1482,20 +1521,17 @@ namespace tools {
 						delete [] name8;
 
 						if (SQLITE_ROW == sqlite3_step(stmt)) {
-							TCHAR* sql = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
-							TCHAR* sql2 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+							TDlgParam dp = {
+								utils::utf8to16((const char*)sqlite3_column_text(stmt, 0)),
+								utils::utf8to16((const char*)sqlite3_column_text(stmt, 1)),
+								TEXT("Current"),
+								TEXT("Compared"),
+							};
+							DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TEXT_COMPARISON), hWnd, (DLGPROC)cbDlgTextComparison, (LPARAM)&dp);
 
-							SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, sql);
-							SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, sql2);
-
-							delete [] sql;
-							delete [] sql2;
-						} else {
-							SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_DDL, TEXT(""));
-							SetDlgItemText(hWnd, IDC_DLG_COMPARED_DDL, TEXT(""));
+							delete [] dp.s1;
+							delete [] dp.s2;
 						}
-
-						rc = SQLITE_DONE == sqlite3_step(stmt);
 					}
 					sqlite3_finalize(stmt);
 				}
@@ -1582,8 +1618,14 @@ namespace tools {
 					ListView_InsertItem(hTablesWnd, &lvi);
 					delete [] name16;
 				}
-
 				sqlite3_finalize(stmt);
+
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_SEARCH_RESULT), WM_SETFONT, (WPARAM)hFont, FALSE);
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_SEARCH_ROWS), WM_SETFONT, (WPARAM)hFont, FALSE);
+				SendMessage(hWnd, DM_SETDEFID, IDC_DLG_SEARCH, 0);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -1767,8 +1809,8 @@ namespace tools {
 	}
 
 
-	const TCHAR* GENERATOR_TYPE[1024] = {0};
-	const TCHAR* SOURCES[1024] = {0};
+	const TCHAR* GENERATOR_TYPE[MAX_ENTITY_COUNT] = {0};
+	const TCHAR* SOURCES[MAX_ENTITY_COUNT] = {0};
 
 	bool execute(const char* query8) {
 		int rc = sqlite3_exec(db, query8, NULL, 0, NULL);
@@ -1785,18 +1827,96 @@ namespace tools {
 		return _ttoi(buf16);
 	}
 
-	WNDPROC cbOldCombobox;
-	LRESULT CALLBACK cbNewType(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	LRESULT CALLBACK cbNewDataGeneratorType(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE)
 			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_TYPE_CHANGED, (WPARAM)GetParent(hWnd), (LPARAM)hWnd);
 
-		return CallWindowProc(cbOldCombobox, hWnd, msg, wParam, lParam);
+		return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
 	}
-	LRESULT CALLBACK cbNewRefTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+
+	LRESULT CALLBACK cbNewDataGeneratorRefTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE)
 			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_REFTABLE_CHANGED, (WPARAM)GetParent(hWnd), (LPARAM)hWnd);
 
-		return CallWindowProc(cbOldCombobox, hWnd, msg, wParam, lParam);
+		return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+	}
+
+	LRESULT CALLBACK cbNewDataGeneratorOneOf(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		if (msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE)
+			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_DATASET_CHANGED, (WPARAM)GetParent(hWnd), (LPARAM)hWnd);
+
+		return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+	}
+
+
+	// USERDATA = lParam = buffer with the set name
+	BOOL CALLBACK cbDlgDataGeneratorSet (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				SetWindowLongPtr(hWnd, GWLP_USERDATA, lParam);
+                setEditorFont(GetDlgItem(hWnd, IDC_DLG_DATASET));
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_OK) {
+					TCHAR* name16 = (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+					GetDlgItemText(hWnd, IDC_DLG_DATASET_NAME, name16, 2047);
+
+					HWND hDatasetWnd = GetDlgItem(hWnd, IDC_DLG_DATASET);
+					int len = GetWindowTextLength(hDatasetWnd);
+					TCHAR dataset16[len + 1]{0};
+					GetWindowText(hDatasetWnd, dataset16, len + 1);
+
+					if (_tcslen(name16) == 0 || _tcslen(dataset16) == 0)
+						return MessageBox(hWnd, TEXT("Both fields are mandatory"), 0, MB_OK);
+
+					sqlite3_stmt* stmt;
+					sqlite3_stmt* stmt2;
+					BOOL rc = SQLITE_OK == sqlite3_prepare_v2(prefs::db, "insert into generators (type, value) values (?1, ?2)", -1, &stmt, 0);
+					BOOL rc2 = SQLITE_OK == sqlite3_prepare_v2(db, "insert into temp.generators (type, value) values (?1, ?2)", -1, &stmt2, 0);
+					if (rc && rc2) {
+						sqlite3_exec(prefs::db, "begin", 0, 0, 0);
+						sqlite3_exec(db, "begin", 0, 0, 0);
+
+						char* name8 = utils::utf16to8(name16);
+
+						TCHAR* value16 = _tcstok (dataset16, TEXT(";"));
+						while (value16 != NULL) {
+							char* value8 = utils::utf16to8(value16);
+							sqlite3_bind_text(stmt, 1, name8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, value8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt2, 1, name8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt2, 2, value8, -1, SQLITE_TRANSIENT);
+							delete [] value8;
+							sqlite3_step(stmt);
+							sqlite3_step(stmt2);
+							sqlite3_reset(stmt);
+							sqlite3_reset(stmt2);
+
+							value16 = _tcstok (NULL, TEXT(";"));
+						}
+
+						delete [] name8;
+
+						sqlite3_exec(prefs::db, "commit", 0, 0, 0);
+						sqlite3_exec(db, "commit", 0, 0, 0);
+					}
+					sqlite3_finalize(stmt);
+					sqlite3_finalize(stmt2);
+
+					EndDialog(hWnd, DLG_OK);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL) {
+					EndDialog(hWnd, DLG_CANCEL);
+				}
+			}
+			break;
+		}
+
+		return false;
 	}
 
 	// USERDATA = 1 if a last generation is ok
@@ -1805,7 +1925,6 @@ namespace tools {
 		switch (msg) {
 			case WM_INITDIALOG: {
 				HWND hTable = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
-				cbOldCombobox = (WNDPROC)GetWindowLongPtr(hTable, GWLP_WNDPROC);
 
 				int rowCount = prefs::get("data-generator-row-count");
 				TCHAR rowCount16[32]{0};
@@ -1846,7 +1965,7 @@ namespace tools {
 				if (!GENERATOR_TYPE[0]) {
 					int i = 0;
 					sqlite3_stmt *stmt;
-					while (GENERATOR_TYPE[i] && i < 1024) {
+					while (GENERATOR_TYPE[i] && i < MAX_ENTITY_COUNT) {
 						delete [] GENERATOR_TYPE[i];
 						GENERATOR_TYPE[i] = 0;
 						i++;
@@ -1861,7 +1980,7 @@ namespace tools {
 					sqlite3_finalize(stmt);
 
 					i = 0;
-					while (SOURCES[i] && i < 1024) {
+					while (SOURCES[i] && i < MAX_ENTITY_COUNT) {
 						delete [] SOURCES[i];
 						SOURCES[i] = 0;
 						i++;
@@ -1895,8 +2014,12 @@ namespace tools {
 					sqlite3_finalize(istmt);
 				}
 
-				SetWindowLongPtr(GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS), GWLP_WNDPROC, (LONG_PTR)&dialogs::cbNewScroll);
-				SendMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
+				HWND hColumnsWnd = GetDlgItem(hWnd, IDC_DLG_GEN_COLUMNS);
+				SetProp(hColumnsWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hColumnsWnd, GWLP_WNDPROC, (LONG_PTR)dialogs::cbNewScroll));
+				PostMessage(hWnd, WMU_TARGET_CHANGED, 0, 0);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 				SetFocus(hTable);
 			}
 			break;
@@ -1915,35 +2038,37 @@ namespace tools {
 				delete [] tablename16;
 				delete [] schema16;
 
+				POINTFLOAT s = utils::getDlgScale(hWnd);
+				RECT rc;
+				GetClientRect(GetDlgItem(hWnd, IDC_DLG_TABLENAME), &rc);
+				int comboH = rc.bottom;
+				int lineH = comboH + 2 * s.y;
+
 				SendMessage(hColumnsWnd, WM_SETREDRAW, FALSE, 0);
 				char* query8 = utils::utf16to8(query16);
 				sqlite3_stmt *stmt;
 				int rowNo = 0;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						HWND hColumnWnd = CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD, 5, 5 + 30 * rowNo, 470, 23, hColumnsWnd, (HMENU)IDC_DLG_GEN_COLUMN, GetModuleHandle(0), 0);
+						HWND hColumnWnd = CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD, 0, lineH * rowNo, 470 * s.x, lineH, hColumnsWnd, (HMENU)IDC_DLG_GEN_COLUMN, GetModuleHandle(0), 0);
 
 						TCHAR* colname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-						CreateWindow(WC_STATIC, colname16, WS_VISIBLE | WS_CHILD, 0, 3, 70, 23, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_NAME, GetModuleHandle(0), 0);
+						CreateWindow(WC_STATIC, colname16, WS_VISIBLE | WS_CHILD | SS_SIMPLE, 0, 2 * s.y, 65 * s.x, comboH, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_NAME, GetModuleHandle(0), 0);
 						delete [] colname16;
 
-						HWND hTypeWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 70, 0, 100, 200, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_TYPE, GetModuleHandle(0), 0);
+						HWND hTypeWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 65 * s.x, 0, 65 * s.x, 100 * s.y, hColumnWnd, (HMENU)IDC_DLG_GEN_COLUMN_TYPE, GetModuleHandle(0), 0);
 						ComboBox_AddString(hTypeWnd, TEXT("none"));
 						ComboBox_AddString(hTypeWnd, TEXT("sequence"));
 						ComboBox_AddString(hTypeWnd, TEXT("number"));
 						ComboBox_AddString(hTypeWnd, TEXT("date"));
 						ComboBox_AddString(hTypeWnd, TEXT("reference to"));
 						ComboBox_AddString(hTypeWnd, TEXT("expression"));
+						ComboBox_AddString(hTypeWnd, TEXT("one of"));
 
-						if (GENERATOR_TYPE[0])
-							ComboBox_AddString(hTypeWnd, TEXT(""));
-
-						for (int i = 0; GENERATOR_TYPE[i]; i++)
-							ComboBox_AddString(hTypeWnd, GENERATOR_TYPE[i]);
 						ComboBox_SetCurSel(hTypeWnd, 0);
-						SetWindowLongPtr(hTypeWnd, GWLP_WNDPROC, (LONG_PTR)cbNewType);
+						SetProp(hTypeWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hTypeWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDataGeneratorType));
 
-						CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 180, 0, 210, 23, hColumnWnd, (HMENU)IDC_DLG_GEN_OPTION, GetModuleHandle(0), 0);
+						CreateWindow(WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 135 * s.x, 0, 140 * s.x, lineH, hColumnWnd, (HMENU)IDC_DLG_GEN_OPTION, GetModuleHandle(0), 0);
 
 						rowNo++;
 					}
@@ -1952,9 +2077,11 @@ namespace tools {
 				delete [] query8;
 				SendMessage(hColumnsWnd, WM_SETREDRAW, TRUE, 0);
 
-				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+				EnumChildWindows(hColumnsWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETPARENTFONT);
 				SetProp(hColumnsWnd, TEXT("SCROLLY"), 0);
-				SendMessage(hColumnsWnd, WMU_SET_SCROLL_HEIGHT, rowNo * 30, 0);
+				SendMessage(hColumnsWnd, WMU_SET_SCROLL_HEIGHT, rowNo * lineH, 0);
+
+				InvalidateRect(hColumnsWnd, NULL, TRUE);
 			}
 			break;
 
@@ -1964,44 +2091,60 @@ namespace tools {
 				HWND hOptionWnd = GetDlgItem(hColumnWnd, IDC_DLG_GEN_OPTION);
 				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_DESTROY);
 
+				POINTFLOAT s = utils::getDlgScale(hWnd);
+				RECT rc;
+				GetClientRect(GetDlgItem(hWnd, IDC_DLG_TABLENAME), &rc);
+				int comboH = rc.bottom;
+
 				TCHAR buf16[64];
 				GetWindowText(hTypeWnd, buf16, 63);
 
 				if (_tcscmp(buf16, TEXT("sequence")) == 0) {
-					CreateWindow(WC_STATIC, TEXT("Start"), WS_VISIBLE | WS_CHILD, 0, 3, 35, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
-					CreateWindow(WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 40, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("Start"), WS_VISIBLE | WS_CHILD, 0, 2 * s.y, 25 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | ES_CENTER | ES_AUTOHSCROLL | WS_TABSTOP, 25 * s.x, 0, 40 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
 				}
 
 				if (_tcscmp(buf16, TEXT("number")) == 0) {
-					CreateWindow(WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 0, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
-					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD, 45, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
-					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | WS_BORDER | ES_CENTER | WS_TABSTOP, 53, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
-					CreateWindow(WC_STATIC, TEXT("x"), WS_VISIBLE | WS_CHILD, 100, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
-					CreateWindow(WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | WS_BORDER | ES_CENTER | WS_TABSTOP, 110, 1, 40, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_MULTIPLIER, GetModuleHandle(0), 0);
+					CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, TEXT("1"), WS_VISIBLE | WS_CHILD | ES_NUMBER | ES_CENTER | ES_AUTOHSCROLL | WS_TABSTOP, 0, 0, 40 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD | SS_CENTER, 40 * s.x, 2 * s.y, 10 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_NUMBER | ES_CENTER | ES_AUTOHSCROLL | WS_TABSTOP, 50 * s.x, 0, 40 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("x"), WS_VISIBLE | WS_CHILD | SS_CENTER, 91 * s.x, 2 * s.y, 10 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, TEXT("100"), WS_VISIBLE | WS_CHILD | ES_CENTER | WS_TABSTOP, 100 * s.x, 0, 39 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_MULTIPLIER, GetModuleHandle(0), 0);
 				}
 
 				if (_tcscmp(buf16, TEXT("date")) == 0) {
-					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 0, 0, 80, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
-					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD, 85, 3, 10, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
-					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 95, 0, 80, 23, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
+					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 0, 0, 65 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_START, GetModuleHandle(0), 0);
+					CreateWindow(WC_STATIC, TEXT("-"), WS_VISIBLE | WS_CHILD | SS_CENTER, 65 * s.x, 2 * s.y, 9 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_LABEL, GetModuleHandle(0), 0);
+					CreateWindowEx(0, DATETIMEPICK_CLASS, NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP, 74 * s.x, 0, 65 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_END, GetModuleHandle(0), 0);
 				}
 
 				if (_tcscmp(buf16, TEXT("reference to")) == 0) {
-					HWND hRefTableWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0, 90, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_TABLE, GetModuleHandle(0), 0);
+					HWND hRefTableWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0, 70 * s.x, 100 * s.y, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_TABLE, GetModuleHandle(0), 0);
 					for (int i = 0; SOURCES[i]; i++)
 						ComboBox_AddString(hRefTableWnd, SOURCES[i]);
-					SetWindowLongPtr(hRefTableWnd, GWLP_WNDPROC, (LONG_PTR)cbNewRefTable);
+					SetProp(hRefTableWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hRefTableWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDataGeneratorRefTable));
 
-					CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 90, 0, 86, 200, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_COLUMN, GetModuleHandle(0), 0);
+					CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 70 * s.x, 0, 69 * s.x, 100 * s.y, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_COLUMN, GetModuleHandle(0), 0);
 					ComboBox_SetCurSel(hRefTableWnd, 0);
 					SendMessage(hWnd, WMU_REFTABLE_CHANGED, (WPARAM)hOptionWnd, (LPARAM)hRefTableWnd);
 				}
 
 				if (_tcscmp(buf16, TEXT("expression")) == 0) {
-					CreateWindow(WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | ES_LEFT | WS_TABSTOP, 0, 1, 195, 18, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_EXPR, GetModuleHandle(0), 0);
+					HWND hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL, WS_VISIBLE | WS_CHILD | ES_AUTOHSCROLL | ES_LEFT | WS_TABSTOP, 0, 0, 140 * s.x, comboH, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_EXPR, GetModuleHandle(0), 0);
+					Edit_SetCueBannerText(hEdit, TEXT("e.g. id + length(id)"));
 				}
 
-				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
+				if (_tcscmp(buf16, TEXT("one of")) == 0) {
+					HWND hOneOfWnd = CreateWindow(WC_COMBOBOX, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0, 140 * s.x, 100 * s.y, hOptionWnd, (HMENU)IDC_DLG_GEN_OPTION_ONEOF, GetModuleHandle(0), 0);
+					for (int i = 0; GENERATOR_TYPE[i]; i++)
+						ComboBox_AddString(hOneOfWnd, GENERATOR_TYPE[i]);
+					ComboBox_AddString(hOneOfWnd, TEXT("New set..."));
+					ComboBox_SetCurSel(hOneOfWnd, 0);
+
+					SetProp(hOneOfWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hOneOfWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDataGeneratorOneOf));
+				}
+
+				EnumChildWindows(hOptionWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETPARENTFONT);
 			}
 			break;
 
@@ -2033,6 +2176,28 @@ namespace tools {
 			}
 			break;
 
+			case WMU_DATASET_CHANGED: {
+				HWND hOneOfWnd = (HWND)lParam;
+
+				TCHAR setName16[2048]{0};
+				GetWindowText(hOneOfWnd, setName16, 2047);
+				if (_tcscmp(setName16, TEXT("New set...")))
+					return false;
+
+				if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_GENERATE_DATA_SET), hWnd, (DLGPROC)cbDlgDataGeneratorSet, (LPARAM)setName16)) {
+					int i = 0;
+					for (i = 0; i < MAX_ENTITY_COUNT && GENERATOR_TYPE[i]; i++);
+					if (i < MAX_ENTITY_COUNT) {
+						TCHAR* type16 = new TCHAR[_tcslen(setName16) + 1]{0};
+						_tcscpy(type16, setName16);
+						GENERATOR_TYPE[i] = type16;
+						ComboBox_InsertString(hOneOfWnd, i, type16);
+						ComboBox_SetCurSel(hOneOfWnd, i);
+					}
+				}
+			}
+			break;
+
 			case WM_COMMAND: {
 				WORD id = LOWORD(wParam);
 				WORD cmd = HIWORD(wParam);
@@ -2042,7 +2207,6 @@ namespace tools {
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL) {
 					EndDialog(hWnd, GetWindowLongPtr(hWnd, GWLP_USERDATA) ? DLG_OK : DLG_CANCEL);
 				}
-
 
 				if (wParam == IDC_DLG_OK || wParam == IDOK)	{
 					execute("drop table if exists temp.data_generator");
@@ -2071,7 +2235,6 @@ namespace tools {
 						"with recursive series(val) as (select 1 union all select val + 1 from series limit %i) " \
 						"insert into temp.data_generator (rownum) select val from series", rowCount);
 					execute(query8);
-
 
 					char columns8[MAX_TEXT_LENGTH]{0};
 
@@ -2142,19 +2305,27 @@ namespace tools {
 
 							if (isExpr && _tcscmp(type16, TEXT("expression")) == 0) {
 								HWND hExpressionWnd = GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_EXPR);
-								int size = GetWindowTextLength(hExpressionWnd);
-								TCHAR expr16[size + 1]{0};
-								GetWindowText(hExpressionWnd, expr16, size + 1);
+								int len = GetWindowTextLength(hExpressionWnd);
+								TCHAR expr16[len + 1]{0};
+								GetWindowText(hExpressionWnd, expr16, len + 1);
 
 								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("update temp.data_generator set \"%ls\" = %ls"), name16, expr16);
 							}
 
-							if (!isExpr && ComboBox_GetCurSel(hTypeWnd) > 5) {
-								_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
-									"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
-									"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
-									"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
-									type16, rowCount, rowCount, name16);
+							if (!isExpr && _tcscmp(type16, TEXT("one of")) == 0) {
+								HWND hOneOfWnd = GetDlgItem(hOptionWnd, IDC_DLG_GEN_OPTION_ONEOF);
+								int len = GetWindowTextLength(hOneOfWnd);
+								TCHAR setName16[len + 1]{0};
+								GetWindowText(hOneOfWnd, setName16, len + 1);
+
+								if (_tcscmp(setName16, TEXT("New set..."))) {
+									_sntprintf(query16, MAX_TEXT_LENGTH, TEXT("with t as (select type, value from temp.generators where type = \"%ls\" order by random()), "\
+										"series(val) as (select 1 union all select val + 1 from series limit (select ceil(%i.0/count(1)) from t)), " \
+										"t2 as (select t.value FROM t, series order by random()), " \
+										"t3 as (select rownum(1) rownum, t2.value from t2 order by 1 limit %i)" \
+										"update temp.data_generator set \"%ls\" = (select value from t3 where t3.rownum = temp.data_generator.rownum)"),
+										setName16, rowCount, rowCount, name16);
+								}
 							}
 
 							char* query8 = utils::utf16to8(query16);
@@ -2213,17 +2384,84 @@ namespace tools {
 				sqlite3_exec(db, "drop table temp.row_statistics;", NULL, 0, NULL);
 				sqlite3_exec(db, "create table temp.row_statistics (name text, cnt integer);", NULL, 0, NULL);
 
-				sqlite3_stmt *stmt;
-				BOOL rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'insert into temp.row_statistics (name, cnt) select ''' || name || ''', count(1) from \"' || name || '\"' from sqlite_master where type in ('table')", -1, &stmt, 0);
-				while (rc && SQLITE_ROW == sqlite3_step(stmt))
-					rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db,
+						"select 'insert into temp.row_statistics (name, cnt) select ''' || name || ''', count(1) from \"' || name || '\"' from sqlite_master where type in ('table')",
+						-1, &stmt, 0)) {
+
+						while (SQLITE_ROW == sqlite3_step(stmt))
+							sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
+				}
 				sqlite3_finalize(stmt);
 
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "SELECT s.name, sm.type, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' " \
-					"from dbstat s left join sqlite_master sm on s.name = sm.name left join temp.row_statistics r on s.name = r.name group by s.name;", -1, &stmt, 0))
-					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_STATISTICS), stmt);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_STATISTICS);
+				SendMessage(hListWnd, WM_SETFONT, (WPARAM)hFont, FALSE);
 
+				if (SQLITE_OK == sqlite3_prepare_v2(db,
+					"select s.name, sm.type, SUM(payload) 'Payload size, B', tosize(SUM(pgsize)) 'Total size', r.cnt 'Rows' " \
+					"from dbstat s left join sqlite_master sm on s.name = sm.name left join temp.row_statistics r on s.name = r.name group by s.name;",
+					-1, &stmt, 0))
+					ListView_SetData(hListWnd, stmt);
 				sqlite3_finalize(stmt);
+
+				float z = utils::getDlgScale(hWnd).x;
+				HWND hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE, NULL, hWnd, IDC_DLG_STATUSBAR);
+				int sizes[5] = {(int)(z * 60), (int)(z * 120), (int)(z * 180), (int)(z * 240), -1};
+				SendMessage(hStatusWnd, SB_SETPARTS, 5, (LPARAM)&sizes);
+				if (SQLITE_OK == sqlite3_prepare_v2(db,
+					"select sum(type = 'table'), sum(type = 'view'), sum(type = 'index'), sum(type = 'trigger'), tosize(?1) from sqlite_master where lower(type) in ('table', 'view', 'trigger', 'index')",
+					-1, &stmt, 0)) {
+
+					struct _stat st;
+					TCHAR* path16 = utils::utf8to16(sqlite3_db_filename(db, 0));
+					sqlite3_bind_int64(stmt, 1, (_tstat(path16, &st) == 0) ? st.st_size : 0);
+					delete [] path16;
+
+					if (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR buf16[256];
+						_sntprintf(buf16, 255, TEXT(" TABLES: %i"), sqlite3_column_int(stmt, 0));
+						SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)buf16);
+
+						_sntprintf(buf16, 255, TEXT(" VIEWS: %i"), sqlite3_column_int(stmt, 1));
+						SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)buf16);
+
+						_sntprintf(buf16, 255, TEXT(" INDEXES: %i"), sqlite3_column_int(stmt, 2));
+						SendMessage(hStatusWnd, SB_SETTEXT, 2, (LPARAM)buf16);
+
+						_sntprintf(buf16, 255, TEXT(" TRIGGERS: %i"), sqlite3_column_int(stmt, 3));
+						SendMessage(hStatusWnd, SB_SETTEXT, 3, (LPARAM)buf16);
+
+						TCHAR* size16 = utils::utf8to16((const char *)sqlite3_column_text(stmt, 4));
+						_sntprintf(buf16, 255, TEXT(" FILE SIZE: %ls"), size16);
+						SendMessage(hStatusWnd, SB_SETTEXT, 4, (LPARAM)buf16);
+						delete [] size16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				RECT rc, rc2;
+				GetClientRect(hListWnd, &rc);
+
+				HWND hHeader = ListView_GetHeader(hListWnd);
+				int colCount = Header_GetItemCount(hHeader);
+				Header_GetItemRect(hHeader, colCount - 1, &rc2);
+
+				SetWindowPos(hWnd, 0, 0, 0, rc2.right + GetSystemMetrics(SM_CXVSCROLL) + 2 * GetSystemMetrics(SM_CXSIZEFRAME) + 2 * GetSystemMetrics(SM_CXEDGE), rc.bottom, SWP_NOZORDER | SWP_NOMOVE);
+				utils::alignDialog(hWnd, hMainWnd, true);
+				SetFocus(hListWnd);
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hStatusWnd = GetDlgItem(hWnd, IDC_DLG_STATUSBAR);
+				SendMessage(hStatusWnd, WM_SIZE, 0, 0);
+
+				RECT rc;
+				GetWindowRect(hStatusWnd, &rc);
+				POINT p{rc.right, rc.top};
+				ScreenToClient(hWnd, &p);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_STATISTICS);
+				SetWindowPos(hListWnd, 0, 0, 0, p.x, p.y - 1, SWP_NOZORDER | SWP_NOMOVE);
 			}
 			break;
 
@@ -2274,6 +2512,9 @@ namespace tools {
 	BOOL CALLBACK cbDlgForeignKeyCheck (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_FOREIGN_KEY_CHECK);
+				SendMessage(hListWnd, WM_SETFONT, (WPARAM)hFont, FALSE);
+
 				char sql8[] = "with idx as ( " \
 					"select sm.name tbl_name, group_concat(ii.name, ', ') columns, count(1) cnt " \
 					"from sqlite_master sm, pragma_index_list(sm.name) i, pragma_index_info(i.name) ii " \
@@ -2287,9 +2528,24 @@ namespace tools {
 					"on fk.id = ck.fkid and sm.\"name\" = ck.\"table\" and fk.\"table\" = ck.parent";
 				sqlite3_stmt *stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0))
-					ListView_SetData(GetDlgItem(hWnd, IDC_DLG_FOREIGN_KEY_CHECK), stmt);
-
+					ListView_SetData(hListWnd, stmt);
 				sqlite3_finalize(stmt);
+
+				RECT rc, rc2;
+				GetClientRect(hListWnd, &rc);
+
+				HWND hHeader = ListView_GetHeader(hListWnd);
+				int colCount = Header_GetItemCount(hHeader);
+				Header_GetItemRect(hHeader, colCount - 1, &rc2);
+
+				SetWindowPos(hWnd, 0, 0, 0, rc2.right + GetSystemMetrics(SM_CXVSCROLL) + 2 * GetSystemMetrics(SM_CXSIZEFRAME) + 2 * GetSystemMetrics(SM_CXEDGE), rc.bottom, SWP_NOZORDER | SWP_NOMOVE);
+				utils::alignDialog(hWnd, hMainWnd, true);
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_FOREIGN_KEY_CHECK);
+				SetWindowPos(hListWnd, 0, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOZORDER | SWP_NOMOVE);
 			}
 			break;
 
@@ -2339,6 +2595,9 @@ namespace tools {
 					}
 				}
 				sqlite3_finalize(stmt);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -2401,6 +2660,147 @@ namespace tools {
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
 					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_CLOSE: {
+				EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+		}
+
+		return false;
+	}
+
+// lParam = TDlgParam
+	BOOL CALLBACK cbDlgTextComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				TDlgParam* dp = (TDlgParam*)lParam;
+
+				setEditorFont(GetDlgItem(hWnd, IDC_DLG_ORIGINAL));
+				setEditorFont(GetDlgItem(hWnd, IDC_DLG_COMPARED));
+
+				SetDlgItemText(hWnd, IDC_DLG_ORIGINAL, dp->s1);
+				SetDlgItemText(hWnd, IDC_DLG_COMPARED, dp->s2);
+				SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_LABEL, dp->s3);
+				SetDlgItemText(hWnd, IDC_DLG_COMPARED_LABEL, dp->s4);
+
+				SendMessage(hWnd, WMU_COMPARE, 0, 0);
+				utils::alignDialog(hWnd, GetWindow(hWnd, GW_OWNER), true);
+			}
+			break;
+
+			case WM_SIZE: {
+				POINTFLOAT s = utils::getDlgScale(hWnd);
+
+				RECT rc;
+				GetClientRect(hWnd, &rc);
+				int W = rc.right;
+				int H = rc.bottom;
+
+				GetClientRect(hWnd, &rc);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_LABEL), 0, 5 * s.x, 12 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_LABEL), 0, W - (108 + 5) * s.x, 12 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_COUNT), 0, W / 2 - (27 + 27 + 5) * s.x, 5 * s.y, 27 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_COUNT), 0, W / 2 + (27 + 5) * s.x, 5. * s.y, 27. * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARE), 0, W / 2 - 27 * s.x, 5 * s.y, 54 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL), 0, 5 * s.x, 25 * s.y, W/2 - 7.5 * s.x, H - 29 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED), 0, W /2 + 2.5 * s.x, 25 * s.y, W/2 - 7.5 * s.x, H - 29 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (wParam == IDC_DLG_COMPARE)
+					SendMessage(hWnd, WMU_COMPARE, 0, 0);
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_COMPARE: {
+				HWND hEditorA = GetDlgItem(hWnd, IDC_DLG_ORIGINAL);
+				HWND hEditorB = GetDlgItem(hWnd, IDC_DLG_COMPARED);
+
+				GETTEXTEX gt = {0};
+				gt.flags = 0;
+				gt.codepage = 1200;
+
+				GETTEXTLENGTHEX gtl = {GTL_NUMBYTES, 0};
+				int len = SendMessage(hEditorA, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+				TCHAR* txtA16 = new TCHAR[len + 1];
+				gt.cb = len + sizeof(TCHAR);
+				SendMessage(hEditorA, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)txtA16);
+				char* txtA8 = utils::utf16to8(txtA16);
+
+				len = SendMessage(hEditorB, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+				TCHAR* txtB16 = new TCHAR[len + 1];
+				gt.cb = len + sizeof(TCHAR);
+				SendMessage(hEditorB, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)txtB16);
+				char* txtB8 = utils::utf16to8(txtB16);
+
+				struct EditorData {
+					HWND hEditorWnd;
+					TCHAR *txt16;
+					int len16;
+					char *txt8;
+					int len8;
+					int dCount;
+				};
+
+				auto cbDiff = [](void *ref, dmp_operation_t op, const void *data8, uint32_t len8) {
+					EditorData* ed = (EditorData*)ref;
+
+					CHARFORMAT2 cf2;
+					ZeroMemory(&cf2, sizeof(CHARFORMAT2));
+					cf2.cbSize = sizeof(CHARFORMAT2) ;
+					SendMessage(ed->hEditorWnd, EM_GETCHARFORMAT, SCF_DEFAULT, (LPARAM) &cf2);
+					cf2.dwMask = CFM_COLOR | CFM_BOLD;
+					cf2.dwEffects = 0;
+					cf2.crTextColor = RGB(255, 0, 0);
+
+					if (op == DMP_DIFF_DELETE) {
+						char diff8[len8 + 1]{0};
+						strncpy(diff8, (char*)data8, len8);
+						int len16 = MultiByteToWideChar(CP_UTF8, 0, diff8, -1, NULL, 0) - 1;
+
+						int from16 = ed->len16 - MultiByteToWideChar(CP_UTF8, 0, (char*)data8, -1, NULL, 0) + 1;
+						SendMessage(ed->hEditorWnd, EM_SETSEL, from16, from16 + len16);
+						SendMessage(ed->hEditorWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &cf2);
+						ed->dCount++;
+					}
+
+					return 0;
+				};
+
+				dmp_diff *diffAB, *diffBA;
+				bool rcA = dmp_diff_from_strs(&diffAB, NULL, txtA8, txtB8) != 0;
+				bool rcB = dmp_diff_from_strs(&diffBA, NULL, txtB8, txtA8) != 0;
+
+				if (rcA || rcB) {
+					MessageBox(hWnd, TEXT("Error occurred during comparison"), TEXT("Error"), MB_ICONERROR);
+				} else {
+					TCHAR cnt[64];
+					EditorData ed = {hEditorA, txtA16, (int)_tcslen(txtA16), txtA8, (int)strlen(txtA8), 0};
+					dmp_diff_foreach(diffAB, cbDiff, &ed);
+					SendMessage(hEditorA, EM_SETSEL, 0, 0);
+					SetDlgItemText(hWnd, IDC_DLG_ORIGINAL_COUNT, _itot(ed.dCount, cnt, 10));
+
+					ed = {hEditorB, txtB16, (int)_tcslen(txtB16), txtB8, (int)strlen(txtB8), 0};
+					dmp_diff_foreach(diffBA, cbDiff, &ed);
+					SendMessage(hEditorB, EM_SETSEL, 0, 0);
+					SetDlgItemText(hWnd, IDC_DLG_COMPARED_COUNT, _itot(ed.dCount, cnt, 10));
+				}
+				dmp_diff_free(diffAB);
+				dmp_diff_free(diffBA);
+
+				delete [] txtA16;
+				delete [] txtA8;
+				delete [] txtB16;
+				delete [] txtB8;
 			}
 			break;
 
@@ -2697,7 +3097,7 @@ namespace tools {
 
 							TCHAR* tvalue16 = isTrimValues ? utils::trim(value) : _tcsdup(value);
 							char* value8 = utils::utf16to8(tvalue16);
-							utils::sqlite3_bind_variant(stmt, colNo + 1, value8);
+							dbutils::bind_variant(stmt, colNo + 1, value8);
 
 							isEmptyRow = isEmptyRow && (strlen(value8) == 0);
 							delete [] value8;
@@ -2858,617 +3258,5 @@ namespace tools {
 			rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), NULL, 0, NULL);
 		sqlite3_finalize(stmt);
 		return rc;
-	}
-
-	#define LINK_FK 1
-	#define LINK_VIEW 2
-	#define LINK_TRIGGER 3
-	#define MAX_LINK_COUNT 1024
-	struct Link {
-		HWND hWndFrom;
-		int posFrom;
-		HWND hWndTo;
-		int posTo;
-		int type;
-	};
-
-	char* dbname8 = 0;
-	Link links[MAX_LINK_COUNT]{0};
-
-	bool isMove = false;
-	POINT cursor = {0, 0};
-	HMENU hDiagramMenu = 0;
-
-	WNDPROC cbOldTable, cbOldDatabaseDiagramToolbar;
-	LRESULT CALLBACK cbNewTable(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if (msg == WM_COMMAND) {
-			TCHAR table16[255]{0};
-			GetWindowText(hWnd, table16, 255);
-			TCHAR* fullname16 = utils::getFullTableName(TEXT("main"), table16, false);
-
-			if (wParam == IDM_EDIT_DATA)
-				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)fullname16);
-
-			if (wParam == IDM_DDL) {
-				int len = _tcslen(fullname16) + 2;
-				TCHAR buf16[len + 1];
-				_sntprintf(buf16, len, TEXT(" %ls"), fullname16);
-				buf16[0] = MAKEWORD(1, 0);
-
-				DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDVIEWEDIT), hWnd, (DLGPROC)&dialogs::cbDlgAddViewEdit, (LPARAM)buf16);
-			}
-			delete [] fullname16;
-		}
-
-		if (msg == WM_WINDOWPOSCHANGED) {
-			RECT rcSize{0};
-			GetWindowRect(hWnd, &rcSize);
-			RECT rcPos{0};
-			GetWindowRect(hWnd, &rcPos);
-			POINT pos{rcPos.left, rcPos.top};
-			ScreenToClient(GetParent(hWnd), &pos);
-			TCHAR table16[255]{0};
-			GetWindowText(hWnd, table16, 255);
-
-			prefs::setSyncMode(0);
-			char* table8 = utils::utf16to8(table16);
-			RECT rect{pos.x, pos.y, rcSize.right - rcSize.left, rcSize.bottom - rcSize.top};
-			sqlite3_stmt* stmt;
-			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into diagrams (dbname, tblname, x, y, width, height) values (?1, ?2, ?3, ?4, ?5, ?6)", -1, &stmt, 0)) {
-				sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
-				sqlite3_bind_text(stmt, 2, table8, strlen(table8), SQLITE_TRANSIENT);
-				sqlite3_bind_int(stmt, 3, rect.left);
-				sqlite3_bind_int(stmt, 4, rect.top);
-				sqlite3_bind_int(stmt, 5, rect.right);
-				sqlite3_bind_int(stmt, 6, rect.bottom);
-
-				sqlite3_step(stmt);
-			}
-			sqlite3_finalize(stmt);
-			prefs::setSyncMode(1);
-			delete [] table8;
-		}
-
-		if (msg == WM_LBUTTONDOWN) {
-			HWND hParentWnd = GetParent(hWnd);
-			SetWindowLongPtr(hParentWnd, GWLP_USERDATA, (LONG_PTR)hWnd);
-
-			int tblNo = 0;
-			while(HWND hTableWnd = GetDlgItem(hParentWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-				ShowWindow(hTableWnd, hTableWnd == hWnd ? SW_SHOW : SW_HIDE);
-				tblNo++;
-			}
-
-			InvalidateRect(hParentWnd, NULL, true);
-		}
-
-		if (msg == WM_WINDOWPOSCHANGED || msg == WM_LBUTTONDBLCLK)
-			SetFocus(GetParent(hWnd));
-
-		if (msg == WM_CONTEXTMENU) {
-			POINT p = {LOWORD(lParam), HIWORD(lParam)};
-			if (!hDiagramMenu) {
-				hDiagramMenu = LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_DIAGRAM));
-				hDiagramMenu = GetSubMenu(hDiagramMenu, 0);
-			}
-
-			TrackPopupMenu(hDiagramMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
-		}
-
-		return CallWindowProc(cbOldTable, hWnd, msg, wParam, lParam);
-	}
-
-	LRESULT CALLBACK cbNewDatabaseDiagramToolbar(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if (msg == WM_GETDLGCODE)
-			return (DLGC_WANTALLKEYS | CallWindowProc(cbOldDatabaseDiagramToolbar, hWnd, msg, wParam, lParam));
-
-		if (msg == WM_COMMAND && (LOWORD(wParam) == IDC_DLG_FILTER) && (HIWORD(wParam) == EN_CHANGE))
-			SendMessage(GetAncestor(hWnd, GA_ROOT), WMU_UPDATE_DIAGRAM, 0, 0);
-
-		return CallWindowProc(cbOldDatabaseDiagramToolbar, hWnd, msg, wParam, lParam);
-	}
-
-	// USERDATA stores a handle of current diagram table
-	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		switch (msg) {
-			case WM_INITDIALOG: {
-				dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
-
-				TBBUTTON tbButtons [] = {
-					{0, IDM_LINK_FK, (byte)(prefs::get("link-fk") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("Foreign keys")},
-					{1, IDM_LINK_VIEW, (byte)(prefs::get("link-view") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in views")},
-					{2, IDM_LINK_TRIGGER, (byte)(prefs::get("link-trigger") ? TBSTATE_CHECKED | TBSTATE_ENABLED : TBSTATE_ENABLED), TBSTYLE_CHECK, {0}, 0L, (INT_PTR)TEXT("References in triggers")},
-					{-1, IDM_LAST_SEPARATOR, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0}
-				};
-
-				HWND hToolbarWnd = CreateToolbarEx (hWnd, WS_CHILD |  WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS |TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
-					tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
-
-				// Should be run before TB_SETIMAGELIST to get the correct delimiter position
-				RECT rc{0};
-				SendMessage(hToolbarWnd, TB_GETRECT, IDM_LAST_SEPARATOR, (LPARAM)&rc);
-				cbOldDatabaseDiagramToolbar = (WNDPROC)SetWindowLongPtr(hToolbarWnd, GWLP_WNDPROC, (LONG_PTR)cbNewDatabaseDiagramToolbar);
-
-				HIMAGELIST tbImages = ImageList_LoadBitmap(GetModuleHandle (0), MAKEINTRESOURCE(IDB_TOOLBAR_DIAGRAM), 32, 0, RGB(255, 255, 255));
-				SendMessage(hToolbarWnd, TB_SETIMAGELIST, 0, (LPARAM)tbImages);
-				SendMessage(hToolbarWnd, TB_SETBITMAPSIZE, 0, MAKELPARAM(32, 16));
-
-				CreateWindow(WC_STATIC, TEXT("Find"), WS_CHILD | WS_VISIBLE, rc.right + 16 * 3 - 5, 5, 30, 14, hToolbarWnd, 0, GetModuleHandle(0), 0);
-				HWND hFilterWnd = CreateWindow(WC_EDIT, NULL, WS_CHILD | WS_BORDER | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL, rc.right + 16 * 3 + 25, 3, 180, 19, hToolbarWnd, (HMENU) IDC_DLG_FILTER, GetModuleHandle(0), 0);
-				SendMessage(hFilterWnd, WM_SETFONT, (LPARAM)SendMessage(hToolbarWnd, WM_GETFONT, 0, 0), true);
-
-				auto addTable = [hWnd](char* name8, int tblNo) {
-					TCHAR* tblname16 = utils::utf8to16((char *)name8);
-					RECT rect{10 + (tblNo % 5) * 150, 40 + 150 * (tblNo / 5), 100, 100};
-
-					sqlite3_stmt * stmt;
-					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select x, y, width, height from 'diagrams' where dbname = ?1 and tblname = ?2", -1, &stmt, 0)) {
-						sqlite3_bind_text(stmt, 1, dbname8, strlen(dbname8), SQLITE_TRANSIENT);
-						sqlite3_bind_text(stmt, 2, name8, strlen(name8), SQLITE_TRANSIENT);
-						if (sqlite3_step(stmt) == SQLITE_ROW) {
-							rect.left = sqlite3_column_int(stmt, 0);
-							rect.top = sqlite3_column_int(stmt, 1);
-							rect.right = sqlite3_column_int(stmt, 2);
-							rect.bottom = sqlite3_column_int(stmt, 3);
-						}
-					}
-					sqlite3_finalize(stmt);
-
-					HWND hTableWnd = CreateWindow(WC_LISTBOX, tblname16,
-						WS_CAPTION | WS_VISIBLE | WS_CHILD | WS_OVERLAPPED | WS_THICKFRAME | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | LBS_MULTIPLESEL | LBS_NOTIFY,
-						rect.left, rect.top, rect.right, rect.bottom + 15, hWnd, (HMENU)IntToPtr(IDC_DATABASE_DIAGRAM_TABLE + tblNo), GetModuleHandle(0), NULL);
-
-					cbOldTable = (WNDPROC)SetWindowLongPtr(hTableWnd, GWLP_WNDPROC, (LONG_PTR)cbNewTable);
-					ShowWindow(hTableWnd, SW_SHOW);
-
-					delete [] tblname16;
-					return hTableWnd;
-				};
-
-				auto addColumn = [] (HWND hTableWnd, char* name8, char* type8) {
-					TCHAR* colname16 = utils::utf8to16(name8);
-					TCHAR* type16 = utils::utf8to16(type8);
-					TCHAR buf16[1024]{0};
-					_sntprintf(buf16, 1023, TEXT("%ls: %ls"), colname16, type16);
-					ListBox_AddString(hTableWnd, buf16);
-
-					delete [] type16;
-					delete [] colname16;
-				};
-
-				HWND hTableWnd = 0;
-				int tblNo = 0;
-				sqlite3_stmt *stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, c.name colname, c.cid, iif(length(c.type), c.type, 'any') || iif(c.pk, ' [PK]', '') " \
-					"from sqlite_master t, pragma_table_xinfo(t.tbl_name) c " \
-					"where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table')" \
-					"order by 1, 3", -1, &stmt, 0)) {
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						int colNo = sqlite3_column_int(stmt, 2);
-						if (colNo == 0) {
-							hTableWnd = addTable((char *)sqlite3_column_text(stmt, 0), tblNo);
-							tblNo++;
-						}
-
-						addColumn(hTableWnd, (char*)sqlite3_column_text(stmt, 1), (char*)sqlite3_column_text(stmt, 3));
-					}
-				}
-				sqlite3_finalize(stmt);
-
-				if (SQLITE_OK != sqlite3_errcode(db) || tblNo == 0) {
-					sqlite3_prepare_v2(db, "select name from sqlite_master t where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table') order by 1", -1, &stmt, 0);
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						char* name8 = (char*)sqlite3_column_text(stmt, 0);
-						hTableWnd = addTable(name8, tblNo);
-						tblNo++;
-
-						sqlite3_stmt *substmt;
-						if (SQLITE_OK == sqlite3_prepare_v2(db, "select name, cid, iif(length(c.type), c.type, 'any') || iif(c.pk, ' [PK]', '') from pragma_table_xinfo(?1) c order by cid", -1, &substmt, 0)) {
-							sqlite3_bind_text(substmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
-							while (SQLITE_ROW == sqlite3_step(substmt))
-								addColumn(hTableWnd, (char*) sqlite3_column_text(substmt, 0), (char *) sqlite3_column_text(substmt, 2));
-
-							if (ListBox_GetCount(hTableWnd) == 0)
-								addColumn(hTableWnd, (char*)"Error", (char*)sqlite3_errmsg(db));
-						}
-						sqlite3_finalize(substmt);
-					}
-					sqlite3_finalize(stmt);
-				}
-
-				int linkNo = 0;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblfrom, c.'from' colfrom, c.'table' tblto, c.'to' colto " \
-					"from sqlite_master t, pragma_foreign_key_list(t.tbl_name) c " \
-					"where t.sql is not null and t.type in ('view', 'table')" \
-					"order by 1, 2, 3", -1, &stmt, 0)) {
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* tblfrom16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-						TCHAR* colfrom16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 1));
-						TCHAR* tblto16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 2));
-						TCHAR* colto16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 3));
-
-						HWND hWndFrom = FindWindowEx(hWnd, 0, NULL, tblfrom16);
-						HWND hWndTo = FindWindowEx(hWnd, 0, NULL, tblto16);
-						int posFrom = ListBox_FindString(hWndFrom, 0, colfrom16);
-						int posTo = ListBox_FindString(hWndTo, 0, colto16);
-
-						if (hWndFrom && hWndTo && posFrom != -1 && posTo != -1) {
-							links[linkNo] = {hWndFrom, posFrom, hWndTo, posTo, LINK_FK};
-							linkNo++;
-						}
-
-						delete [] tblfrom16;
-						delete [] colfrom16;
-						delete [] tblto16;
-						delete [] colto16;
-					}
-				}
-				sqlite3_finalize(stmt);
-
-				if (SQLITE_OK == sqlite3_prepare_v2(db, "select sm.tbl_name, +(sm.type = 'view'), ref.name " \
-					"from sqlite_master sm inner join sqlite_master ref " \
-					"on sm.type in ('view', 'trigger') and ref.type in ('table', 'view') " \
-					"and lower(sm.sql) regexp '(from |join |into )([ \"''])*' || lower(ref.name) || '(\\D|\\b|''])+'", -1, &stmt, 0)) {
-					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* tblname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
-						int isView = sqlite3_column_int(stmt, 1);
-						TCHAR* refname16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 2));
-
-						HWND hWndFrom = FindWindowEx(hWnd, 0, NULL, tblname16);
-						HWND hWndTo = FindWindowEx(hWnd, 0, NULL, refname16);
-						if (hWndFrom && hWndTo) {
-							links[linkNo] = {hWndFrom, -1, hWndTo, -1, isView ? LINK_VIEW : LINK_TRIGGER};
-							linkNo++;
-						}
-
-						delete [] tblname16;
-						delete [] refname16;
-					}
-				} else {
-					SendMessage(hToolbarWnd, TB_SETSTATE, IDM_LINK_VIEW, 0);
-					SendMessage(hToolbarWnd, TB_SETSTATE, IDM_LINK_TRIGGER, 0);
-				}
-				sqlite3_finalize(stmt);
-
-				prefs::setSyncMode(0);
-				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_SETDEFFONT);
-				prefs::setSyncMode(1);
-
-				SetWindowPos(hWnd, 0, prefs::get("x") + 30, prefs::get("y") + 70, prefs::get("width") - 60, prefs::get("height") - 100,  SWP_NOZORDER);
-				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
-			}
-			break;
-
-			case WM_LBUTTONDOWN: {
-				cursor = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-				isMove = wParam == MK_LBUTTON;
-				SetCapture(hWnd);
-				if (GetWindowLongPtr(hWnd, GWLP_USERDATA)) {
-					SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
-					int tblNo = 0;
-					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-						ShowWindow(hTableWnd, SW_SHOW);
-						tblNo++;
-					}
-				}
-				InvalidateRect(hWnd, NULL, true);
-			}
-			break;
-
-			case WM_LBUTTONUP: {
-				int dx = cursor.x - GET_X_LPARAM(lParam);
-				int dy = cursor.y - GET_Y_LPARAM(lParam);
-
-				if (isMove && (dx != 0 ||dy != 0)) {
-					prefs::setSyncMode(0);
-					int tblNo = 0;
-					while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-						RECT rc;
-						GetWindowRect(hTableWnd, &rc);
-						POINT p = {rc.left, rc.top};
-						ScreenToClient(hWnd, &p);
-						SetWindowPos(hTableWnd, 0, p.x - dx, p.y - dy, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
-						tblNo++;
-					}
-					prefs::setSyncMode(1);
-				}
-
-				isMove = false;
-				ReleaseCapture();
-			}
-			break;
-
-			case WM_MOUSEMOVE: {
-				if (isMove)
-					InvalidateRect(hWnd, NULL, true);
-			}
-			break;
-
-			case WM_SIZE: {
-				SendMessage(GetDlgItem(hWnd, IDC_DLG_TOOLBAR), WM_SIZE, 0, 0);
-			}
-			break;
-
-			case WM_ERASEBKGND: {
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
-
-				return 1;
-			}
-			break;
-
-			case WM_PAINT : {
-				InvalidateRect(hWnd, NULL, true);
-
-				PAINTSTRUCT ps{0};
-				ps.fErase = true;
-				HDC hdc = BeginPaint(hWnd, &ps);
-
-				if (isMove) {
-					POINT p;
-					GetCursorPos(&p);
-					ScreenToClient(hWnd, &p);
-					int dx = cursor.x - p.x;
-					int dy = cursor.y - p.y;
-
-					if (isMove && (dx != 0 ||dy != 0)) {
-						HPEN hPen = CreatePen(PS_DOT, 1, RGB(128, 128, 128));
-						SelectObject(hdc, hPen);
-
-						int tblNo = 0;
-						while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-							RECT rc;
-							GetWindowRect(hTableWnd, &rc);
-							POINT p = {rc.left, rc.top};
-							ScreenToClient(hWnd, &p);
-							Rectangle(hdc, p.x - dx, p.y - dy,  p.x - dx + rc.right - rc.left, p.y - dy + rc.bottom - rc.top);
-							tblNo++;
-						}
-
-						DeleteObject(hPen);
-					}
-				}
-
-				bool isFk = prefs::get("link-fk");
-				bool isView = prefs::get("link-view");
-				bool isTrigger = prefs::get("link-trigger");
-				HWND hCurrWnd = (HWND)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-
-				int tblNo = 0;
-				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-					tblNo++;
-
-					if (GetProp(hTableWnd, TEXT("HIGHLIGHTED")) == 0 || !IsWindowVisible(hTableWnd))
-						continue;
-
-					RECT rc{0};
-					GetWindowRect(hTableWnd, &rc);
-					POINT p = {rc.left, rc.top};
-					ScreenToClient(hWnd, &p);
-
-					HPEN hPen = CreatePen(PS_DOT, 3, RGB(255, 200, 255));
-					SelectObject(hdc, hPen);
-					Rectangle(hdc, p.x - 5, p.y - 5,  p.x + rc.right - rc.left + 5, p.y + rc.bottom - rc.top + 5);
-					DeleteObject(hPen);
-				}
-
-				if (hCurrWnd) {
-					RECT rc{0};
-					GetWindowRect(hCurrWnd, &rc);
-					POINT p = {rc.left, rc.top};
-					ScreenToClient(hWnd, &p);
-
-					HPEN hPen = CreatePen(PS_DOT, 1, RGB(128, 128, 128));
-					SelectObject(hdc, hPen);
-					Rectangle(hdc, p.x - 5, p.y - 5,  p.x + rc.right - rc.left + 5, p.y + rc.bottom - rc.top + 5);
-					DeleteObject(hPen);
-				}
-
-				int captionH = GetSystemMetrics(SM_CYCAPTION) +  ListBox_GetItemHeight(links[0].hWndFrom, 0) - 2;
-				for (int i = 0; links[i].type != 0; i++) {
-					int type = links[i].type;
-					if ((type == LINK_FK && !isFk) || (type == LINK_VIEW && !isView) || (type == LINK_TRIGGER && !isTrigger))
-						continue;
-
-					if (hCurrWnd && (hCurrWnd != links[i].hWndFrom && hCurrWnd != links[i].hWndTo))
-						continue;
-
-					ShowWindow(links[i].hWndFrom, SW_SHOW);
-					ShowWindow(links[i].hWndTo, SW_SHOW);
-
-					RECT rcA{0}, rcB{0};
-					GetWindowRect(links[i].hWndFrom, &rcA);
-					GetWindowRect(links[i].hWndTo, &rcB);
-
-					POINT from{rcA.left, rcA.top}, to{rcB.left, rcB.top};
-					ScreenToClient(hWnd, &from);
-					ScreenToClient(hWnd, &to);
-					int hA = rcA.bottom - rcA.top;
-					int wA = rcA.right - rcA.left;
-					int hB = rcB.bottom - rcB.top;
-					int wB = rcB.right - rcB.left;
-
-					int minStick = 10;
-					POINT a = {0}, b = {0}, c = {0}, d = {0};
-
-					HPEN hPen = CreatePen(PS_SOLID,
-						(hCurrWnd == links[i].hWndFrom || hCurrWnd == links[i].hWndTo) ? 2 : 1,
-						type == LINK_FK ? RGB(0, 0, 0) : type == LINK_VIEW ? RGB(0, 0, 255) : RGB(255, 0, 0));
-					SelectObject(hdc, hPen);
-
-					if (type == LINK_FK) {
-						bool isRightA = false;
-						bool isRightB = false;
-
-						if (rcB.left - rcA.right > 2 * minStick) {
-							isRightA = true;
-						} else if (rcA.left - rcB.right > 2 * minStick) {
-							isRightB = true;
-						} else if (abs(rcA.left - rcB.left) < abs(rcA.right - rcB.right)) {
-							isRightA = true;
-							isRightB = true;
-						}
-
-						RECT rcFrom{0}, rcTo{0};
-						ListBox_GetItemRect(links[i].hWndFrom, links[i].posFrom, &rcFrom);
-						ListBox_GetItemRect(links[i].hWndTo, links[i].posTo, &rcTo);
-
-						a = {from.x + (isRightA ? wA : 0), from.y + rcFrom.top  + captionH};
-						b = {to.x + (isRightB ? wB : 0), to.y + rcTo.top  + captionH};
-
-						int midX = isRightA && isRightB ? MAX(from.x + wA, to.x + wB) + minStick :
-							!isRightA && !isRightB ? MIN(from.x, to.x) - minStick :
-							isRightA && !isRightB ? from.x + wA + (to.x - from.x - wA) / 2 :
-							!isRightA && isRightB ? to.x + wB + (from.x - to.x - wB) / 2 :
-							0;
-						c = {midX, a.y};
-						d = {midX, b.y};
-
-						MoveToEx(hdc, a.x + (isRightA ? 5 : -5), a.y, NULL);
-						LineTo(hdc, a.x, a.y + 5);
-						MoveToEx(hdc, a.x + (isRightA ? 5 : -5), a.y, NULL);
-						LineTo(hdc, a.x, a.y - 5);
-
-						MoveToEx(hdc, b.x, b.y - 5, NULL);
-						LineTo(hdc, b.x, b.y + 5);
-					}
-
-					if ((type == LINK_VIEW) || (type == LINK_TRIGGER)) {
-						bool isBottomA = false;
-						bool isBottomB = false;
-						int shift = LINK_VIEW ? 5 : 10;
-
-						if (rcB.top - rcA.bottom > 2 * minStick) {
-							isBottomA = true;
-						} else if (rcA.top - rcB.bottom > 2 * minStick) {
-							isBottomB = true;
-						} else if (abs(rcA.top - rcB.top) < abs(rcA.bottom - rcB.bottom)) {
-							isBottomA = true;
-							isBottomB = true;
-						}
-
-						a = {from.x + wA/2 - shift, from.y + (isBottomA ? hA : 0)};
-						b = {to.x + wB/2 + shift, to.y + (isBottomB ? hB : 0)};
-
-						int midY = isBottomA && isBottomB ? MAX(from.y + hA, to.y + hB) + minStick :
-							!isBottomA && !isBottomB ? MIN(from.y, to.y) - minStick :
-							isBottomA && !isBottomB ? from.y + hA + (to.y - from.y - hA) / 2 :
-							!isBottomA && isBottomB ? to.y + hB + (from.y - to.y - hB) / 2 :
-							0;
-						c = {a.x, midY};
-						d = {b.x, midY};
-
-						MoveToEx(hdc, a.x - 5, a.y, NULL);
-						LineTo(hdc, a.x + 5, a.y);
-
-						MoveToEx(hdc, b.x, b.y, NULL);
-						LineTo(hdc, b.x + 5, b.y + (isBottomB ? 5 : -5));
-						MoveToEx(hdc, b.x, b.y, NULL);
-						LineTo(hdc, b.x - 5, b.y + (isBottomB ? 5 : -5));
-					}
-
-					MoveToEx(hdc, a.x, a.y, NULL);
-					LineTo(hdc, c.x, c.y);
-					LineTo(hdc, d.x, d.y);
-					LineTo(hdc, b.x, b.y);
-
-					DeleteObject(hPen);
-				}
-
-				EndPaint(hWnd, &ps);
-			}
-			break;
-
-			case WM_COMMAND: {
-				if (wParam == IDM_LINK_FK || wParam == IDM_LINK_VIEW || wParam == IDM_LINK_TRIGGER) {
-					HWND hToolWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
-					int isChecked = SendMessage(hToolWnd, TB_ISBUTTONCHECKED, wParam, 0);
-
-					if (wParam == IDM_LINK_FK)
-						prefs::set("link-fk", isChecked);
-					if (wParam == IDM_LINK_VIEW)
-						prefs::set("link-view", isChecked);
-					if (wParam == IDM_LINK_TRIGGER)
-						prefs::set("link-trigger", isChecked);
-
-					if (GetWindowLongPtr(hWnd, GWLP_USERDATA)) {
-						int tblNo = 0;
-						while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-							ShowWindow(hTableWnd, SW_HIDE);
-							tblNo++;
-						}
-					}
-
-					InvalidateRect(hWnd, NULL, true);
-				}
-
-				if (HIWORD(wParam) == LBN_SELCHANGE && GetParent((HWND)lParam) == hWnd)
-					return SendMessage(hWnd, WMU_UPDATE_DIAGRAM, 0, 0);
-
-				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
-			case WM_NOTIFY: {
-				NMHDR* pHdr = (LPNMHDR)lParam;
-				if (pHdr->code == (WORD)NM_CHAR && (((NMCHAR*) lParam)->ch == VK_ESCAPE))
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
-			case WMU_UPDATE_DIAGRAM: {
-				HWND hFilterWnd = GetDlgItem(GetDlgItem(hWnd, IDC_DLG_TOOLBAR), IDC_DLG_FILTER);
-
-				TCHAR filter[256]{0};
-				GetWindowText(hFilterWnd, filter, 255);
-				_tcslwr(filter);
-
-				int tblNo = 0;
-				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-					TCHAR title[256]{0};
-					GetWindowText(hTableWnd, title, 255);
-					_tcslwr(title);
-					SetProp(hTableWnd, TEXT("HIGHLIGHTED"), (HANDLE)(_tcslen(filter) > 0 && _tcsstr(title, filter) != 0));
-
-					ListBox_SetSel(hTableWnd, 0, -1);
-					int rowCount = ListBox_GetCount(hTableWnd);
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						int size = ListBox_GetTextLen(hTableWnd, rowNo) + 1;
-						TCHAR buf[size]{0};
-						ListBox_GetText(hTableWnd, rowNo, buf);
-						_tcslwr(buf);
-						_tcstok(buf, TEXT(":"));
-						ListBox_SetSel(hTableWnd, _tcslen(filter) > 0 && _tcsstr(buf, filter) != 0, rowNo);
-					}
-					tblNo++;
-				}
-				InvalidateRect(hWnd, NULL, false);
-			}
-			break;
-
-			case WM_SYSKEYDOWN: {
-				if (wParam == VK_ESCAPE)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
-			case WM_CLOSE: {
-				delete [] dbname8;
-				for (int i = 0; i < MAX_LINK_COUNT; i++)
-					links[i].type = 0;
-
-				int tblNo = 0;
-				while(HWND hTableWnd = GetDlgItem(hWnd, IDC_DATABASE_DIAGRAM_TABLE + tblNo)) {
-					RemoveProp(hTableWnd, TEXT("HIGHLIGHTED"));
-					tblNo++;
-				}
-				EndDialog(hWnd, DLG_CANCEL);
-			}
-			break;
-		}
-
-		return false;
 	}
 }

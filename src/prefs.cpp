@@ -5,21 +5,21 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 84;
+	const int ICOUNT = 87;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
 		"cli-font-size", "cli-row-limit", "cli-preserve-inja",
-		"backup-prefs", "ignore-readonly-prefs", "autoload-extensions", "restore-db", "restore-editor", "use-highlight",
+		"backup-prefs", "ignore-readonly-prefs", "restore-db", "restore-editor", "use-highlight",
 		"use-autocomplete", "autocomplete-by-tab", "disable-autocomplete-help", "use-foreign-keys", "use-legacy-rename", "editor-indent",
 		"editor-tab-count", "editor-tab-current", "highlight-delay",
-		"ask-delete", "word-wrap", "clear-values", "recent-count",
+		"ask-delete", "word-wrap", "clear-values", "recent-count", "auto-filters", "edit-data-filter-mode",
 		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "csv-import-is-create-table", "csv-import-is-truncate", "csv-import-is-replace", "csv-import-trim-values", "csv-import-skip-empty", "csv-import-abort-on-error",
 		"odbc-strategy",
 		"sql-export-multiple-insert", "extended-query-plan",
 		"row-limit", "show-preview", "preview-width", "show-filters", "max-column-width",
-		"chart-grid-size-x", "chart-grid-size-y",
+		"chart-grid-size-x", "chart-grid-size-y", "dialog-row-width", "dialog-row-maximized",
 		"cipher-legacy", "retain-passphrase",
 		"check-update", "last-update-check",
 		"case-sensitive",
@@ -36,23 +36,23 @@ namespace prefs {
 		100, 100, 800, 600, 200, 200,
 		0, 10, 1000, 1, 3000, 1,
 		8, 10, 1,
-		0, 0, 1, 1, 1, 1,
-		1, 0, 0, 0, 0, 0, // use
+		0, 0, 1, 1, 1,
+		1, 1, 0, 0, 0, 0, // use
 		1, 0, 30,
-		0, 0, 0, 10,
+		0, 0, 0, 10, 1, 0,
 		0, 0, 1,
 		0, 0, 1, 1, 0, 1, 1, 1, 0, // csv-import
 		0,
 		0, 0,
 		10000, 0, 200, 0, 400,
-		100, 50,
+		100, 50, 400, 0, // chart and dialog-row size
 		0, 0,
 		1, 0,
 		0,
 		0,
 		0, 3000, 0,
 		// colors are stored in reverse order BGR
-		0xFFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0, 0x00FF00,
+		0xFFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0, 0xA66046,
 		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F, 0x404080,
 		100, 0,
 		1, 0, 0,
@@ -154,6 +154,14 @@ namespace prefs {
 			}
 		}
 
+		// migration from 1.8.2 and earlier versions
+		if (SQLITE_OK == sqlite3_exec(db, "select 1 from help where 1 = 2", 0, 0, 0) &&
+			SQLITE_OK != sqlite3_exec(db, "select source from help where 1 = 2", 0, 0, 0)) {
+			MessageBox(0, TEXT("The help structure was changed. You need reinstall all extensions\nto update help. Open Database > Extension manager and uncheck and check again all checked entries.\n\n(Re-)Install odbc-extension to enable all ODBC features."), TEXT("Information"), MB_ICONINFORMATION);
+			sqlite3_exec(db, "drop table help", 0, 0, 0);
+		}
+		sqlite3_exec(db, "alter table functions add column help text", 0, 0, 0);
+
 		if (!loadSqlResource(IDR_INIT))
 			return false;
 
@@ -209,5 +217,34 @@ namespace prefs {
 		char query[255];
 		sprintf(query, "pragma synchronous = %i;", mode);
 		return SQLITE_DONE == sqlite3_exec(db, query, 0, 0, 0);
+	}
+
+	bool applyHelp(const char* json, const char* source) {
+		bool rc = true;
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(db,
+			"with j (type, signature, description, example, alias, args) as (select " \
+			"json_extract(value, '$.type'), json_extract(value, '$.signature'), json_extract(value, '$.description'), "	\
+			"json_extract(value, '$.example'), json_extract(value, '$.alias'), json_extract(value, '$.args') from json_each(?1))" \
+			"insert or replace into \"help\" (keyword, \"type\", signature, description, example, alias, args, nargs, source) " \
+			"select " \
+			"trim(substr(signature, 0, instr(signature, '('))), type, signature, description, example, alias, args, " \
+			"iif(instr(signature, '...') = 0, length(args) - length(replace(args, '|', '')) + (instr(args, '()') = 0), -1), ?2 " \
+			"from j;", -1, &stmt, 0)) {
+			sqlite3_bind_text(stmt, 1, json, strlen(json),  SQLITE_TRANSIENT);
+			if (source) {
+				sqlite3_bind_text(stmt, 2, source, strlen(source),  SQLITE_TRANSIENT);
+			} else {
+				sqlite3_bind_null(stmt, 2);
+			}
+
+			rc = SQLITE_DONE == sqlite3_step(stmt);
+		} else {
+			printf(sqlite3_errmsg(db));
+		}
+		sqlite3_finalize(stmt);
+
+		return rc;
 	}
 }

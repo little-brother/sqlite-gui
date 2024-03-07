@@ -1,9 +1,6 @@
 #ifndef __GLOBAL_H__
 #define __GLOBAL_H__
 
-// missing
-#define LVS_EX_AUTOSIZECOLUMNS      0x10000000
-
 #define MAX_TAB_COUNT               16
 #define MAX_RESULT_COUNT            32
 #define MAX_ENTITY_COUNT          1024
@@ -22,7 +19,7 @@
 #define DLG_DELETE                  2
 
 #define ACTION_SETFONT              1
-#define ACTION_SETDEFFONT           2
+#define ACTION_SETPARENTFONT        2
 #define ACTION_DESTROY              3
 #define ACTION_RESIZETAB            4
 #define ACTION_UPDATETAB            5
@@ -47,6 +44,7 @@
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define CLAMP(x, lower, upper) (MIN(upper, MAX(x, lower)))
 
 #include <windows.h>
 #include <windowsx.h>
@@ -60,6 +58,7 @@
 #include <sys/stat.h>
 #include <locale.h>
 #include <math.h>
+#include <uxtheme.h>
 
 #include "sqlite3.h"
 
@@ -68,6 +67,7 @@ extern HWND  hMainWnd;
 extern HMENU hBlobMenu, hEditorMenu;
 
 extern TCHAR searchString[255];
+extern TCHAR APP_PATH[MAX_PATH];
 
 extern const char *TYPES8[6];
 extern const TCHAR *TYPES16[6];
@@ -75,15 +75,13 @@ extern const TCHAR *TYPES16u[6];
 extern const TCHAR *TYPES16p[6];
 
 extern COLORREF GRIDCOLORS[8];
-
-extern HFONT hDefFont;
 extern HFONT hFont;
-extern HPEN hCurrentCellPen;
 
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
+bool CALLBACK cbEnumFixEditHeights (HWND hWnd, LPARAM height);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
 void setEditorFont(HWND hWnd);
@@ -110,6 +108,7 @@ void hideTooltip();
 bool openBlobAsFile(const unsigned char* data, int size, bool isTxt = false);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
+DWORD_PTR Toolbar_GetButtonData(HWND hToolbar, int id);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
 int ListView_Sort(HWND hListWnd, int colNo);
@@ -117,16 +116,26 @@ int ListView_Reset(HWND hListWnd);
 int ListView_GetColumnCount(HWND hListWnd);
 int Header_GetItemText(HWND hWnd, int i, TCHAR* pszText, int cchTextMax);
 int Header_SetItemText(HWND hWnd, int i, TCHAR* pszText);
-void Menu_SetItemText(HMENU hMenu, UINT wID, const TCHAR* caption);
-void Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState);
-void Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const TCHAR* pszText);
-void Menu_SetData(HMENU hMenu, ULONG_PTR data);
+int Menu_GetItemPositionByName(HMENU hMenu, const TCHAR* itemName);
+BOOL Menu_SetItemText(HMENU hMenu, UINT wID, const TCHAR* caption);
+BOOL Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState);
+BOOL Menu_SetItemStateByPosition(HMENU hMenu, UINT pos, UINT fState);
+BOOL Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const TCHAR* pszText);
+BOOL Menu_SetData(HMENU hMenu, ULONG_PTR data);
 ULONG_PTR Menu_GetData(HMENU hMenu);
+//HMENU GetSubMenuByName(HMENU hMenu, const TCHAR* itemName);
 
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
 TCHAR* getDDL(const TCHAR* schema16, const TCHAR* name16, int type, bool withDrop = false);
 bool showDbError(HWND hWnd);
+
+typedef struct TDlgParam {
+	const TCHAR* s1;
+	const TCHAR* s2;
+	const TCHAR* s3;
+	const TCHAR* s4;
+} TDlgParam;
 
 #endif

@@ -6,6 +6,8 @@
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
+#include <shlobj.h>
+#include <shlwapi.h>
 #include <io.h>
 #include "utils.h"
 
@@ -378,68 +380,6 @@ namespace utils {
 		return true;
 	}
 
-	bool isSQLiteDatabase(TCHAR* path16) {
-		FILE *f = _tfopen (path16, TEXT("rb"));
-		if(!f)
-			return 0;
-
-		char buf[16] = {0};
-		fread(buf, 16, 1, f);
-		fclose(f);
-
-		return strncmp(buf, "SQLite format 3", 15) == 0;
-	}
-
-	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
-		int len = strlen(value8);
-
-		if (len == 0)
-			return sqlite3_bind_null(stmt, pos);
-
-		if (forceToText)
-			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
-
-		//if (len > 20) // 18446744073709551615
-		//	return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
-
-		if (len == 1 && value8[0] == '0')
-			return sqlite3_bind_int(stmt, pos, 0);
-
-		bool isNum = true;
-		int dotCount = 0;
-		for (int i = +(value8[0] == '-' /* is negative */); i < len; i++) {
-			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.' || value8[i] == ',');
-			dotCount += value8[i] == '.' || value8[i] == ',';
-		}
-
-		if (isNum && dotCount == 0) {
-			return len < 10 ? // 2147483647
-				sqlite3_bind_int(stmt, pos, atoi(value8)) :
-				sqlite3_bind_int64(stmt, pos, atoll(value8));
-		}
-
-		double d = 0;
-		if (isNum && dotCount == 1 && isNumber(value8, &d))
-			return sqlite3_bind_double(stmt, pos, d);
-
-		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
-	}
-
-	BYTE sqlite3_type(const char* decltype8) {
-		if (decltype8 == 0)
-			return SQLITE_NULL;
-
-		char type8[strlen(decltype8) + 1]{0};
-		strcpy(type8, decltype8);
-		strlwr(type8);
-
-		return strstr(type8, "char") != NULL || strstr(type8, "text") != NULL ? SQLITE_TEXT :
-			strstr(type8, "int") != NULL ? SQLITE_INTEGER :
-			strstr(type8, "float") != NULL || strstr(type8, "double") != NULL || strstr(type8, "real") != NULL || strstr(type8, "numeric") != NULL ? SQLITE_FLOAT :
-			strcmp(type8, "blob") == 0 ? SQLITE_BLOB :
-			SQLITE_TEXT;
-	}
-
 	const TCHAR* sizes[] = { TEXT("b"), TEXT("KB"), TEXT("MB"), TEXT("GB"), TEXT("TB") };
 	TCHAR* toBlobSize(INT64 bSize) {
 		TCHAR* res = new TCHAR[64]{0};
@@ -553,6 +493,11 @@ namespace utils {
 		return RGB(r, g, b);
 	}
 
+	// https://stackoverflow.com/a/25427128/6121703
+	bool isColorDark(COLORREF color) {
+		return GetRValue(color) * 0.2126 + GetGValue(color) * 0.7152 + GetBValue(color) * 0.0722 < 255 / 2;
+	}
+
 	// https://stackoverflow.com/a/14530993/6121703
 	void urlDecode (char *dst, const char *src) {
 		char a, b;
@@ -657,6 +602,124 @@ namespace utils {
 		return crc ^ ~0U;
 	}
 
+	// https://github.com/pod32g/MD5/blob/master/md5.c
+	const UINT k[64] = {
+		0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee ,
+		0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501 ,
+		0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be ,
+		0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821 ,
+		0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa ,
+		0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8 ,
+		0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed ,
+		0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a ,
+		0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c ,
+		0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70 ,
+		0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05 ,
+		0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665 ,
+		0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039 ,
+		0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1 ,
+		0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1 ,
+		0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+	};
+
+	const UINT r[] = {
+		7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+		5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20,
+		4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+		6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+	};
+
+	#define LEFTROTATE(x, c) (((x) << (c)) | ((x) >> (32 - (c))))
+
+	void to_bytes(UINT val, UINT8 *bytes) {
+		bytes[0] = (UINT8) val;
+		bytes[1] = (UINT8) (val >> 8);
+		bytes[2] = (UINT8) (val >> 16);
+		bytes[3] = (UINT8) (val >> 24);
+	}
+
+	UINT to_int32(const UINT8 *bytes) {
+		return (UINT) bytes[0] | ((UINT) bytes[1] << 8) | ((UINT) bytes[2] << 16) | ((UINT) bytes[3] << 24);
+	}
+
+	void md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest) {
+		UINT h0, h1, h2, h3;
+		UINT8 *msg = NULL;
+
+		size_t new_len, offset;
+		UINT w[16];
+		UINT a, b, c, d, i, f, g, temp;
+
+		h0 = 0x67452301;
+		h1 = 0xefcdab89;
+		h2 = 0x98badcfe;
+		h3 = 0x10325476;
+
+		for (new_len = initial_len + 1; new_len % (512/8) != 448/8; new_len++);
+
+		msg = (UINT8*)malloc(new_len + 8);
+		memcpy(msg, initial_msg, initial_len);
+		msg[initial_len] = 0x80;
+		for (offset = initial_len + 1; offset < new_len; offset++)
+			msg[offset] = 0;
+
+
+		to_bytes(initial_len*8, msg + new_len);
+		to_bytes(initial_len>>29, msg + new_len + 4);
+
+		for (offset=0; offset<new_len; offset += (512/8)) {
+			for (i = 0; i < 16; i++)
+				w[i] = to_int32(msg + offset + i*4);
+
+			a = h0;
+			b = h1;
+			c = h2;
+			d = h3;
+
+			// Main loop:
+			for(i = 0; i < 64; i++) {
+				if (i < 16) {
+					f = (b & c) | ((~b) & d);
+					g = i;
+				} else if (i < 32) {
+					f = (d & b) | ((~d) & c);
+					g = (5*i + 1) % 16;
+				} else if (i < 48) {
+					f = b ^ c ^ d;
+					g = (3*i + 5) % 16;
+				} else {
+					f = c ^ (b | (~d));
+					g = (7*i) % 16;
+				}
+
+				temp = d;
+				d = c;
+				c = b;
+				b = b + LEFTROTATE((a + f + k[i] + w[g]), r[i]);
+				a = temp;
+			}
+
+			h0 += a;
+			h1 += b;
+			h2 += c;
+			h3 += d;
+		}
+		free(msg);
+
+		to_bytes(h0, digest);
+		to_bytes(h1, digest + 4);
+		to_bytes(h2, digest + 8);
+		to_bytes(h3, digest + 12);
+	}
+
+	unsigned int read_le16(const unsigned char *p) {
+		return ((unsigned int) p[0]) | ((unsigned int) p[1] << 8);
+	}
+
+	unsigned int read_le32(const unsigned char *p) {
+		return ((unsigned int) p[0]) | ((unsigned int) p[1] << 8) | ((unsigned int) p[2] << 16) | ((unsigned int) p[3] << 24);
+	}
+
 	void mergeSortJoiner(int indexes[], void* data, int l, int m, int r, BOOL isBackward, BOOL isNums) {
 		int n1 = m - l + 1;
 		int n2 = r - m;
@@ -712,7 +775,7 @@ namespace utils {
 
 
 	// http://www.geekhideout.com/urlcode.shtml
-	char *url_encode(const char *str) {
+	char *urlEncode(const char *str) {
 		auto toHex = [](char code) -> char {
 			static char hex[] = "0123456789abcdef";
 			return hex[code & 15];
@@ -735,25 +798,26 @@ namespace utils {
 		return buf;
 	}
 
-	char* httpRequest(const char* method, const char* uri, const char* path, const char* data) {
+	char* httpRequest(const char* method, const char* uri, const char* path, const char* data, int* readBytes, DWORD* statusCode) {
 		DWORD resSize = 1;
 		char* res8 = 0;
 
 		char headers[1024];
 		char* encoded_data = 0;
 		if (strcmp(method, "PUT") == 0 || strcmp(method, "POST") == 0) {
-			encoded_data = url_encode(data);
+			encoded_data = urlEncode(data);
 			strcpy(headers,	"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n");
 		} else {
 			strcpy(headers,	"Accept: application/json\r\n");
 		}
 
 		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
-		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 1u);
-		HINTERNET hRequest = HttpOpenRequestA(hSession, method, path, NULL, uri, 0, INTERNET_FLAG_SECURE, 1);
+		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 0);
+		HINTERNET hRequest = HttpOpenRequestA(hSession, method, path, NULL, uri, 0, INTERNET_FLAG_SECURE | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD, 0);
 
 		if (hRequest && HttpSendRequestA(hRequest, headers, strlen(headers), encoded_data, encoded_data ? strlen(encoded_data) : 0)) {
 			bool isDone = false;
+
 			while (!isDone) {
 				DWORD read = 0;
 				char* buf8 = new char[32000]{0};
@@ -767,7 +831,13 @@ namespace utils {
 
 				isDone = read == 0;
 			}
+
+			if (statusCode) {
+				DWORD len = sizeof(DWORD);
+				HttpQueryInfo(hRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, statusCode, &len, NULL);
+			}
 		}
+
 		InternetCloseHandle(hRequest);
 		InternetCloseHandle(hSession);
 		InternetCloseHandle(hInet);
@@ -779,18 +849,113 @@ namespace utils {
 		if (res8)
 			res8[resSize - 1] = 0;
 
+		if (readBytes)
+			*readBytes = resSize - 1;
+
 		return res8;
 	}
 
-	SIZE getTextSize(HWND hWnd, const TCHAR* text) {
-		HDC hDC = GetDC(hWnd);
-		HFONT hOldFont = (HFONT)SelectObject(hDC, (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0));
+	bool downloadFile(const TCHAR* url16, const TCHAR* path16, bool unpack) {
+		bool rc = false;
+
+		HINTERNET hInet = InternetOpen(TEXT("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)"), INTERNET_OPEN_TYPE_PRECONFIG, TEXT(""), TEXT(""), 0);
+		HINTERNET hUrl = InternetOpenUrl(hInet, url16, 0, 0, INTERNET_FLAG_SECURE | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD, 0);
+
+		if (hUrl)  {
+			DWORD resSize = 1;
+			char* res8 = 0;
+
+			bool isDone = false;
+			while (!isDone) {
+				DWORD read = 0;
+				char* buf8 = new char[32000]{0};
+				InternetReadFile(hUrl, buf8, 32000, &read);
+
+				resSize += read;
+				res8 = res8 ? (char*)realloc(res8, resSize) : new char[resSize]{0};
+				for (DWORD i = 0; i < read; i++)
+					res8[resSize - read + i - 1] = buf8[i];
+				delete [] buf8;
+
+				isDone = read == 0;
+			}
+
+			TCHAR folder16[MAX_PATH + 1] = {0};
+			_tcscpy(folder16, path16);
+			PathRemoveFileSpec(folder16);
+			SHCreateDirectoryEx(0, folder16, 0);
+
+			FILE* f = _tfopen(path16, TEXT("wb"));
+			if (f) {
+				fwrite(res8, 1, resSize - 1, f);
+				fclose(f);
+
+				rc = true;
+			}
+
+			delete [] res8;
+		}
+
+		InternetCloseHandle(hUrl);
+		InternetCloseHandle(hInet);
+
+		return rc;
+	}
+
+	SIZE getTextSize(HFONT hFont, const TCHAR* text) {
+		HDC hDC = GetDC(HWND_DESKTOP);
+		HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
 
 		SIZE s = {0};
 		GetTextExtentPoint32(hDC, text, _tcslen(text), &s);
 		SelectObject(hDC, hOldFont);
-		ReleaseDC(hWnd, hDC);
+		ReleaseDC(HWND_DESKTOP, hDC);
 
 		return s;
+	}
+
+	POINTFLOAT getDlgScale(HWND hWnd) {
+		RECT rc = {0, 0, 1000, 1000};
+		MapDialogRect(hWnd, &rc);
+
+		return (POINTFLOAT){rc.right/1000.f, rc.bottom/1000.f};
+	}
+
+	POINTFLOAT getWndScale(HWND hWnd) {
+		HDC hDC = GetDC(hWnd);
+		POINTFLOAT z = {GetDeviceCaps(hDC, LOGPIXELSX) / 96.f, GetDeviceCaps(hDC, LOGPIXELSY) / 96.f};
+		ReleaseDC(hWnd, hDC);
+
+		return z;
+	}
+
+	int getEditHeight(HWND hWnd) {
+		float z = getWndScale(hWnd).x;
+		return (13 - (z >= 1.25f) - (z >= 1.5f)) * getDlgScale(hWnd).y;
+	}
+
+	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess, bool doMore) {
+		RECT rc, prc;
+		GetWindowRect(hDlgWnd, &rc);
+		if (hParentWnd) {
+			GetWindowRect(hParentWnd, &prc);
+		} else {
+			prc = (RECT){0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+		}
+
+		if (doMore || doLess) {
+			int w = rc.right - rc.left;
+			int pw = prc.right - prc.left;
+			int W = (doLess && w > pw) || (doMore && w < pw) ?  pw - 60 : w;
+
+			int h = rc.bottom - rc.top;
+			int ph = prc.bottom - prc.top;
+			int H = (doLess && h > ph) || (doMore && h < ph) ?  ph - 60 : h;
+			SetWindowPos(hDlgWnd, 0, 0, 0, W, H, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+		}
+
+		GetWindowRect(hDlgWnd, &rc);
+		POINT c = {(prc.right + prc.left) / 2, (prc.bottom + prc.top) / 2};
+		SetWindowPos(hDlgWnd, 0, c.x - (rc.right - rc.left) / 2, c.y - (rc.bottom - rc.top) / 2, 0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
 	}
 }

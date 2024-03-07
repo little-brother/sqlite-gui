@@ -14,20 +14,19 @@ Small, simple, [powerfull](https://youtu.be/lctkqWD7HTk), fast, free.
 * Colorized data grid
 * Store an execution history and user scripts
 * Export/Import data
-* Database diagram
 * Database comparison
 * Search text in the whole database
+* Data generator
+* [Extension manager](https://github.com/little-brother/sqlite-gui/wiki#extension-manager)
+* [Cross-database queries](https://github.com/little-brother/sqlite-gui/wiki#cross-database-queries) (odbc-extension is required)
 * [Quick data references](https://github.com/little-brother/sqlite-gui/wiki#quick-references)
 * [Terminal mode](https://raw.githubusercontent.com/little-brother/sqlite-gui/master/resources/terminal.webp)
 * [Charts](https://github.com/little-brother/sqlite-gui/wiki#charts)
 * [Query parameters](https://github.com/little-brother/sqlite-gui/wiki#query-parameters)
 * [Query shortcuts](https://github.com/little-brother/sqlite-gui/wiki#query-shortcuts)
 * [Custom functions](https://github.com/little-brother/sqlite-gui/wiki#custom-functions)
-* [Jinja scripting](https://github.com/little-brother/sqlite-gui/wiki#jinja-scripting) (experimental)
-* [Data generator](https://github.com/little-brother/sqlite-gui/wiki#data-generator)
-* [Extension pack](https://github.com/little-brother/sqlite-gui/wiki#extensions)
+* [Jinja scripting](https://github.com/little-brother/sqlite-gui/wiki#jinja-scripting)
 * [Built-in REST API web server](https://github.com/little-brother/sqlite-gui/wiki#rest-api-web-server)
-* Demo database "Bookstore" for beginners
 * Does not require installation
 
 Need a much simpler tool? Try [sqlite-x](https://github.com/little-brother/sqlite-x)!

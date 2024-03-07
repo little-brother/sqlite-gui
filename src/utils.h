@@ -38,22 +38,30 @@ namespace utils {
 	bool isDate(const TCHAR* str, double* utc);
 
 	COLORREF blend(COLORREF c1, COLORREF c2, BYTE alpha);
+	bool isColorDark(COLORREF color);
 
-	bool isSQLiteDatabase(TCHAR* path16);
-	int sqlite3_bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
-	BYTE sqlite3_type(const char* type8);
 	void urlDecode (char *dst, const char *src);
+	char* base64Decode(const char *in);
 
 	bool isStartBy(const TCHAR* text, int pos, const TCHAR* test);
 	bool isPrecedeBy(const TCHAR* text, int pos, const TCHAR* test);
 
 	extern const UINT crc32_tab[];
 	UINT crc32(const BYTE* data, int size);
+	void md5(const UINT8 *initial_msg, size_t initial_len, UINT8 *digest);
+
+	unsigned int read_le16(const unsigned char *p);
+	unsigned int read_le32(const unsigned char *p);
 
 	void mergeSort(int indexes[], void* data, int l, int r, BOOL isBackward, BOOL isNums);
 
-	char* httpRequest(const char* method, const char* uri, const char* path, const char* data = 0);
+	char* httpRequest(const char* method, const char* uri, const char* path, const char* data = 0, int* readBytes = 0, DWORD* statusCode = 0);
+	bool downloadFile(const TCHAR* url16, const TCHAR* path16, bool unpack = false);
 
-	SIZE getTextSize(HWND hWnd, const TCHAR* text);
+	SIZE getTextSize(HFONT hFont, const TCHAR* text);
+	POINTFLOAT getDlgScale(HWND hWnd);
+	POINTFLOAT getWndScale(HWND hWnd);
+	int getEditHeight(HWND hWnd);
+	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess = false, bool doMore = false);
 }
 #endif

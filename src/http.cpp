@@ -348,6 +348,9 @@ namespace http {
 	}
 
 	bool stop() {
+		if (!isRun)
+			return true;
+
 		isRun = false;
 		if (hThread) {
 			TerminateThread(hThread, 0);

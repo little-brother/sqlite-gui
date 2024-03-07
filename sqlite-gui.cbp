@@ -12,16 +12,12 @@
 				<Option type="1" />
 				<Option compiler="mingw64_x32" />
 				<Compiler>
-					<Add option="-std=c++11" />
-					<Add option="-U__STRICT_ANSI__" />
 					<Add option="-g" />
-					<Add directory="include" />
+					<Add option="-U__STRICT_ANSI__" />
 				</Compiler>
 				<Linker>
-					<Add option="-static-libstdc++" />
-					<Add option="-static" />
-					<Add option="-m32" />
 					<Add library="lib/x32/libsqlite3.a" />
+					<Add library="lib/x32/libtinf.a" />
 				</Linker>
 			</Target>
 			<Target title="Release">
@@ -31,16 +27,11 @@
 				<Option compiler="mingw64_x32" />
 				<Compiler>
 					<Add option="-Os" />
-					<Add option="-std=c++11" />
-					<Add option="-m32" />
-					<Add directory="include" />
 				</Compiler>
 				<Linker>
-					<Add option="-static-libstdc++" />
-					<Add option="-static" />
-					<Add option="-m32" />
 					<Add option="-s" />
 					<Add library="lib/x32/libsqlite3.a" />
+					<Add library="lib/x32/libtinf.a" />
 				</Linker>
 			</Target>
 			<Target title="Release x64">
@@ -50,29 +41,26 @@
 				<Option compiler="mingw64_x64" />
 				<Compiler>
 					<Add option="-Os" />
-					<Add option="-std=c++11" />
 					<Add option="-m64" />
-					<Add directory="include" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
-					<Add option="-static" />
 					<Add option="-m64" />
 					<Add library="lib/x64/libsqlite3.a" />
+					<Add library="lib/x64/libtinf.a" />
 				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
 			<Add option="-std=c++11" />
-			<Add option="-m32" />
 			<Add option="-DUNICODE" />
 			<Add option="-D_UNICODE" />
-			<Add option="-D_WIN32_WINNT=0x0501" />
+			<Add option="-D_WIN32_WINNT=0x0600" />
+			<Add directory="include" />
 		</Compiler>
 		<Linker>
 			<Add option="-static" />
-			<Add option="-m32" />
 			<Add library="gdi32" />
 			<Add library="user32" />
 			<Add library="kernel32" />
@@ -85,9 +73,13 @@
 			<Add library="libws2_32" />
 			<Add library="ole32" />
 			<Add library="uuid" />
+			<Add library="uxtheme" />
+			<Add library="advapi32" />
 			<Add directory="lib" />
 		</Linker>
 		<Unit filename="ToDo.txt" />
+		<Unit filename="src/dbutils.cpp" />
+		<Unit filename="src/dbutils.h" />
 		<Unit filename="src/dialogs.cpp" />
 		<Unit filename="src/dialogs.h" />
 		<Unit filename="src/global.h" />

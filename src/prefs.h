@@ -19,6 +19,8 @@ namespace prefs {
 
 	char* get(const char* name, const char* def);
 	bool set(const char* name, const char* value, bool strict = false);
+
+	bool applyHelp(const char* json, const char* source = 0);
 }
 
 #endif
