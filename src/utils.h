@@ -3,7 +3,9 @@
 
 #include <tchar.h>
 #include <windows.h>
-#include "sqlite3.h"
+
+#define CP_UTF16LE             1200
+#define CP_UTF16BE             1201
 
 namespace utils {
 	TCHAR* trim(TCHAR *in);
@@ -29,9 +31,10 @@ namespace utils {
 	char* readFile(const char* path);
 	char* getFileName(const char* path, bool noExt = false);
 	TCHAR* getFileName(const TCHAR* path16, bool noExt = false);
-	bool getFileExtension(const char* data, int len, TCHAR* out);
+	bool detectFileExtension(const char* data, int len, TCHAR* out);
 
 	TCHAR* toBlobSize(INT64 bSize);
+	unsigned char* toBlob(INT64 dataSize, const unsigned char* data);
 
 	bool isNumber(const TCHAR* str, double *out);
 	bool isNumber(const char* str, double *out);
@@ -63,5 +66,7 @@ namespace utils {
 	POINTFLOAT getWndScale(HWND hWnd);
 	int getEditHeight(HWND hWnd);
 	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess = false, bool doMore = false);
+
+	int getBlobSize (const unsigned char* data);
 }
 #endif

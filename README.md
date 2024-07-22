@@ -17,7 +17,7 @@ Small, simple, [powerfull](https://youtu.be/lctkqWD7HTk), fast, free.
 * Database comparison
 * Search text in the whole database
 * Data generator
-* [Extension manager](https://github.com/little-brother/sqlite-gui/wiki#extension-manager)
+* [Add-ons](https://github.com/little-brother/sqlite-gui/wiki#add-ons)
 * [Cross-database queries](https://github.com/little-brother/sqlite-gui/wiki#cross-database-queries) (odbc-extension is required)
 * [Quick data references](https://github.com/little-brother/sqlite-gui/wiki#quick-references)
 * [Terminal mode](https://raw.githubusercontent.com/little-brother/sqlite-gui/master/resources/terminal.webp)

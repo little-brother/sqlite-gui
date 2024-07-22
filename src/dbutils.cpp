@@ -23,39 +23,59 @@ namespace dbutils {
 		return strncmp(buf, "SQLite format 3", 15) == 0;
 	}
 
-	int bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
-		int len = strlen(value8);
+	BYTE detectSqliteType(const char* value8, bool forceToText) {
+		if (value8 == 0)
+			return SQLITE_NULL;
 
+		int len = strlen(value8);
 		if (len == 0)
-			return sqlite3_bind_null(stmt, pos);
+			return SQLITE_NULL;
 
 		if (forceToText)
-			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
-
-		//if (len > 20) // 18446744073709551615
-		//	return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+			return SQLITE_TEXT;
 
 		if (len == 1 && value8[0] == '0')
-			return sqlite3_bind_int(stmt, pos, 0);
+			return SQLITE_INTEGER;
 
 		bool isNum = true;
 		int dotCount = 0;
 		for (int i = +(value8[0] == '-' /* is negative */); i < len; i++) {
-			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.' || value8[i] == ',');
-			dotCount += value8[i] == '.' || value8[i] == ',';
+			isNum = isNum && (isdigit(value8[i]) || value8[i] == '.');
+			dotCount += value8[i] == '.';// || value8[i] == ',';
 		}
 
 		if (isNum && dotCount == 0) {
-			return len < 10 ? // 2147483647
-				sqlite3_bind_int(stmt, pos, atoi(value8)) :
-				sqlite3_bind_int64(stmt, pos, atoll(value8));
+			return SQLITE_INTEGER;
 		}
 
 		double d = 0;
 		if (isNum && dotCount == 1 && utils::isNumber(value8, &d))
-			return sqlite3_bind_double(stmt, pos, d);
+			return SQLITE_FLOAT;
 
-		return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+		return SQLITE_TEXT;
+	}
+
+	int bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText) {
+		BYTE type = detectSqliteType(value8, forceToText);
+		if (type == SQLITE_NULL)
+			return sqlite3_bind_null(stmt, pos);
+
+		if (type == SQLITE_TEXT)
+			return sqlite3_bind_text(stmt, pos, value8, strlen(value8), SQLITE_TRANSIENT);
+
+		if (type == SQLITE_FLOAT) {
+			double d = 0;
+			utils::isNumber(value8, &d);
+			return sqlite3_bind_double(stmt, pos, d);
+		}
+
+		if (type == SQLITE_INTEGER) {
+			return strlen(value8) < 10 ? // 2147483647
+				sqlite3_bind_int(stmt, pos, atoi(value8)) :
+				sqlite3_bind_int64(stmt, pos, atoll(value8));
+		}
+
+		return SQLITE_ERROR;
 	}
 
 	BYTE sqlite3_type(const char* decltype8) {

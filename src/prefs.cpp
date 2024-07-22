@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 87;
+	const int ICOUNT = 88;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -29,7 +29,8 @@ namespace prefs {
 		"color-keyword", "color-function", "color-quoted", "color-comment", "color-parenthesis", "color-pragma",
 		"data-generator-row-count", "data-generator-truncate",
 		"link-fk", "link-view", "link-trigger",
-		"format-keyword-case", "format-function-case"
+		"format-keyword-case", "format-function-case",
+		"use-logger"
 	};
 
 	int ivalues[ICOUNT] = {
@@ -56,7 +57,8 @@ namespace prefs {
 		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F, 0x404080,
 		100, 0,
 		1, 0, 0,
-		1, 1
+		1, 1,
+		0
 	};
 
 	int get(const char* name) {
@@ -170,6 +172,12 @@ namespace prefs {
 			sqlite3_exec(db, "alter table refs add column refname text", 0, 0, 0);
 			if(IDYES == MessageBox(0, TEXT("Reference format in table prefs.refs has been changed.\nClear the table to rebuild references automatically?\n\nVisit Wiki to get details."), TEXT("Confirmation"), MB_YESNO))
 				sqlite3_exec(db, "delete from refs", 0, 0, 0);
+		}
+
+		// migration from 1.9.0 to 1.9.1
+		if (SQLITE_OK == sqlite3_exec(db, "select 1 from extensions where 1 = 2", 0, 0, 0)) {
+			sqlite3_exec(db, "insert into addons (name, type, enable, version) select name, 0, enable, version from extensions", 0, 0, 0);
+			sqlite3_exec(db, "drop table extensions", 0, 0, 0);
 		}
 
 		sqlite3_stmt* stmt;

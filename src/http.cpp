@@ -3,6 +3,7 @@
 #include <process.h>
 #include <shlwapi.h>
 #include <stdio.h>
+#include "sqlite3.h"
 #include "utils.h"
 
 #define MAX_CLIENT_COUNT        30

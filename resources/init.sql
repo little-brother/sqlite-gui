@@ -2,7 +2,7 @@ create table if not exists prefs (name text primary key, value text);
 create table if not exists recents (path text primary key, time real not null);
 create table if not exists attached_recents (path text primary key, time real not null);
 create table if not exists odbc_recents (alias text primary key, driver text, options text, time real not null);
-create table if not exists extensions (name text primary key, enable integer, version text);
+create table if not exists addons (name text, type integer, enable integer, version text, primary key (name, type));
 create table if not exists history (query text primary key, time real not null);
 create table if not exists gists (query text primary key, time real not null);
 create table if not exists generators (type text, value text);

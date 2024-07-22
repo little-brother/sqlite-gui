@@ -226,7 +226,7 @@ namespace utils {
 		ofn.lpstrFileTitle = NULL;
 		ofn.nMaxFileTitle = 0;
 		ofn.lpstrInitialDir = NULL;
-		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_EXPLORER;
 
 		if (!GetOpenFileName(&ofn))
 			return false;
@@ -339,9 +339,9 @@ namespace utils {
 		return name16;
 	}
 
-	bool getFileExtension(const char* data, int len, TCHAR* out) {
+	bool detectFileExtension(const char* data, int len, TCHAR* out) {
 		_sntprintf(out, 9,
-			len < 10 ? TEXT("bin") :
+			len < 10 ? TEXT("") :
 			// https://en.wikipedia.org/wiki/List_of_file_signatures
 			strncmp(data, "\x47\x49\x46\x38\x37\x61", 6) == 0 ? TEXT("gif") :
 			strncmp(data, "\x47\x49\x46\x38\x39\x61", 6) == 0 ? TEXT("gif") :
@@ -364,17 +364,13 @@ namespace utils {
 			strncmp(data, "\x66\x74\x79\x70\x69\x73\x6F\x6D", 8) == 0 ? TEXT("mp4") :
 
 			strncmp(data, "\x52\x49\x46\x46", 4) == 0 ? TEXT("wav") :
-			strncmp(data, "\xFF\xFB", 2) == 0 ? TEXT("mp3") :
-			strncmp(data, "\xFF\xF3", 2) == 0 ? TEXT("mp3") :
-			strncmp(data, "\xFF\xF2", 2) == 0 ? TEXT("mp3") :
-			strncmp(data, "\x49\x44\x33", 3) == 0 ? TEXT("mp3") :
 			strncmp(data, "\x4F\x67\x67\x53", 4) == 0 ? TEXT("ogg") :
 			strncmp(data, "\x4D\x54\x68\x64", 4) == 0 ? TEXT("mid") :
 
 			strncmp(data, "\x25\x50\x44\x46\x2D", 5) == 0 ? TEXT("pdf") :
 			strncmp(data, "\x7B\x5C\x72\x74\x66\x31", 6) == 0 ? TEXT("rtf") :
 
-			TEXT("bin")
+			TEXT("")
 		);
 
 		return true;
@@ -393,6 +389,18 @@ namespace utils {
 
         _sntprintf(res, 63, TEXT("(BLOB: %.2lf%ls)"), size, mag < 5 ? sizes[mag] : TEXT("Error"));
         return res;
+	}
+
+	unsigned char* toBlob(INT64 dataSize, const unsigned char* data) {
+		int blobSize = dataSize + 4;
+		unsigned char* blob = new unsigned char[blobSize];
+		blob[0] = (blobSize >> 24) & 0xFF;
+		blob[1] = (blobSize >> 16) & 0xFF;
+		blob[2] = (blobSize >> 8) & 0xFF;
+		blob[3] = blobSize & 0xFF;
+
+		memcpy(blob + 4, data, dataSize);
+		return blob;
 	}
 
 	// Supports both 2.7 and 2,7
@@ -957,5 +965,15 @@ namespace utils {
 		GetWindowRect(hDlgWnd, &rc);
 		POINT c = {(prc.right + prc.left) / 2, (prc.bottom + prc.top) / 2};
 		SetWindowPos(hDlgWnd, 0, c.x - (rc.right - rc.left) / 2, c.y - (rc.bottom - rc.top) / 2, 0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
+	}
+
+	// Read first 4 bytes
+	int getBlobSize (const unsigned char* data) {
+		int size = 0;
+		for (int i = 0; i < 4; i++) {
+			size <<= 8;
+			size |= data[i];
+		}
+		return size;
 	}
 }

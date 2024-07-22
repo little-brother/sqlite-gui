@@ -160,7 +160,8 @@ select value from json_each(''["a", "b"]''); --> 2 rows: (a) and (b)
 select value from json_each(''{"a": ["foo", "bar"]}'', ''$.a''); --> 2 rows: (foo) and (bar)', '', 'Json|Path', 2, 'json1'),
 ('json_tree', 'module', 'json_tree(json [, path])', 'Walks the json and returns one row for each element.', 'select value from json_tree(''{"a": ["foo", "bar"]}'', ''$.a''); --> 3 rows: (["foo","bar"]), (foo) and (bar)', '', 'Json|Path', 2, 'json1'),
 ('json_error_position', 'function', 'json_error_position (json)', 'Returns 0 if the json is a well-formed JSON/JSON5 string or json-blob.', 'select json_error_position(''{"x": "abc, "y": 10}'') --> 14', '', 'Json', 1, 'json1'),
-('json_quote', 'function', 'json_quote (value)', 'converts the SQL value (a number or a string) into its corresponding JSON representation. If the value is a JSON value returned by another JSON function, then this function is a no-op.', 'json_quote(''test''); --> "test"', '', 'Value', 1, 'json1'),
+('json_quote', 'function', 'json_quote (value)', 'Converts the SQL value (a number or a string) into its corresponding JSON representation. If the value is a JSON value returned by another JSON function, then this function is a no-op.', 'json_quote(''test''); --> "test"', '', 'Value', 1, 'json1'),
+('json_pretty', 'function', 'json_pretty (json)', 'Make the JSON result easier for humans to read', 'json_pretty(''{"x":10}'');', '', 'Json', 1, 'json1'),
 
 -- GEOPOLY
 

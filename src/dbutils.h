@@ -7,6 +7,7 @@
 namespace dbutils {
 	bool isSQLiteDatabase(TCHAR* path16);
 	int bind_variant(sqlite3_stmt* stmt, int pos, const char* value8, bool forceToText = false);
+	BYTE detectSqliteType(const char* value8, bool forceToText = false);
 	BYTE sqlite3_type(const char* type8);
 	void userDefinedFunction (sqlite3_context *ctx, int argc, sqlite3_value **argv);
 
