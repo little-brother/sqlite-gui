@@ -91,11 +91,16 @@ namespace utils {
 	bool hasString(const TCHAR* str, const TCHAR* sub) {
 		bool res = false;
 
+		if (!str || _tcslen(str) == 0 || !sub || _tcslen(sub) == 0)
+			return res;
+
 		TCHAR* lstr = _tcsdup(str);
 		_tcslwr(lstr);
 		TCHAR* lsub = _tcsdup(sub);
 		_tcslwr(lsub);
+
 		res = _tcsstr(lstr, lsub) != 0;
+
 		free(lstr);
 		free(lsub);
 
@@ -415,7 +420,7 @@ namespace utils {
 		d = _tcstod(str, &endptr);
 		bool rc = !(errno != 0 || *endptr != '\0');
 		if (rc && out != NULL)
-				*out = d;
+			*out = d;
 
 		if (rc)
 			return true;
@@ -940,6 +945,18 @@ namespace utils {
 	int getEditHeight(HWND hWnd) {
 		float z = getWndScale(hWnd).x;
 		return (13 - (z >= 1.25f) - (z >= 1.5f)) * getDlgScale(hWnd).y;
+	}
+	int getEditHeightByFont(HWND hWnd) {
+		RECT rc = {0};
+		HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+
+		HDC hDC = GetDC(hWnd);
+		HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
+		DrawText(hDC, TEXT("AgqW"), 5, &rc, DT_CALCRECT);
+		SelectObject(hDC, hOldFont);
+		ReleaseDC(hWnd, hDC);
+
+		return rc.bottom;
 	}
 
 	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess, bool doMore) {

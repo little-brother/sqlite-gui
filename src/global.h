@@ -14,6 +14,8 @@
 #define MAX_RESULT_COLUMN_COUNT     96
 #define MAX_TRANSPOSE_ROWS         512
 #define MAX_PLUGIN_COUNT           128
+#define MAX_MODIFIER_OUTPUT_LEN   1024
+#define MAX_MODIFIER_ERROR_LEN     255
 
 #define DLG_OK                      1
 #define DLG_CANCEL                 -1
@@ -27,6 +29,7 @@
 #define ACTION_UPDATETAB            6
 #define ACTION_REDRAW               7
 #define ACTION_SET_THEME            8
+#define ACTION_RESET_MODIFIERS      9
 
 #define LOGGER_HIGHLIGHT            1
 #define LOGGER_OCCURRENCE           2
@@ -45,7 +48,7 @@
 
 #define ADDON_SQLITE_EXTENSION      0
 #define ADDON_VALUE_VIEWER          1
-#define ADDON_VALUE_FORMAT          2
+#define ADDON_COLUMN_MODIFIER       2
 
 #define EDITOR_HIGHLIGHT            TEXT("HIGHLIGHT")
 #define EDITOR_PARENTHESIS          TEXT("PARENTHESIS")
@@ -85,12 +88,50 @@ extern const char *TYPES8[6];
 extern const TCHAR *TYPES16[6];
 extern const TCHAR *TYPES16u[6];
 extern const TCHAR *TYPES16p[6];
-extern const TCHAR* ADDON_TYPES16[3];
+extern const TCHAR* ADDON_EXTS16[3];
 
 extern COLORREF GRIDCOLORS[8];
 extern HFONT hFont;
 extern HFONT hMenuFont;
 extern HIMAGELIST hIconsImageList;
+
+typedef HWND (WINAPI *pluginView)(HWND hPreviewWnd, const unsigned char* data, int dataLen, int dataType, TCHAR* outInfo16, TCHAR* outExtension16);
+typedef int (WINAPI* pluginClose)(HWND hPluginWnd);
+typedef BOOL (WINAPI* pluginActivate)(HWND hListWnd, int colNo, TCHAR* err16);
+typedef BOOL (WINAPI* pluginDeactivate)(HWND hListWnd, int colNo);
+typedef BOOL (WINAPI *pluginSetText)(HWND hListWnd, int colNo, const unsigned char* data, int dataLen, int dataType, TCHAR* output16);
+typedef BOOL (WINAPI *pluginSetColor)(NMLVCUSTOMDRAW* pCustomDraw, const unsigned char* data, int dataLen, int dataType);
+typedef BOOL (WINAPI *pluginRender)(NMLVCUSTOMDRAW* pCustomDraw, const unsigned char* data, int dataLen, int dataType);
+typedef int (WINAPI* pluginGetPriority)();
+
+struct TPlugin {
+	HMODULE hModule;
+	pluginView view;
+	pluginClose close;
+	pluginActivate activate;
+	pluginDeactivate deactivate;
+	pluginSetText setText;
+	pluginSetColor setColor;
+	pluginRender render;
+	int type;
+	int priority;
+	TCHAR name[256];
+};
+extern TPlugin plugins[MAX_PLUGIN_COUNT + 1];
+
+typedef struct TDlgParam {
+	const TCHAR* s1;
+	const TCHAR* s2;
+	const TCHAR* s3;
+	const TCHAR* s4;
+} TDlgParam;
+
+typedef struct TValue {
+	const unsigned char* data;
+	int dataLen;
+	int dataType;
+	LONG_PTR extra;
+} TValue;
 
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -124,8 +165,11 @@ void logger(ULONG_PTR type, TCHAR* msg16);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 DWORD_PTR Toolbar_GetButtonData(HWND hToolbar, int id);
+LPARAM TreeView_GetItemParam (HWND hTreeWnd, HTREEITEM hItem);
 int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef = false);
 int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo);
+BOOL ListView_GetItemValue(HWND hListWnd, int rowNo, int colNo, TValue* cell, bool ignoreResultset = false);
+TCHAR* ListView_GetItemValueText(HWND hListWnd, int rowNo, int colNo, bool ignoreResultset = false);
 int ListView_Sort(HWND hListWnd, int colNo);
 int ListView_Reset(HWND hListWnd);
 int ListView_GetColumnCount(HWND hListWnd);
@@ -138,36 +182,12 @@ BOOL Menu_SetItemStateByPosition(HMENU hMenu, UINT pos, UINT fState);
 BOOL Menu_InsertItem(HMENU hMenu, UINT uPosition, UINT wID, UINT fState, const TCHAR* pszText);
 BOOL Menu_SetData(HMENU hMenu, ULONG_PTR data);
 ULONG_PTR Menu_GetData(HMENU hMenu);
+BOOL Menu_SetItemData(HMENU hMenu, UINT wID, ULONG_PTR lParam);
+ULONG_PTR Menu_GetItemData(HMENU hMenu, UINT wID);
 
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
 TCHAR* getDDL(const TCHAR* schema16, const TCHAR* name16, int type, bool withDrop = false);
 bool showDbError(HWND hWnd);
-
-typedef HWND (WINAPI *pluginView)(HWND hPreviewWnd, const unsigned char* data, int dataLen, int dataType, TCHAR* outInfo16, TCHAR* outExtension16);
-typedef int (WINAPI* pluginClose)(HWND hPluginWnd);
-typedef int (WINAPI* pluginGetPriority)();
-struct TPlugin {
-	HMODULE hModule;
-	pluginView view;
-	pluginClose close;
-	int type;
-	int priority;
-};
-extern TPlugin plugins[MAX_PLUGIN_COUNT];
-
-typedef struct TDlgParam {
-	const TCHAR* s1;
-	const TCHAR* s2;
-	const TCHAR* s3;
-	const TCHAR* s4;
-} TDlgParam;
-
-typedef struct TDlgValueParam {
-	int dataType;
-	const unsigned char* data;
-	LONG_PTR extra;
-} TDlgValueParam;
-
 #endif

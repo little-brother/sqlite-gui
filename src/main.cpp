@@ -30,7 +30,7 @@ const TCHAR *TYPES16[6] = {TEXT("current"), TEXT("table"), TEXT("view"), TEXT("i
 const TCHAR *TYPES16u[6] = {TEXT("CURRENT"), TEXT("TABLE"), TEXT("VIEW"), TEXT("INDEX"), TEXT("TRIGGER"), TEXT("COLUMN")};
 const TCHAR *TYPES16p[6] = {TEXT(""), TEXT("Tables"), TEXT("Views"), TEXT("Indexes"), TEXT("Triggers"), TEXT("Columns")};
 const TCHAR *transactionStates[] = {TEXT(""),TEXT(" TRN")};
-const TCHAR* ADDON_TYPES16[3] = {TEXT("dll"), TEXT("vvp"), TEXT("vfp")};
+const TCHAR* ADDON_EXTS16[3] = {TEXT("dll"), TEXT("vvp"), TEXT("cmp")};
 COLORREF GRIDCOLORS[8]{0}; // 0 = current cell
 
 // AutoComplete
@@ -43,13 +43,13 @@ TCHAR* TABLES[MAX_ENTITY_COUNT] = {0};
 
 
 sqlite3 *db;
-HWND hMainWnd = 0, hToolbarWnd, hEditorSearchWnd, hStatusWnd, hTreeWnd, hSchemaWnd, hEditorWnd, hTabWnd, hMainTabWnd, hLoggerWnd = 0,
+HWND hMainWnd = 0, hToolbarWnd, hEditorSearchWnd, hStatusWnd, hTreeWnd, hTreeSearchWnd, hSchemaWnd, hEditorWnd, hTabWnd, hMainTabWnd, hLoggerWnd = 0,
 hTooltipWnd = 0, hAutoComplete, hAutoCompleteHelp, hDragWnd = 0, hDialog, hSortingResultWnd;
-HMENU hMainMenu, hSchemaMenu, hDbMenu, hEditorMenu, hResultMenu, hTabResultMenu, hCliMenu, hPreviewMenu;
+HMENU hMainMenu, hSchemaMenu, hDbMenu, hEditorMenu, hResultMenu, hModifierMenu, hTabResultMenu, hCliMenu, hPreviewMenu;
 HWND hDialogs[MAX_DIALOG_COUNT]{0};
 HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
-TPlugin plugins[MAX_PLUGIN_COUNT] = {0};
+TPlugin plugins[MAX_PLUGIN_COUNT + 1] = {0};
 
 HTREEITEM treeItems[5]; // 0 - current
 TCHAR treeEditName[255];
@@ -121,7 +121,7 @@ bool attachOdbcDb(sqlite3* conn, const TCHAR* alias);
 bool isDbBusy();
 void enableMainMenu();
 void disableMainMenu();
-void reloadPlugins();
+void reloadPlugins(int type = 0);
 void updateExecuteMenu(bool isEnable);
 void updateRecentList();
 void updateTables(const TCHAR* schema16);
@@ -153,6 +153,7 @@ WNDPROC cbOldResultTabFilterEdit;
 LRESULT CALLBACK cbNewEditor(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewTree(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK cbNewTreeSearch(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewSchema(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEditorSearch(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewEditorSearchString(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -248,6 +249,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	hResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_RESULT));
 	hResultMenu = GetSubMenu(hResultMenu, 0);
+	int menuPos = Menu_GetItemPositionByName(hResultMenu, TEXT("Column modifier"));
+	if (menuPos != -1) {
+		hModifierMenu = GetSubMenu(hResultMenu, menuPos);
+	} else {
+		MessageBox(hMainWnd, TEXT("Result menu bug"), 0, MB_OK);
+	}
 
 	hTabResultMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_TAB_RESULT));
 	hTabResultMenu = GetSubMenu(hTabResultMenu, 0);
@@ -396,6 +403,11 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hTreeWnd = CreateWindowEx(0, WC_TREEVIEW, NULL, WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT | WS_DISABLED | TVS_EDITLABELS, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE, hInstance,  NULL);
 	SetProp(hTreeWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hTreeWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewTree));
 	DragAcceptFiles(hTreeWnd, TRUE);
+	hTreeSearchWnd = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("RICHEDIT50W"), NULL, WS_CHILD, 0, 0, 100, 100, hMainWnd, (HMENU)IDC_TREE_SEARCH, hInstance,  NULL);
+	SendMessage(hTreeSearchWnd, WM_SETFONT, (LPARAM)hFont, 0);
+	SetProp(hTreeSearchWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hTreeSearchWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewTreeSearch));
+	SendMessage(hTreeSearchWnd, EM_SETEVENTMASK, 0, ENM_CHANGE);
+
 	hMainTabWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_NOTIFY, 100, 0, 100, 100, hMainWnd, (HMENU)IDC_MAINTAB, hInstance,  NULL);
 	createTooltip(hMainWnd);
 
@@ -976,6 +988,14 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			rc = (RECT){spX, spY, w, spY + 10};
 			FillRect((HDC)wParam, &rc, hBrush);
 
+			if (IsWindowVisible(hTreeSearchWnd)) {
+				RECT rcSearch;
+				GetWindowRect(hTreeSearchWnd, &rcSearch);
+				InflateRect(&rcSearch, 5, 5);
+				MapWindowPoints(HWND_DESKTOP, hWnd, (LPPOINT) &rcSearch, 2);
+				FillRect((HDC)wParam, &rcSearch, hBrush);
+			}
+
 			DeleteObject(hBrush);
 
 			return 1;
@@ -1270,7 +1290,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
 
 					TCHAR pluginPath16[MAX_PATH + 1] = {0};
-					_sntprintf(pluginPath16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_TYPES16[ADDON_VALUE_VIEWER]);
+					_sntprintf(pluginPath16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_EXTS16[ADDON_VALUE_VIEWER]);
 
 					SHFILEOPSTRUCT fo = {0};
 					fo.wFunc = FO_MOVE;
@@ -1279,7 +1299,31 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					fo.pTo = pluginPath16;
 					SHFileOperation(&fo);
 
-					reloadPlugins();
+					reloadPlugins(ADDON_VALUE_VIEWER);
+				}
+			}
+
+			if (cmd == IDM_MODIFIER_PLUGINS) {
+				if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDON_MANAGER), hMainWnd, (DLGPROC)dialogs::cbDlgAddonManager, (LPARAM)ADDON_COLUMN_MODIFIER)) {
+
+					// Reset all plugins
+					EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_RESET_MODIFIERS);
+
+					TCHAR tmpPath16[MAX_PATH + 1] = {0};
+					GetTempPath(MAX_PATH, tmpPath16);
+					_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
+
+					TCHAR pluginPath16[MAX_PATH + 1] = {0};
+					_sntprintf(pluginPath16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_EXTS16[ADDON_COLUMN_MODIFIER]);
+
+					SHFILEOPSTRUCT fo = {0};
+					fo.wFunc = FO_MOVE;
+					fo.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_FILESONLY;
+					fo.pFrom = tmpPath16;
+					fo.pTo = pluginPath16;
+					SHFileOperation(&fo);
+
+					reloadPlugins(ADDON_COLUMN_MODIFIER);
 				}
 			}
 
@@ -1292,6 +1336,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				updateCustomFunction(false);
 				reloadMeta(FUNCTIONS, "select distinct name from pragma_function_list()");
 				processHighlight(hEditorWnd, true, true, true);
+				reloadPlugins(ADDON_COLUMN_MODIFIER);
 			}
 
 			if (cmd == IDM_ENCRYPTION) {
@@ -1588,8 +1633,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (!SendMessage(hToolbarWnd, TB_ISBUTTONHIDDEN, IDM_INTERRUPT, 0))
 					return SendMessage(hWnd, WM_COMMAND, IDM_INTERRUPT, 0);
 
-				if (GetDlgCtrlID(GetFocus()) == IDC_EDITOR_SEARCH_STRING)
-					return SendMessage(GetFocus(), WM_KEYDOWN, VK_ESCAPE, 0);
+				HWND hFocusWnd = GetFocus();
+				int focusId = GetDlgCtrlID(hFocusWnd);
+				if (focusId == IDC_EDITOR_SEARCH_STRING || focusId == IDC_TREE_SEARCH)
+					return SendMessage(hFocusWnd, WM_KEYDOWN, VK_ESCAPE, 0);
 
 				int exitByEscape = prefs::get("exit-by-escape");
 				if((exitByEscape == 1 || (exitByEscape == 2 && MessageBox(hMainWnd, TEXT("Are you sure you want to close the app?"), TEXT("Exit confirmation"), MB_YESNO) == IDYES)) &&
@@ -1668,12 +1715,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (cmd == IDM_ADD && type == TABLE) {
 					_sntprintf(name16, 255, schema16);
 					if (DLG_OK == DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADD_TABLE), hMainWnd, (DLGPROC)&dialogs::cbDlgAddTable, (LPARAM)name16)) {
+						updateTables(schema16);
 						updateReferences();
 						updateTree(TABLE, name16);
 					}
 				}
 
-				if ((cmd == IDM_ADD && type != TABLE) || cmd == IDM_VIEW || cmd == IDM_EDIT) {
+				if ((cmd == IDM_ADD && type != TABLE) || ((cmd == IDM_VIEW || cmd == IDM_EDIT) && type != COLUMN)) {
 					int len = _tcslen(fullname16) + 2;
 					TCHAR buf16[len + 1];
 					_sntprintf(buf16, len, TEXT(" %ls"), fullname16);
@@ -2062,9 +2110,34 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
 			}
 
-			if (cmd == IDM_RESULT_HEATMAP) {
+			if (cmd >= IDM_RESULT_MODIFIER && cmd <= IDM_RESULT_MODIFIER + 100) {
 				HWND hListWnd = (HWND)SendMessage(hWnd, WMU_GET_CURRENT_RESULTSET, 0, 0);
-				SendMessage(hListWnd, WMU_HEATMAP, 0, 0);
+				int colNo = currCell.iSubItem;
+
+				int* modifiers = (int*)GetProp(hListWnd, TEXT("MODIFIERS"));
+				int* modifierRows = (int*)GetProp(hListWnd, TEXT("MODIFIER_ROWS"));
+				if (!modifiers || !modifierRows) {
+					MessageBox(hWnd, TEXT("Can't set modifier for the column: no modifiers"), TEXT("Internal error"), MB_OK);
+					return false;
+				}
+
+				SendMessage(hListWnd, WMU_RESET_MODIFIER, colNo, 0);
+
+				bool rc = false;
+				TCHAR err16[MAX_MODIFIER_ERROR_LEN + 1] {0};
+				int modifierNo = Menu_GetItemData(hModifierMenu, cmd);
+				if ((modifierNo > 0 && modifierNo < MAX_PLUGIN_COUNT && plugins[modifierNo].hModule) || modifierNo <= 0) {
+					rc = true;
+					modifierRows[colNo] = currCell.iItem;
+					if (modifierNo > 0 && plugins[modifierNo].activate)
+						rc = plugins[modifierNo].activate(hListWnd, colNo, err16);
+
+					InvalidateRect(hListWnd, NULL, TRUE);
+				}
+
+				modifiers[colNo] = rc ? modifierNo : 0;
+				if (!rc && _tcslen(err16))
+					MessageBox(hWnd, err16, plugins[modifierNo].name, MB_OK);
 			}
 
 			if (cmd == IDM_RESULT_CHART || cmd == IDM_RESULT_VALUE_FILTER || cmd == IDM_RESULT_COPY_CELL || cmd == IDM_RESULT_COPY_ROW || cmd == IDM_RESULT_EXPORT)
@@ -2116,13 +2189,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				int currResultNo = GetWindowLongPtr(hCurrListWnd, GWLP_USERDATA);
 
 				HMENU hCompareMenu = GetSubMenu(hResultMenu, GetMenuItemCount(hResultMenu) - 1);
-				MENUITEMINFO mii{0};
-				mii.cbSize = sizeof(MENUITEMINFO);
-				mii.fMask = MIIM_DATA;
-				GetMenuItemInfo(hCompareMenu, cmd, false, &mii);
 
-				int tabNo = LOWORD(mii.dwItemData);
-				int resultNo = HIWORD(mii.dwItemData);
+				ULONG_PTR data = Menu_GetItemData(hCompareMenu, cmd);
+				int tabNo = LOWORD(data);
+				int resultNo = HIWORD(data);
 
 				TCHAR title[1024]{0};
 				TCHAR buf[256];
@@ -2465,6 +2535,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_CHANGE)
 				SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
 
+			if (LOWORD(wParam) == IDC_TREE_SEARCH && HIWORD(wParam) == EN_CHANGE)
+				updateTree(0);
+
 			if (LOWORD(wParam) == IDC_EDITOR && HIWORD(wParam) == EN_KILLFOCUS && IsWindowVisible(hTooltipWnd))
 				hideTooltip();
 
@@ -2545,24 +2618,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 							if (rowNo == -1 || colNo < 1 || ListView_GetSelectedCount(hListWnd) > 1)
 								return 0;
 
-							TCHAR*** cache = (TCHAR***)GetProp(hListWnd, TEXT("CACHE"));
-							int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
-							byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-							unsigned char** blobs = (unsigned char**)GetProp(hListWnd, TEXT("BLOBS"));
-
-							int colCount = ListView_GetColumnCount(hListWnd);
-							int no = colNo + resultset[rowNo] * (colCount - 1);
-							TCHAR* text16 = cache[resultset[rowNo]][colNo];
-
-							if (datatypes[no] == SQLITE_NULL)
-								return 0;
-
-							TDlgValueParam data = {0};
-							if (datatypes[no] == SQLITE_BLOB)
-								data = {SQLITE_BLOB, blobs[no]};
-							else
-								data = {SQLITE_TEXT, (const unsigned char*)text16};
-							openDialog(IDD_VALUE_VIEWER, (DLGPROC)dialogs::cbDlgValueViewer, (LPARAM)&data);
+							TValue value = {0};
+							if (ListView_GetItemValue(hListWnd, rowNo, colNo, &value))
+								openDialog(IDD_VALUE_VIEWER, (DLGPROC)dialogs::cbDlgValueViewer, (LPARAM)&value);
 						}
 
 
@@ -2697,6 +2755,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == (DWORD)TVN_KEYDOWN) {
 				NMTVKEYDOWN* pKd = (LPNMTVKEYDOWN) lParam;
+				bool isCtrl = HIWORD(GetKeyState(VK_CONTROL));
+				bool isShift = HIWORD(GetKeyState(VK_SHIFT));
+
 				if ((pKd->wVKey == VK_DELETE)) {
 					TVITEM ti{0};
 					ti.hItem = treeItems[0];
@@ -2706,7 +2767,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						PostMessage(hMainWnd, WM_COMMAND, IDM_DELETE, 0);
 				}
 
-				if (pKd->wVKey == 0x43 && GetKeyState(VK_CONTROL)) {// Ctrl + C
+				if (isCtrl && pKd->wVKey == 0x43) {// Ctrl + C
 					TCHAR name16[256] = {0};
 					TV_ITEM tv;
 					tv.mask = TVIF_TEXT | TVIF_PARAM;
@@ -2720,7 +2781,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if (tv.lParam == COLUMN)
 						_tcstok(name16, TEXT(":"));
 
-					if (tv.lParam == TABLE && HIWORD(GetKeyState(VK_SHIFT))) {
+					if (isShift && tv.lParam == TABLE) {
 						TCHAR* ddl = getDDL(TEXT("main"), name16, tv.lParam, false);
 						if (ddl != NULL) {
 							utils::setClipboardText(ddl);
@@ -2729,6 +2790,12 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					} else {
 						utils::setClipboardText(name16);
 					}
+				}
+
+				if (isCtrl && pKd->wVKey == 0x46) {// Ctrl + F
+					ShowWindow(hTreeSearchWnd, SW_SHOW);
+					SetFocus(hTreeSearchWnd);
+					SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
 				}
 
 				return 1;
@@ -2742,7 +2809,11 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (pHdr->hwndFrom == hTreeWnd && pHdr->code == TVN_BEGINLABELEDIT) {
 				const NMTVDISPINFO * pMi = (LPNMTVDISPINFO)lParam;
-				if (!TreeView_GetParent(hTreeWnd, pMi->item.hItem))
+				HTREEITEM hParentItem = TreeView_GetParent(hTreeWnd, pMi->item.hItem);
+				if (!hParentItem)
+					return true;
+
+				if (TreeView_GetItemParam(hTreeWnd, hParentItem) == VIEW)
 					return true;
 
 				if (pMi->item.state & TVIS_CUT)
@@ -2867,8 +2938,10 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
 					UINT state = TreeView_GetItemState(pHdr->hwndFrom, (HTREEITEM)pCustomDraw->nmcd.dwItemSpec, TVIS_CUT);
+					UINT type = TreeView_GetItemParam(pHdr->hwndFrom, (HTREEITEM)pCustomDraw->nmcd.dwItemSpec);
 					pCustomDraw->clrText = pCustomDraw->clrTextBk != RGB(255, 255, 255) ? RGB(255, 255, 255) :
 						state & TVIS_CUT ? RGB(200, 200, 200) :
+						state & TVIS_BOLD && type == COLUMN ? RGB(200, 0, 200) :
 						state & TVIS_BOLD ? RGB(0, 0, 200) :
 						RGB(0, 0, 0);
 				}
@@ -2982,7 +3055,19 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				bool isTransposed = GetProp(hListWnd, TEXT("ISTRANSPOSED"));
 				UINT tState = (isTransposed ? MF_CHECKED : MF_UNCHECKED) | (!isTransposed && *(int*)GetProp(hListWnd, TEXT("TOTALROWCOUNT")) > MAX_TRANSPOSE_ROWS ? MF_DISABLED | MF_GRAYED : 0);
 				Menu_SetItemState(hResultMenu, IDM_RESULT_TRANSPOSE, tState);
-				Menu_SetItemState(hResultMenu, IDM_RESULT_HEATMAP, GetProp(hListWnd, TEXT("HEATMAP")) ? MF_CHECKED : MF_UNCHECKED);
+
+				int* modifiers = (int*)GetProp(hListWnd, TEXT("MODIFIERS"));
+				if (modifiers) {
+					int itemCount = GetMenuItemCount(hModifierMenu);
+					for (int itemNo = 0; itemNo < itemCount; itemNo++) {
+						int id = GetMenuItemID(hModifierMenu, itemNo);
+						int modifierNo = Menu_GetItemData(hModifierMenu, id);
+						Menu_SetItemState(hModifierMenu, id, modifierNo == modifiers[currCell.iSubItem] ? MF_CHECKED : MF_UNCHECKED);
+					}
+
+					if (itemCount == 1)
+						Menu_SetItemState(hModifierMenu, IDM_RESULT_MODIFIER, MF_UNCHECKED | MF_DISABLED | MF_GRAYED);
+				}
 
 				TrackPopupMenu(hResultMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hMainWnd, NULL);
 			}
@@ -3252,13 +3337,15 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			int splitterY = CLAMP(prefs::get("splitter-position-y"), 50 * z + rcToolbar.bottom, h - 50 * z);
 			int tabH = 19 * z;
 			int editorSearchH = IsWindowVisible(hEditorSearchWnd) ? rcEditorSearch.bottom : 0;
+			int treeSearchH = IsWindowVisible(hTreeSearchWnd) ? utils::getEditHeightByFont(hTreeSearchWnd) + 2 * GetSystemMetrics(SM_CYFIXEDFRAME): 0;
 
 			RECT rcEditor;
 			GetClientRect(hEditorWnd, &rcEditor);
 
 			LONG flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_DEFERERASE;
 			SetWindowPos(hSchemaWnd, 0, 0, top + 2, splitterX, tabH, flags);
-			SetWindowPos(hTreeWnd, 0, 0, top + tabH + 2, splitterX, h - tabH - 2, flags);
+			SetWindowPos(hTreeWnd, 0, 0, top + tabH + 2, splitterX, h - tabH - 2 - treeSearchH - (treeSearchH > 0), flags);
+			SetWindowPos(hTreeSearchWnd, 0, 0, top + h - treeSearchH, splitterX, treeSearchH, flags);
 			SetWindowPos(hMainTabWnd, 0, splitterX + 5, top + 2, rc.right - splitterX - 5, tabH, flags);
 			SetWindowPos(hEditorWnd, 0, splitterX + 5, top + tabH + 2, rc.right - splitterX - 5, splitterY - tabH + 2 - editorSearchH, flags);
 			SetWindowPos(hEditorSearchWnd, 0, splitterX + 5, top + splitterY - rcEditorSearch.bottom + 2, rc.right - splitterX - 5, rcEditorSearch.bottom, flags);
@@ -3268,6 +3355,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			rcEditor = (RECT){0, rcEditor.bottom - dy, rcEditor.right, rcEditor.bottom + dy};
 			InvalidateRect(hEditorWnd, &rcEditor, FALSE);
 			InvalidateRect(hSchemaWnd, NULL, TRUE);
+			InvalidateRect(hTreeSearchWnd, NULL, TRUE);
 
 			SetWindowPos(hTabWnd, 0, splitterX + 3, top + splitterY + 5, rc.right - splitterX, h - splitterY - 3, flags);
 			EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
@@ -3281,6 +3369,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			setEditorFont(hEditorWnd);
 			SendMessage(hTreeWnd, WM_SETFONT, (LPARAM)hFont, FALSE);
+			SendMessage(hTreeSearchWnd, WM_SETFONT, (LPARAM)hFont, FALSE);
 			SendMessage(hAutoComplete, WM_SETFONT, (LPARAM)hFont, FALSE);
 			SendMessage(hAutoCompleteHelp, WM_SETFONT, (LPARAM)hFont, FALSE);
 			SendMessage(hTooltipWnd, WM_SETFONT, (LPARAM)hFont, FALSE);
@@ -3361,6 +3450,7 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		break;
 
 		case WM_DESTROY : {
+			SendMessage(hWnd, WMU_RESET_MODIFIER, -1, 0);
 			SendMessage(hWnd, WMU_RESET_CACHE, 0, 0);
 
 			int* pOrderBy = (int*)GetProp(hWnd, TEXT("ORDERBY"));
@@ -3466,86 +3556,6 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 
-		case WMU_HEATMAP: {
-			bool isVirtual = GetWindowLong(hWnd, GWL_STYLE) & LVS_OWNERDATA;
-			if (!isVirtual)
-				return 0;
-
-			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
-			bool isHeatmap = heatmap != NULL;
-			bool isCtrl = HIWORD(GetKeyState(VK_CONTROL));
-			bool isShift = HIWORD(GetKeyState(VK_SHIFT));
-			if (heatmap) {
-				delete [] heatmap;
-				RemoveProp(hWnd, TEXT("HEATMAP"));
-			}
-
-			if (isHeatmap && !isCtrl && !isShift) {
-				InvalidateRect(hWnd, NULL, TRUE);
-				return 0;
-			}
-
-			HWND hHeader = ListView_GetHeader(hWnd);
-			int colCount = Header_GetItemCount(hHeader) - 1;
-			int rowCount = *(int*)GetProp(hWnd, TEXT("TOTALROWCOUNT"));
-			if (colCount == 0 || rowCount == 0)
-				return 0;
-
-			TCHAR*** cache = (TCHAR***)GetProp(hWnd, TEXT("CACHE"));
-
-			auto getColor = [](double min, double max, double value, bool isReverse) {
-				double v = 2 * (value - min)/(max - min); // --> (0, 2)
-				return isReverse ?
-					(v < 1 ? RGB(255, v * 255, 0) : RGB((2 - v) * 255, 255, 0)) :
-					(v < 1 ? RGB(v * 255, 255, 0) : RGB(255, (2 - v) * 255, 0));
-			};
-
-			heatmap = new COLORREF[rowCount * (colCount + 1)] {0};
-
-			double NO_VALUE = 0.00012003;
-			bool isSharedExtremes = isCtrl;
-			bool isReverseColors = HIWORD(GetKeyState(VK_SHIFT));
-			if (isSharedExtremes) {
-				double min = NO_VALUE, max = NO_VALUE;
-				for (int colNo = 1; colNo <= colCount; colNo++) {
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						double value;
-						if (utils::isNumber(cache[rowNo][colNo], &value)) {
-							min = min == NO_VALUE || min > value ? value : min;
-							max = max == NO_VALUE || max < value ? value : max;
-						}
-					}
-				}
-
-				for (int colNo = 1; colNo <= colCount; colNo++) {
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						double value;
-						heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
-					}
-				}
-			} else {
-				for (int colNo = 1; colNo <= colCount; colNo++) {
-					double min = NO_VALUE, max = NO_VALUE;
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						double value;
-						if (utils::isNumber(cache[rowNo][colNo], &value)) {
-							min = min == NO_VALUE || min > value ? value : min;
-							max = max == NO_VALUE || max < value ? value : max;
-						}
-					}
-
-					for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-						double value;
-						heatmap[colNo + rowNo * colCount] = min != NO_VALUE && utils::isNumber(cache[rowNo][colNo], &value) ? getColor(min, max, value, isReverseColors) : RGB(255, 255, 255);
-					}
-				}
-			}
-			SetProp(hWnd, TEXT("HEATMAP"), heatmap);
-
-			InvalidateRect(hWnd, NULL, TRUE);
-		}
-		break;
-
 		case WMU_UPDATE_RESULTSET: {
 			bool isVirtual = GetWindowLong(hWnd, GWL_STYLE) & LVS_OWNERDATA;
 			if (!isVirtual)
@@ -3560,8 +3570,6 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			int* pRowCount = (int*)GetProp(hWnd, TEXT("ROWCOUNT"));
 			int* pOrderBy = (int*)GetProp(hWnd, TEXT("ORDERBY"));
 			int* resultset = (int*)GetProp(hWnd, TEXT("RESULTSET"));
-			if (resultset)
-				free(resultset);
 
 			if (!cache || *pTotalRowCount == 0) {
 				SendMessage(hWnd, WMU_SET_HEADER_FILTERS, 0, 0);
@@ -3571,6 +3579,9 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			int colCount = Header_GetItemCount(hHeader);
 			if (colCount == 0)
 				return 1;
+
+			if (resultset)
+				free(resultset);
 
 			BOOL* bResultset = (BOOL*)calloc(*pTotalRowCount, sizeof(BOOL));
 			for (int rowNo = 0; rowNo < *pTotalRowCount; rowNo++)
@@ -3588,7 +3599,7 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					if (!bResultset[rowNo])
 						continue;
 
-					TCHAR* value = cache[rowNo][colNo];
+					TCHAR* value = ListView_GetItemValueText(hListWnd, rowNo, colNo, true); //cache[rowNo][colNo];
 					if (len > 1 && (filter[0] == TEXT('<') || filter[0] == TEXT('>')) && utils::isNumber(filter + 1, NULL)) {
 						TCHAR* end = 0;
 						double df = _tcstod(filter + 1, &end);
@@ -3662,7 +3673,7 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 		case WMU_SET_HEADER_FILTERS: {
 			HWND hHeader = ListView_GetHeader(hWnd);
-			int isShowFilters = prefs::get("show-filters");
+			int isShowFilters = prefs::get("show-filters") || GetDlgCtrlID(hWnd) == IDC_DLG_ROWS;
 			int colCount = Header_GetItemCount(hHeader);
 
 			SendMessage(hWnd, WM_SETREDRAW, FALSE, 0);
@@ -3814,31 +3825,63 @@ LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			int* resultset = (int*)GetProp(hWnd, TEXT("RESULTSET"));
 			if (resultset) {
-				SetProp(hWnd, TEXT("RESULTSET"), (HANDLE)0);
+				SetProp(hWnd, TEXT("RESULTSET"), 0);
 				free(resultset);
 			}
 
 			byte* datatypes = (byte*)GetProp(hWnd, TEXT("DATATYPES"));
 			if (datatypes) {
-				SetProp(hWnd, TEXT("DATATYPES"), (HANDLE)0);
+				SetProp(hWnd, TEXT("DATATYPES"), 0);
 				free(datatypes);
 			}
 
-			COLORREF* heatmap = (COLORREF*)GetProp(hWnd, TEXT("HEATMAP"));
-			if (heatmap) {
-				SetProp(hWnd, TEXT("HEATMAP"), (HANDLE)0);
-				delete [] heatmap;
+			int* modifiers = (int*)GetProp(hWnd, TEXT("MODIFIERS"));
+			if (modifiers) {
+				SetProp(hWnd, TEXT("MODIFIERS"), 0);
+				free(modifiers);
+			}
+
+			int* modifierRows = (int*)GetProp(hWnd, TEXT("MODIFIER_ROWS"));
+			if (modifierRows) {
+				SetProp(hWnd, TEXT("MODIFIER_ROWS"), 0);
+				free(modifierRows);
+			}
+
+			TCHAR* modifierBuffer = (TCHAR*)GetProp(hWnd, TEXT("MODIFIERBUFFER"));
+			if (modifierBuffer) {
+				SetProp(hWnd, TEXT("MODIFIERBUFFER"), 0);
+				delete [] modifierBuffer;
 			}
 
 			int vCount = (int)(LONG_PTR)GetProp(hWnd, TEXT("VALUECOUNT"));
 			unsigned char** blobs = (unsigned char**)GetProp(hWnd, TEXT("BLOBS"));
 			if (blobs) {
-				SetProp(hWnd, TEXT("BLOBS"), (HANDLE)0);
+				SetProp(hWnd, TEXT("BLOBS"), 0);
 
 				for (int i = 0; i < vCount; i++)
 					if (blobs[i])
 						delete [] blobs[i];
 				free(blobs);
+			}
+		}
+		break;
+
+		// wParam = colNo, -1 = all
+		case WMU_RESET_MODIFIER: {
+			int* modifiers = (int*)GetProp(hWnd, TEXT("MODIFIERS"));
+			if (modifiers) {
+				int _colNo = (int)wParam;
+				int colCount = ListView_GetColumnCount(hWnd);
+				for (int colNo = 0; colNo < colCount; colNo++) {
+					if (_colNo != colNo && _colNo != -1)
+						continue;
+
+					int modifierNo = modifiers[colNo];
+					if (modifierNo > 0 && modifierNo < MAX_PLUGIN_COUNT && plugins[modifierNo].hModule && plugins[modifierNo].deactivate)
+						plugins[modifierNo].deactivate(hWnd, colNo);
+					modifiers[colNo] = 0;
+				}
+				InvalidateRect(hWnd, NULL, TRUE);
 			}
 		}
 		break;
@@ -4073,6 +4116,21 @@ LRESULT CALLBACK cbNewTreeItemEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
 	if (processEditKeys(hWnd, msg, wParam, lParam))
 		return 0;
+
+	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK cbNewTreeSearch(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	if (msg == WM_CHAR && wParam == VK_ESCAPE)
+		return 0;
+
+	if (msg == WM_KEYDOWN && wParam == VK_ESCAPE) {
+		SetFocus(hTreeWnd);
+		SetWindowText(hWnd, NULL);
+		ShowWindow(hWnd, SW_HIDE);
+		SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
+		return 0;
+	}
 
 	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
 }
@@ -5236,17 +5294,21 @@ void updateCustomFunction(bool unreg, sqlite3* conn) {
 	HWND hCodesWnd = GetDlgItem(hMainWnd, IDC_FUNCTION_CODES);
 
 	auto update = [hCodesWnd](bool unreg, sqlite3* conn, const char* name8, const char* code8) {
+		sqlite3_stmt* stmt;
+		int nargs = SQLITE_OK == sqlite3_prepare_v2(db, code8, -1, &stmt, 0) ? sqlite3_bind_parameter_count(stmt) : -1;
+		sqlite3_finalize(stmt);
+
 		if (unreg) {
 			char* stored8 = (char*)GetPropA(hCodesWnd, name8);
 			if (stored8)
 				free(stored8);
 
-			sqlite3_create_function(conn, name8, -1, SQLITE_UTF8, 0, 0, 0, 0);
+			sqlite3_create_function(conn, name8, nargs, SQLITE_UTF8, 0, 0, 0, 0);
 		} else {
 			char* stored8 = (char*)GetPropA(hCodesWnd, name8);
 			if (!stored8)
 				stored8 = strdup(code8);
-			sqlite3_create_function(conn, name8, -1, SQLITE_UTF8, (void*)stored8, dbutils::userDefinedFunction, 0, 0);
+			sqlite3_create_function(conn, name8, nargs, SQLITE_UTF8, (void*)stored8, dbutils::userDefinedFunction, 0, 0);
 		}
 	};
 
@@ -5850,80 +5912,157 @@ int pluginSorter (const void* a, const void* b) {
 	return (*(TPlugin*)b).priority - (*(TPlugin*)a).priority;
 }
 
-void reloadPlugins() {
-	for (int i = 0; i < MAX_PLUGIN_COUNT; i++) {
-		if (plugins[i].hModule) {
+// 0-index as None-plugin
+void reloadPlugins(int type) {
+	for (int i = 1; i < MAX_PLUGIN_COUNT; i++) {
+		if (plugins[i].hModule && (type == 0 || plugins[i].type == type)) {
 			FreeLibrary(plugins[i].hModule);
 			plugins[i] = {0};
 		}
 	}
 
-	int pluginNo = 0;
+	auto getNextPluginNo = [] () {
+		int res = 1;
+		while (res <= MAX_PLUGIN_COUNT && plugins[res].hModule)
+			res++;
+		return res;
+	};
+
+	int nextPluginNo = getNextPluginNo();
 	TCHAR pluginsDir16[MAX_PATH + 1]{0};
 	_sntprintf(pluginsDir16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY), APP_PATH);
 
-	for (int pluginTypeNo = 1; pluginTypeNo < 3; pluginTypeNo++) {
-		const TCHAR* pluginType16 = ADDON_TYPES16[pluginTypeNo];
+	for (int pluginType = 1; pluginType < 3; pluginType++) {
+		if (type && pluginType != type)
+				continue;
+
+		const TCHAR* pluginExt16 = ADDON_EXTS16[pluginType];
 
 		TCHAR searchPath16[MAX_PATH];
-		_sntprintf(searchPath16, MAX_PATH, TEXT("%ls%ls\\*.*"), pluginsDir16, pluginType16);
+		_sntprintf(searchPath16, MAX_PATH, TEXT("%ls%ls\\*.*"), pluginsDir16, pluginExt16);
 
 		WIN32_FIND_DATA ffd;
 		HANDLE hFind = FindFirstFile(searchPath16, &ffd);
 		if (hFind == INVALID_HANDLE_VALUE)
-			break;
+			continue;
 
 		sqlite3_stmt* stmt;
 		if (SQLITE_OK != sqlite3_prepare_v2(prefs::db, "select 1 from main.addons where name = ?1 and type = ?2 and enable = 0", -1, &stmt, 0)) {
 			sqlite3_finalize(stmt);
-			break;
+			continue;
 		}
 
 		do {
 			TCHAR filepath16[MAX_PATH + 1]{0};
-			_sntprintf(filepath16, MAX_PATH, TEXT("%ls%ls\\%ls"), pluginsDir16, pluginType16, ffd.cFileName);
+			_sntprintf(filepath16, MAX_PATH, TEXT("%ls%ls\\%ls"), pluginsDir16, pluginExt16, ffd.cFileName);
 
 			TCHAR ext16[32]{0};
 			TCHAR name16[32]{0};
 			_tsplitpath(filepath16, NULL, NULL, name16, ext16);
 
-			if (_tcscmp(ext16 + 1 /* skip first dot .ext */, pluginType16))
+			if (_tcscmp(ext16 + 1 /* skip first dot .ext */, pluginExt16))
 				continue;
 
 			char* name8 = utils::utf16to8(name16);
 			sqlite3_reset(stmt);
 			sqlite3_bind_text(stmt, 1, name8, strlen(name8),  SQLITE_TRANSIENT);
-			sqlite3_bind_int(stmt, 2, pluginTypeNo);
+			sqlite3_bind_int(stmt, 2, pluginType);
 			bool isEnable = SQLITE_ROW != sqlite3_step(stmt);
 			delete [] name8;
 
-			if (isEnable) {
+			if (isEnable && nextPluginNo < MAX_PLUGIN_COUNT) {
 				HMODULE hModule = LoadLibrary(filepath16);
 				if (hModule) {
+
 					pluginView view = (pluginView)GetProcAddress(hModule, "view");
 					pluginClose close = (pluginClose)GetProcAddress(hModule, "close");
 					pluginGetPriority getPriority = (pluginGetPriority)GetProcAddress(hModule, "getPriority");
-					if (view && close) {
-						plugins[pluginNo] = {
+
+					pluginActivate activate = (pluginActivate)GetProcAddress(hModule, "activate");
+					pluginDeactivate deactivate = (pluginDeactivate)GetProcAddress(hModule, "deactivate");
+					pluginSetText setText = (pluginSetText)GetProcAddress(hModule, "setText");
+					pluginSetColor setColor = (pluginSetColor)GetProcAddress(hModule, "setColor");
+					pluginRender render = (pluginRender)GetProcAddress(hModule, "render");
+
+					if ((pluginType == ADDON_VALUE_VIEWER && view && close) ||
+						(pluginType == ADDON_COLUMN_MODIFIER && (setText || render || setColor))) {
+						plugins[nextPluginNo] = {
 							hModule,
 							view,
 							close,
-							pluginTypeNo,
+							activate,
+							deactivate,
+							setText,
+							setColor,
+							render,
+							pluginType,
 							getPriority != NULL ? getPriority() : 0
 						};
-						pluginNo++;
+						_tsplitpath(filepath16, NULL, NULL, plugins[nextPluginNo].name, NULL);
+
+						nextPluginNo = getNextPluginNo();
 					} else {
 						FreeLibrary(hModule);
 					}
 				}
 			}
-		} while  (FindNextFile(hFind, &ffd) && pluginNo < MAX_PLUGIN_COUNT);
+		} while  (FindNextFile(hFind, &ffd) && nextPluginNo < MAX_PLUGIN_COUNT);
 
 		FindClose(hFind);
 		sqlite3_finalize(stmt);
 	}
 
 	qsort(plugins, MAX_PLUGIN_COUNT, sizeof(TPlugin), pluginSorter);
+
+	if (type == 0 || type == ADDON_COLUMN_MODIFIER) {
+		int cnt = GetMenuItemCount(hModifierMenu);
+		for (int itemNo = 0; itemNo < cnt; itemNo++)
+			DeleteMenu(hModifierMenu, 0, MF_BYPOSITION);
+
+		Menu_InsertItem(hModifierMenu, 0, IDM_RESULT_MODIFIER + 0, MF_STRING, TEXT("None"));
+
+		int itemNo = 1;
+		bool isSeparator = false;
+		for (int pluginNo = 1; pluginNo < MAX_PLUGIN_COUNT; pluginNo++) {
+			if (plugins[pluginNo].hModule && plugins[pluginNo].type == ADDON_COLUMN_MODIFIER) {
+				if (!isSeparator) {
+					AppendMenu(hModifierMenu, MF_STRING, 0, 0);
+					isSeparator = true;
+				}
+				AppendMenu(hModifierMenu, MF_STRING, IDM_RESULT_MODIFIER + itemNo, plugins[pluginNo].name);
+				Menu_SetItemData(hModifierMenu, IDM_RESULT_MODIFIER + itemNo, pluginNo);
+				itemNo++;
+			}
+		}
+
+		isSeparator = false;
+		sqlite3_stmt* stmt;
+
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select id, name, code from functions f order by name", -1, &stmt, 0)) {
+			while (SQLITE_ROW == sqlite3_step(stmt)) {
+				sqlite3_stmt* stmt2;
+				int nargs = SQLITE_OK == sqlite3_prepare_v2(prefs::db, (const char*)sqlite3_column_text(stmt, 2), -1, &stmt2, 0) ? sqlite3_bind_parameter_count(stmt2) : -1;
+				sqlite3_finalize(stmt2);
+
+				if (nargs != 1)
+					continue;
+
+				if (!isSeparator) {
+					AppendMenu(hModifierMenu, MF_STRING, 0, 0);
+					isSeparator = true;
+				}
+				TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+				AppendMenu(hModifierMenu, MF_STRING, IDM_RESULT_MODIFIER + itemNo, name16);
+				Menu_SetItemData(hModifierMenu, IDM_RESULT_MODIFIER + itemNo, -sqlite3_column_int(stmt, 0));
+				delete [] name16;
+				itemNo++;
+			}
+		}
+		sqlite3_finalize(stmt);
+
+		if (itemNo == 1)
+			Menu_SetItemText(hModifierMenu, IDM_RESULT_MODIFIER + 0, TEXT("No plugin installed"));
+	}
 }
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam) {
@@ -5995,10 +6134,7 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 			int id = (int)(GetDlgCtrlID(hWnd) / 100) * 100;
 			if (id == IDC_TAB_ROWS) {
 				ShowWindow(hWnd, SW_SHOW);
-				// ???
-				// SetFocus(hWnd);
-				// int pos = ListView_GetNextItem(hWnd, -1, LVNI_SELECTED);
-				// ListView_SetItemState (hWnd, pos == -1 ? 0 : pos, LVIS_FOCUSED | LVIS_SELECTED, 0x000F);
+
 				int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 				SendMessage(hStatusWnd, SB_SETTEXT, SB_ELAPSED_TIME, (LPARAM)tabs[tabNo].queryElapsedTimes[resultNo]);
 				SendMessage(hMainWnd, WMU_UPDATE_SB_RESULTSET, 0, 0);
@@ -6029,6 +6165,10 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 			if (prefs::get("show-filters"))
 				SendMessage(hWnd, WMU_UPDATE_FILTER_SIZE, 0, 0);
 		}
+	}
+
+	if (action == ACTION_RESET_MODIFIERS && (int)(GetDlgCtrlID(hWnd)) == IDC_TAB_ROWS && GetWindowLong(hWnd, GWL_STYLE) & LVS_OWNERDATA) {
+		SendMessage(hWnd, WMU_RESET_MODIFIER, -1, 0);
 	}
 
 	return true;
@@ -6080,7 +6220,6 @@ COLORREF RichEdit_GetTextColor (HWND hWnd, int pos) {
 
 HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, int type = 0, int disabled = 0, int pinned = 0) {
 	TVITEM tvi{0};
-	TVINSERTSTRUCT tvins{0};
 	tvi.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 	tvi.pszText = (TCHAR*)caption;
 	tvi.cchTextMax = _tcslen(caption) + 1;
@@ -6096,17 +6235,33 @@ HTREEITEM TreeView_AddItem (const TCHAR* caption, HTREEITEM parent = TVI_ROOT, i
 		tvi.state = TVIS_CUT;
 	}
 
+	TVINSERTSTRUCT tvins{0};
 	tvins.item = tvi;
 	tvins.hInsertAfter = pinned ? (HTREEITEM)GetProp(hTreeWnd, TEXT("LASTPINNED")) : parent != TVI_ROOT || type == 0 ? TVI_LAST : abs(type) == 1 ? TVI_FIRST : treeItems[abs(type) - 1];
 	//pinned && parent != TVI_ROOT ? TVI_FIRST : TVI_LAST;//parent != TVI_ROOT || type == 0 ? TVI_LAST : //abs(type) == 1 ? TVI_FIRST : treeItems[abs(type)];
 	tvins.hParent = parent;
 	return (HTREEITEM)SendMessage(hTreeWnd, TVM_INSERTITEM, 0, (LPARAM)(LPTVINSERTSTRUCT)&tvins);
-};
+}
+
+LPARAM TreeView_GetItemParam (HWND hTreeWnd, HTREEITEM hItem) {
+	TVITEM ti = {0};
+	ti.hItem = hItem;
+	ti.mask = TVIF_PARAM;
+	TreeView_GetItem(hTreeWnd, &ti);
+
+	return ti.lParam;
+}
 
 void updateTree(int type, TCHAR* select) {
 	if (type < 0) {
 		printf("(updateTree) Error: illegal value of type: %i\n", type);
 		return;
+	}
+
+	TCHAR treeFilter16[256] = {0};
+	if (IsWindowVisible(hTreeSearchWnd)) {
+		GetWindowText(hTreeSearchWnd, treeFilter16, 255);
+		_tcslwr(treeFilter16);
 	}
 
 	TCHAR selText[256] = {0};
@@ -6176,7 +6331,7 @@ void updateTree(int type, TCHAR* select) {
 	char* schema8 = utils::utf16to8(schema16);
 	sprintf(sql,
 		"select t.name, t.type, " \
-		"iif(t.type in ('table', 'view'), group_concat(c.name || iif(t.type = 'table', ': ' || c.type || iif(c.pk,' [pk]',''), ''), ','), null) columns" \
+		"iif(t.type in ('table', 'view'), group_concat(c.name || iif(t.type = 'table', ': ' || c.type || iif(c.pk,' [pk]',''), ''), ','), null) columns " \
 		"from \"%s\".sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg and c.schema = \"%s\" " \
 		"where t.sql is not null and t.type = coalesce(?1, t.type) and t.name <> 'sqlite_sequence' " \
 		"group by t.type, t.name order by t.type, t.name",
@@ -6188,7 +6343,7 @@ void updateTree(int type, TCHAR* select) {
 		conn = tabNo == -1 ? cli.db : tabs[tabNo].db;
 	}
 
-	auto insertTreeItems = [conn, type, isObjectPinned, schema8](const char* sql, bool hasColumns) {
+	auto insertTreeItems = [conn, type, isObjectPinned, schema8, treeFilter16](const char* sql, bool hasColumns) {
 		auto getItemType = [](const char* type8) {
 			return !strcmp(type8, "table") ? TABLE :
 				!strcmp(type8, "view") ? VIEW :
@@ -6219,19 +6374,25 @@ void updateTree(int type, TCHAR* select) {
 			TCHAR* name16 = utils::utf8to16(name8);
 			TCHAR* columns16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 2));
 
+			bool isFilterColumn = false;
 			bool pinned = (itemType == TABLE || itemType == VIEW) && isObjectPinned(name16);
 			HTREEITEM hItem = TreeView_AddItem(name16, treeItems[itemType], itemType, 0, pinned);
-
-			if (pinned) {
-				SetProp(hTreeWnd, TEXT("LASTPINNED"), hItem);
-				prevItemType = itemType;
-			}
 
 			if (itemType == TABLE || itemType == VIEW) {
 				if (hasColumns) {
 					TCHAR* column16 = _tcstok (columns16, TEXT(","));
 					while (column16 != NULL) {
-						TreeView_AddItem(column16, hItem, itemType == TABLE ? COLUMN : 0);
+						HTREEITEM hColumnItem = TreeView_AddItem(column16, hItem, COLUMN, 0, true);
+						TCHAR* colName16 = _tcsdup(column16);
+						_tcslwr(colName16);
+						if (treeFilter16[0]) {
+							TCHAR* s = _tcsstr(colName16, treeFilter16);
+							if (s != 0 && (_tcschr(s, TEXT(':')) != 0)) {
+								TreeView_SetItemState(hTreeWnd, hColumnItem, TVIS_BOLD, TVIS_BOLD);
+								isFilterColumn = true;
+							}
+						}
+						free(colName16);
 						column16 = _tcstok (NULL, TEXT(","));
 					}
 				} else {
@@ -6242,7 +6403,17 @@ void updateTree(int type, TCHAR* select) {
 						sqlite3_bind_text(substmt, 3, schema8, strlen(schema8), SQLITE_TRANSIENT);
 						while(SQLITE_ROW == sqlite3_step(substmt)) {
 							TCHAR* column16 = utils::utf8to16((char *) sqlite3_column_text(substmt, 0));
-							TreeView_AddItem(column16, hItem, COLUMN);
+							HTREEITEM hColumnItem = TreeView_AddItem(column16, hItem, COLUMN, 0, true);
+							TCHAR* colName16 = _tcsdup(column16);
+							_tcslwr(colName16);
+							if (treeFilter16[0]) {
+								TCHAR* s = _tcsstr(colName16, treeFilter16);
+								if (s != 0 && (_tcschr(s, TEXT(':')) != 0)) {
+									TreeView_SetItemState(hTreeWnd, hColumnItem, TVIS_BOLD, TVIS_BOLD);
+									isFilterColumn = true;
+								}
+							}
+							free(colName16);
 							delete [] column16;
 						}
 					}
@@ -6256,6 +6427,19 @@ void updateTree(int type, TCHAR* select) {
 						TreeView_Expand(hTreeWnd, hItem, TVE_EXPAND);
 					}
 					sqlite3_finalize(substmt);
+				}
+			}
+
+			if (treeFilter16[0]) {
+				if (_tcsstr(name16, treeFilter16) == 0 && !isFilterColumn)
+					TreeView_DeleteItem(hTreeWnd, hItem);
+
+				if (isFilterColumn)
+					TreeView_Expand(hTreeWnd, hItem, TVE_EXPAND);
+			} else {
+				if (pinned) {
+					SetProp(hTreeWnd, TEXT("LASTPINNED"), hItem);
+					prevItemType = itemType;
 				}
 			}
 
@@ -6573,7 +6757,7 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 
 	SendMessage(hListWnd, WMU_RESET_CACHE, 0, 0);
 
-	int cacheSize = rowLimit > 0 ? rowLimit : 100 * (colCount + 1);
+	int cacheSize = (rowLimit > 0 ? rowLimit : 100) * (colCount + 1);
 	TCHAR*** cache = isVirtual ? (TCHAR***)calloc(cacheSize, sizeof(TCHAR**)) : 0;
 	byte* datatypes = (byte*)calloc(cacheSize, sizeof(byte));
 	unsigned char** blobs = isVirtual ? (unsigned char**)calloc(cacheSize, sizeof(unsigned char*)) : 0;
@@ -6722,6 +6906,10 @@ int ListView_SetData(HWND hListWnd, sqlite3_stmt *stmt, bool isRef) {
 		SetProp(hListWnd, TEXT("ROWCOUNT"), new int(rowCount));
 		SetProp(hListWnd, TEXT("TOTALROWCOUNT"), new int(rowCount));
 
+		SetProp(hListWnd, TEXT("MODIFIERS"), (int*)calloc(colCount + 1, sizeof(int)));
+		SetProp(hListWnd, TEXT("MODIFIER_ROWS"), (int*)calloc(colCount + 1, sizeof(int)));
+		SetProp(hListWnd, TEXT("MODIFIERBUFFER"), new TCHAR[MAX_MODIFIER_OUTPUT_LEN + 1]);
+
 		ListView_SetItemCount(hListWnd, 0);
 		SendMessage(hListWnd, WMU_UPDATE_RESULTSET, 0, 0);
 	}
@@ -6840,6 +7028,90 @@ bool ListView_DrillUp(HWND hListWnd) {
 	return 1;
 }
 
+BOOL ListView_GetItemValue(HWND hListWnd, int rowNo, int colNo, TValue* cell, bool ignoreResultset) {
+	TCHAR*** cache = (TCHAR***)GetProp(hListWnd, TEXT("CACHE"));
+	int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
+	byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
+	unsigned char** blobs = (unsigned char**)GetProp(hListWnd, TEXT("BLOBS"));
+	int colCount = ListView_GetColumnCount(hListWnd);
+
+	if (!hListWnd || !cache || !datatypes || !blobs || colNo > colCount)
+		return FALSE;
+
+	if (!ignoreResultset && !resultset)
+		rowNo = resultset[rowNo];
+
+	int no = colNo + rowNo * (colCount - 1);
+	int dataType = datatypes ? datatypes[no] : SQLITE_TEXT;
+	const unsigned char* blob = blobs && dataType == SQLITE_BLOB ? blobs[no] : 0;
+
+	cell->dataType = dataType;
+	cell->dataLen = blob && dataType == SQLITE_BLOB ? utils::getBlobSize(blob) - 4 : _tcslen(cache[rowNo][colNo]);
+	cell->data = blob && dataType == SQLITE_BLOB ? blob + 4 : (const unsigned char*)cache[rowNo][colNo];
+
+	return TRUE;
+}
+
+TCHAR* ListView_GetItemValueText(HWND hListWnd, int rowNo, int colNo, bool ignoreResultset) {
+	TCHAR* res16 = 0;
+	TCHAR*** cache = (TCHAR***)GetProp(hListWnd, TEXT("CACHE"));
+	int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
+
+	if (!cache) {
+		MessageBox(hMainWnd, TEXT("ListView_GetValueText allowed only for a virtual listview"), NULL, MB_OK);
+		return res16;
+	}
+
+	if (!ignoreResultset)
+		rowNo = resultset[rowNo];
+
+	res16 = cache[rowNo][colNo]; // default behaviour
+
+	int* modifiers = (int*)GetProp(hListWnd, TEXT("MODIFIERS"));
+	int modifierNo = modifiers ? modifiers[colNo] : 0;
+	TValue value = {0};
+	if (modifierNo && ListView_GetItemValue(hListWnd, rowNo, colNo, &value, ignoreResultset)) {
+		TCHAR* buf16 = (TCHAR*)GetProp(hListWnd, TEXT("MODIFIERBUFFER"));
+		ZeroMemory(buf16, (MAX_MODIFIER_OUTPUT_LEN + 1) * sizeof(TCHAR));
+
+		if (modifierNo > 0 && plugins[modifierNo].hModule && plugins[modifierNo].type == ADDON_COLUMN_MODIFIER && plugins[modifierNo].setText) {
+			if (plugins[modifierNo].setText(hListWnd, colNo, value.data, value.dataLen, value.dataType, buf16))
+				res16 = buf16;
+		}
+
+		if (modifierNo < 0)	{
+			modifierNo = abs(modifierNo);
+			sqlite3_stmt* stmt;
+			sqlite3_prepare_v2(prefs::db, "select code from functions where id = ?1", -1, &stmt, 0);
+			sqlite3_bind_int(stmt, 1, abs(modifierNo));
+			if (SQLITE_ROW == sqlite3_step(stmt)) {
+				sqlite3_stmt* stmt2;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 0), -1, &stmt2, 0)) {
+					if (value.dataType != SQLITE_BLOB) {
+						char* value8 = utils::utf16to8(cache[rowNo][colNo]);
+						dbutils::bind_variant(stmt2, 1, value8, false);
+						delete [] value8;
+					} else {
+						sqlite3_bind_blob(stmt2, 1, value.data, value.dataLen, SQLITE_TRANSIENT);
+					}
+
+					if (SQLITE_ROW == sqlite3_step(stmt2)) {
+						TCHAR* value16 = utils::utf8to16((const char*)sqlite3_column_text(stmt2, 0));
+						_sntprintf(buf16, MAX_MODIFIER_OUTPUT_LEN, value16);
+						delete [] value16;
+
+						res16 = buf16;
+					}
+				}
+				sqlite3_finalize(stmt2);
+			}
+			sqlite3_finalize(stmt);
+		}
+	}
+
+	return res16;
+}
+
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn) {
 	auto getRowLength = [hListWnd](int rowNo) {
 		TCHAR rowLength[64 + 1]{0};
@@ -6854,13 +7126,11 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 	};
 
 	if (cmd == IDM_RESULT_CHART)
-		return DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CHART), hMainWnd, (DLGPROC)&dialogs::cbDlgChart, (LPARAM)hListWnd);
+		return DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_CHART), hMainWnd, (DLGPROC)dialogs::cbDlgChart, (LPARAM)hListWnd);
 
 	if (cmd == IDM_RESULT_COPY_CELL) {
-		int rowLength = getRowLength(rowNo);
-		TCHAR buf[rowLength + 1];
-		ListView_GetItemText(hListWnd, rowNo, colNo, buf, rowLength + 1);
-		utils::setClipboardText(buf);
+		TCHAR* value16 = ListView_GetItemValueText(hListWnd, rowNo, colNo);
+		utils::setClipboardText(value16);
 		return true;
 	}
 
@@ -6869,11 +7139,11 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 		if ((GetWindowLongPtr(hHeader, GWL_STYLE) & HDS_FILTERBAR) == 0)
 			SendMessage(hMainWnd, WM_COMMAND, IDM_RESULT_FILTERS, 0);
 
-		int rowLength = getRowLength(rowNo);
-		TCHAR buf[rowLength + 2];
-		buf[0] = TEXT('=');
-		ListView_GetItemText(hListWnd, rowNo, colNo, buf + 1, rowLength + 1);
-		SetDlgItemText(hHeader, IDC_HEADER_EDIT + colNo, buf);
+		TCHAR* value16 = ListView_GetItemValueText(hListWnd, rowNo, colNo);
+		int len = _tcslen(value16) + 2;
+		TCHAR buf16[len];
+		_sntprintf(buf16, len, TEXT("=%ls"), value16);
+		SetDlgItemText(hHeader, IDC_HEADER_EDIT + colNo, buf16);
 		SendMessage(hListWnd, WMU_UPDATE_RESULTSET, 0, 0); // Resultset
 		SendMessage(GetAncestor(hListWnd, GA_ROOT), WMU_UPDATE_DATA, 0, 0); // Edit data dialog
 	}
@@ -6885,7 +7155,7 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 	int colCount = (int)SendMessage(hHeader, HDM_GETITEMCOUNT, 0, 0L) - ignoreLastColumn;
 	int rowCount = ListView_GetSelectedCount(hListWnd);
 	int searchNext = LVNI_SELECTED;
-	if (cmd == IDM_RESULT_EXPORT  && rowCount < 2) {
+	if (cmd == IDM_RESULT_EXPORT && rowCount < 2) {
 		rowCount = ListView_GetItemCount(hListWnd);
 		searchNext = LVNI_ALL;
 	}
@@ -6908,21 +7178,24 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 	}
 
 	bool withHeader = cmd == IDM_RESULT_EXPORT || HIWORD(GetKeyState(VK_SHIFT));
-	const TCHAR* delimiter16 = cmd == IDM_RESULT_COPY_ROW ? tools::DELIMITERS[0] : tools::DELIMITERS[prefs::get("csv-export-delimiter")];
+	const TCHAR* delimiter16 = tools::DELIMITERS[prefs::get(cmd == IDM_RESULT_COPY_ROW ? "copy-to-clipboard-delimiter" : "csv-export-delimiter")];
 	const TCHAR* newLine16 = cmd == IDM_RESULT_COPY_ROW || !prefs::get("csv-export-is-unix-line") ? TEXT("\r\n") : TEXT("\n");
 
 	if (!colCount || !rowCount)
 		return false;
 
+	int* modifiers = (int*)GetProp(hListWnd, TEXT("MODIFIERS"));
 	int bufSize = withHeader ? 255 * colCount : 0;
 	int currRowNo = -1;
-	while((currRowNo = ListView_GetNextItem(hListWnd, currRowNo, searchNext)) != -1)
+	while((currRowNo = ListView_GetNextItem(hListWnd, currRowNo, searchNext)) != -1) {
 		bufSize += getRowLength(currRowNo);
+		for (int colNo = 1; colNo < colCount; colNo++)
+			bufSize += modifiers && modifiers[colNo] ? _tcslen(ListView_GetItemValueText(hListWnd, currRowNo, colNo)) : 0;
+	}
 
 	bufSize += (colCount /* delimiters*/ + 64 /* possible quotes */ + 3 /* new line */) * rowCount + 1 /* EOF */;
 	bufSize *= 2; // single " is extended to "" => allocate additional memory
 	TCHAR* res16 = new TCHAR[bufSize] {0};
-	TCHAR buf16[MAX_TEXT_LENGTH]{0};
 
 	auto addValue = [](TCHAR* res16, TCHAR* buf16) {
 		TCHAR* qvalue16 = utils::replaceAll(buf16, TEXT("\""), TEXT("\"\""));
@@ -6939,7 +7212,8 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 
 	if (withHeader) {
 		for(int colNo = 1; colNo < colCount; colNo++) {
-			Header_GetItemText(hHeader, colNo, buf16, MAX_TEXT_LENGTH);
+			TCHAR buf16[256]{0};
+			Header_GetItemText(hHeader, colNo, buf16, 255);
 			addValue(res16, buf16);
 			_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
 		}
@@ -6948,8 +7222,8 @@ LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignore
 	currRowNo = -1;
 	while((currRowNo = ListView_GetNextItem(hListWnd, currRowNo, searchNext)) != -1) {
 		for(int colNo = 1; colNo < colCount; colNo++) {
-			ListView_GetItemText(hListWnd, currRowNo, colNo, buf16, MAX_TEXT_LENGTH);
-			addValue(res16, buf16);
+			TCHAR* value16 = ListView_GetItemValueText(hListWnd, currRowNo, colNo);
+			addValue(res16, value16);
 			_tcscat(res16, colNo != colCount - 1 ? delimiter16 : newLine16);
 		}
 	}
@@ -7421,6 +7695,24 @@ BOOL Menu_SetItemText(HMENU hMenu, UINT wID, const TCHAR* caption) {
 	mii.cch = _tcslen(caption);
 
 	return SetMenuItemInfo(hMenu, wID, FALSE, &mii);
+}
+
+BOOL Menu_SetItemData(HMENU hMenu, UINT wID, ULONG_PTR lParam) {
+	MENUITEMINFO mii = {0};
+	mii.cbSize = sizeof(MENUITEMINFO);
+	mii.fMask = MIIM_DATA;
+	mii.dwItemData = lParam;
+
+	return SetMenuItemInfo(hMenu, wID, FALSE, &mii);
+}
+
+ULONG_PTR Menu_GetItemData(HMENU hMenu, UINT wID) {
+	MENUITEMINFO mii = {0};
+	mii.cbSize = sizeof(MENUITEMINFO);
+	mii.fMask = MIIM_DATA;
+
+	GetMenuItemInfo(hMenu, wID, FALSE, &mii);
+	return mii.dwItemData;
 }
 
 BOOL Menu_SetItemState(HMENU hMenu, UINT wID, UINT fState) {
@@ -8009,9 +8301,10 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 		int cPos = crPos;
 		// fix new line \r \n
-		for (int i = 0; (i < cPos) && (i < tLen + 1); i++)
+		for (int i = 0; (i < cPos) && (i < tLen + 1); i++) {
 			if (text[i] == TEXT('\r'))
 				cPos = cPos + 1;
+		}
 
 		//                    qStart                                    qEnd
 		//                    |                                         |
@@ -8074,22 +8367,51 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 			TCHAR query16[qEnd - qStart + 1]{0};
 			_tcsncpy(query16, text + qStart, qEnd - qStart);
+			_tcslwr(query16);
+
 			if (_tcslen(query16) > 0) {
+				auto hasWord = [](TCHAR* str, TCHAR* word) {
+					bool res = false;
+
+					TCHAR breakers[] = TEXT(" \"'`\n\t+-;:(),=<>/%");
+					TCHAR* s = _tcsstr(str, word);
+					int slen = _tcslen(str);
+					int wlen = _tcslen(word);
+
+					while (!res && s) {
+						int l = slen - _tcslen(s);
+						int r = l + wlen;
+						res = (l == 0 || (l > 0 && _tcschr(breakers, str[l - 1]))) && (r == slen || (r < slen && _tcschr(breakers, str[r])));
+						s = _tcsstr(s + 1, word);
+					}
+
+					return res;
+				};
+
+				// Each table is processed separately because pragma_table_xinfo-command can raise an error
+				// hasWord-function is used instead of regexp \b<tbl_name>\b because tbl_name can contain special char for regexp e.g. $
 				sqlite3_stmt *stmt;
-				char sql8[] =
-					"select c.name from sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg and c.schema = 'main' " \
-					"where t.sql is not null and t.type in ('table', 'view') and ?1 regexp '\\b' || lower(t.tbl_name) || '\\b' order by t.tbl_name, c.cid";
-
-				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-					char* query8 = utils::utf16to8(query16);
-					sqlite3_bind_text(stmt, 1, query8, strlen(query8), SQLITE_TRANSIENT);
-					delete [] query8;
-
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select lower(tbl_name) from main.sqlite_master where type in ('table', 'view') and sql is not null order by tbl_name", -1, &stmt, 0)) {
 					bool isNoCheck = wLen == 0;
+
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
-						TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt, 0));
-						isExact += addString(name16, isNoCheck);
-						delete [] name16;
+						const char* tblName8 = (const char*) sqlite3_column_text(stmt, 0);
+						TCHAR* tblName16 = utils::utf8to16(tblName8);
+						if (hasWord(query16, tblName16)) {
+							sqlite3_stmt *stmt2;
+							if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_xinfo where schema = 'main' and arg = ?1", -1, &stmt2, 0)) {
+								sqlite3_bind_text(stmt2, 1, tblName8, strlen(tblName8), SQLITE_TRANSIENT);
+
+								while (SQLITE_ROW == sqlite3_step(stmt2)) {
+									TCHAR* name16 = utils::utf8to16((char *) sqlite3_column_text(stmt2, 0));
+									isExact += addString(name16, isNoCheck);
+									delete [] name16;
+								}
+							}
+							sqlite3_finalize(stmt2);
+						}
+
+						delete [] tblName16;
 					}
 				}
 				sqlite3_finalize(stmt);
@@ -8352,29 +8674,35 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 					LV_ITEM* pItem = &(pDispInfo)->item;
 					HWND hListWnd = pHdr->hwndFrom;
 
-					TCHAR*** cache = (TCHAR***)GetProp(hListWnd, TEXT("CACHE"));
-					int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
-					if(cache && resultset && pItem->mask & LVIF_TEXT) {
-						int rowNo = resultset[pItem->iItem];
-						pItem->pszText = cache[rowNo][pItem->iSubItem];
-					}
+					if (pItem->mask & LVIF_TEXT)
+						pItem->pszText = ListView_GetItemValueText(hListWnd, pItem->iItem, pItem->iSubItem);
 				}
 
 				if (pHdr->code == (UINT)NM_CUSTOMDRAW) {
 					int result = CDRF_DODEFAULT;
 					HWND hListWnd = pHdr->hwndFrom;
+					int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
 					byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-					COLORREF* heatmap = (COLORREF*)GetProp(hListWnd, TEXT("HEATMAP"));
+					int* modifiers = (int*)GetProp(hListWnd, TEXT("MODIFIERS"));
+
 					if (!datatypes)
-						return result;
+						return CDRF_DODEFAULT;
 
 					NMLVCUSTOMDRAW* pCustomDraw = (LPNMLVCUSTOMDRAW)lParam;
+					int rowNo = pCustomDraw->nmcd.dwItemSpec;
+					int colNo = pCustomDraw->iSubItem;
+					int colCount = ListView_GetColumnCount(hListWnd);
+
+
+					int modifierNo = modifiers && colNo >= 0 && colNo < colCount ? modifiers[colNo] : 0; // ??? Some colNo less 0 or greater colCount
+					modifierNo = modifierNo > 0 && modifierNo < MAX_PLUGIN_COUNT && plugins[modifierNo].hModule && plugins[modifierNo].type == ADDON_COLUMN_MODIFIER ? modifierNo : 0;
+
 					if (pCustomDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
 						result = CDRF_NOTIFYITEMDRAW;
 
 					if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
 						pCustomDraw->nmcd.lItemlParam = 0;
-						if (ListView_GetItemState(pHdr->hwndFrom, pCustomDraw->nmcd.dwItemSpec, LVIS_SELECTED)) {
+						if (ListView_GetItemState(hListWnd, rowNo, LVIS_SELECTED)) {
 							pCustomDraw->nmcd.uItemState &= ~CDIS_SELECTED;
 							pCustomDraw->nmcd.lItemlParam = 1;
 						}
@@ -8382,11 +8710,7 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 					}
 
 					if (pCustomDraw->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM)) {
-						int rowNo = pCustomDraw->nmcd.dwItemSpec;
-						int colNo = pCustomDraw->iSubItem;
 						int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
-
-						int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
 						rowNo = resultset[rowNo];
 
 						bool isFocus = GetFocus() == hListWnd;
@@ -8399,9 +8723,20 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 						pCustomDraw->clrTextBk = isCurrCell ? GRIDCOLORS[0] :
 							isSelectedRow && isFocus ? RGB(10, 36, 106) :
 							isSelectedRow && !isFocus ? RGB(212, 208, 200) :
-							heatmap ? heatmap[colNo + colCount * rowNo] :
 							datatypes ? GRIDCOLORS[datatypes[colNo + colCount * rowNo]] :
 							RGB(255, 255, 255);
+
+						if (modifierNo && (plugins[modifierNo].setColor || plugins[modifierNo].render)) {
+							TValue value = {0};
+							if (ListView_GetItemValue(hListWnd, rowNo, colNo, &value)) {
+								if (plugins[modifierNo].setColor)
+									plugins[modifierNo].setColor(pCustomDraw, value.data, value.dataLen, value.dataType);
+
+								if (plugins[modifierNo].render) {
+									result = plugins[modifierNo].render(pCustomDraw, value.data, value.dataLen, value.dataType) ? CDRF_SKIPDEFAULT : result;
+								}
+							}
+						}
 					}
 
 					return result;
@@ -8479,27 +8814,13 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 			SetProp(hListWnd, TEXT("CURRENTROW"), IntToPtr(rowNo));
 			SetProp(hListWnd, TEXT("CURRENTCOLUMN"), IntToPtr(colNo));
 
-			if (prefs::get("show-preview") && rowNo != -1 && colNo != -1) {
-				byte* datatypes = (byte*)GetProp(hListWnd, TEXT("DATATYPES"));
-				int colCount = Header_GetItemCount(ListView_GetHeader(hListWnd)) - 1;
+			TValue value = {0};
+			if (prefs::get("show-preview") && rowNo != -1 && colNo != -1 && ListView_GetItemValue(hListWnd, rowNo, colNo, &value)) {
+				SetProp(hPreviewWnd, TEXT("DATA"), (HANDLE)value.data);
+				SetProp(hPreviewWnd, TEXT("DATATYPE"), IntToPtr(value.dataType));
+				SetProp(hPreviewWnd, TEXT("DATALEN"), IntToPtr(value.dataLen));
 
-				int* resultset = (int*)GetProp(hListWnd, TEXT("RESULTSET"));
-				TCHAR*** cache = (TCHAR***)GetProp(hListWnd, TEXT("CACHE"));
-				byte type = datatypes ? datatypes[colNo + colCount * resultset[rowNo]] : SQLITE_TEXT;
-
-				if (type == SQLITE_TEXT || type == SQLITE_FLOAT || type == SQLITE_INTEGER) {
-					TCHAR* value16 = cache[resultset[rowNo]][colNo];
-					SendMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, SQLITE_TEXT, (LPARAM)value16);
-				}
-
-				if (type == SQLITE_NULL)
-					SendMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, SQLITE_NULL, 0);
-
-				if (type == SQLITE_BLOB) {
-					char** blobs = (char**)GetProp(hListWnd, TEXT("BLOBS"));
-					char* data = blobs ? blobs[colNo + colCount * resultset[rowNo]] : 0;
-					SendMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, SQLITE_BLOB, (LPARAM)data);
-				}
+				SendMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, 0, 0);
 			}
 		}
 		break;
@@ -9538,7 +9859,7 @@ void createResultControls(HWND hTabWnd, int resultNo) {
 	CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 300, 0, 400, 100, hRowsWnd, (HMENU)IDC_REFLIST, GetModuleHandle(0), 0);
 
 	HWND hPreviewWnd = CreateWindow(WC_STATIC, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | SS_CENTER | WS_BORDER | SS_CENTERIMAGE, 20, 20, 100, 100, hTabWnd, (HMENU)IntToPtr(IDC_TAB_PREVIEW + resultNo), GetModuleHandle(0), NULL);
-	SetProp(hPreviewWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hPreviewWnd, GWLP_WNDPROC, (LONG_PTR)&dialogs::cbNewValueViewer));
+	SetProp(hPreviewWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hPreviewWnd, GWLP_WNDPROC, (LONG_PTR)dialogs::cbNewValueViewer));
 	SetProp(hPreviewWnd, TEXT("INFO"), (HANDLE)(new TCHAR[255]));
 	SetProp(hPreviewWnd, TEXT("EXT"), (HANDLE)(new TCHAR[32]));
 	SendMessage(hPreviewWnd, WM_SETFONT, (LPARAM)hFont, 0);
@@ -9650,8 +9971,7 @@ bool saveResultToTable(sqlite3* db, const TCHAR* table16, int tabNo, int resultN
 
 				while(rc && (rowNo = ListView_GetNextItem(hListWnd, rowNo, searchNext)) != -1) {
 					for(int colNo = 1; colNo < colCount; colNo++) {
-						TCHAR val16[MAX_TEXT_LENGTH + 1];
-						ListView_GetItemText(hListWnd, rowNo, colNo, val16, MAX_TEXT_LENGTH);
+						TCHAR* val16 = ListView_GetItemValueText(hListWnd, rowNo, colNo);
 						int no = colNo + resultset[rowNo] * (colCount - 1);
 						const unsigned char* blob = datatypes && blobs && datatypes[no] == SQLITE_BLOB ? blobs[no] : 0;
 						if (!blob) {

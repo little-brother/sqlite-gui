@@ -170,12 +170,12 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SETTINGS DIALOGEX 0, 0, 215, 230
+IDD_SETTINGS DIALOGEX 0, 0, 215, 240
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | WS_CLIPCHILDREN
 	CAPTION "Settings"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	CONTROL "", IDC_DLG_SETTING_TAB, WC_TABCONTROL, TCS_FIXEDWIDTH, 5, 5, 205, 200, WS_EX_CONTROLPARENT
+	CONTROL "", IDC_DLG_SETTING_TAB, WC_TABCONTROL, TCS_FIXEDWIDTH, 5, 5, 205, 210, WS_EX_CONTROLPARENT
 
 	AUTOCHECKBOX "Open last database on startup", IDC_DLG_RESTORE_DB, 5, 3, 180, 14, BS_NOTIFY | WS_TABSTOP
 	AUTOCHECKBOX "Restore editor tabs on startup", IDC_DLG_RESTORE_EDITOR, 5, 18, 180, 14, BS_NOTIFY | WS_TABSTOP
@@ -226,23 +226,29 @@ BEGIN
 	LTEXT "Beep if the query took longer than N ms", IDC_DLG_BEEP_LABEL, 5, 126, 150, 12, SS_LEFT
 	EDITTEXT IDC_DLG_BEEP_ON_QUERY_END, 160, 124, 35, 13, WS_BORDER | WS_TABSTOP | ES_CENTER | ES_NUMBER
 
+	LTEXT "Column delimiter when copy rows to clipboard", IDC_DLG_DELIMITER_LABEL, 5, 41 + 100, 150, 14, SS_LEFT
+	COMBOBOX IDC_DLG_DELIMITER, 160, 39 + 100, 33, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
 	LTEXT "Execute on a database connection", IDC_DLG_STARTUP_LABEL, 5, 5, 150, 12, SS_LEFT
-	EDITTEXT IDC_DLG_STARTUP, 5, 17, 190, 40, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL
+	EDITTEXT IDC_DLG_STARTUP, 5, 17, 190, 30, WS_BORDER | WS_TABSTOP | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL
 
-	AUTOCHECKBOX "Use foreign keys (pragma foreign_keys = on)", IDC_DLG_FOREIGN_KEYS, 5, 60, 190, 14, BS_NOTIFY | WS_TABSTOP
-	AUTOCHECKBOX "Use unsafe renaming (pragma legacy_alter_table = on)", IDC_DLG_LEGACY_RENAME, 5, 71, 190, 14, BS_NOTIFY | WS_TABSTOP
+	AUTOCHECKBOX "Use foreign keys (pragma foreign_keys = on)", IDC_DLG_FOREIGN_KEYS, 5, 50, 190, 14, BS_NOTIFY | WS_TABSTOP
+	AUTOCHECKBOX "Use unsafe renaming (pragma legacy_alter_table = on)", IDC_DLG_LEGACY_RENAME, 5, 61, 190, 14, BS_NOTIFY | WS_TABSTOP
 
-	LTEXT "Google API key", IDC_DLG_GOOGLE_KEY_LABEL, 5, 90, 150, 10, SS_LEFT
-	EDITTEXT IDC_DLG_GOOGLE_KEY, 5, 100, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
+	LTEXT "Google API key", IDC_DLG_GOOGLE_KEY_LABEL, 5, 80, 150, 10, SS_LEFT
+	EDITTEXT IDC_DLG_GOOGLE_KEY, 5, 90, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
 
-	LTEXT "Viewer plugin respository", IDC_DLG_VIEWER_REPOSITORY_LABEL, 5, 118, 152, 10, SS_LEFT
-	EDITTEXT IDC_DLG_VIEWER_REPOSITORY, 5, 128, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
+	LTEXT "Value viewers respository", IDC_DLG_VIEWER_REPOSITORY_LABEL, 5, 108, 152, 10, SS_LEFT
+	EDITTEXT IDC_DLG_VIEWER_REPOSITORY, 5, 118, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
 
-	LTEXT "SQLite extension respository", IDC_DLG_EXTENSION_REPOSITORY_LABEL, 5, 146, 152, 10, SS_LEFT
-	EDITTEXT IDC_DLG_EXTENSION_REPOSITORY, 5, 156, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
+	LTEXT "Column modifiers respository", IDC_DLG_MODIFIER_REPOSITORY_LABEL, 5, 108 + 28, 152, 10, SS_LEFT
+	EDITTEXT IDC_DLG_MODIFIER_REPOSITORY, 5, 118 + 28, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
 
-	PUSHBUTTON "OK", IDC_DLG_OK, 86, 211, 60, 14, WS_TABSTOP
-	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 150, 211, 60, 14, WS_TABSTOP
+	LTEXT "SQLite extension respository", IDC_DLG_EXTENSION_REPOSITORY_LABEL, 5, 146 + 18, 152, 10, SS_LEFT
+	EDITTEXT IDC_DLG_EXTENSION_REPOSITORY, 5, 156 + 18, 190, 11, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_WANTRETURN
+
+	PUSHBUTTON "OK", IDC_DLG_OK, 86, 221, 60, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 150, 221, 60, 14, WS_TABSTOP
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -378,7 +384,7 @@ END
 LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_ADDON_MANAGER DIALOGEX 100, 50, 400, 300
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
-	CAPTION "Addon manager"
+	CAPTION "Add-on manager"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
 	CONTROL "", IDC_DLG_ADDON_LIST, WC_LISTVIEW, WS_TABSTOP| WS_CLIPSIBLINGS | LVS_AUTOARRANGE | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL | WS_TABSTOP, 0, 0, 400, 300, WS_EX_STATICEDGE
@@ -827,8 +833,9 @@ BEGIN
 
 	POPUP "Add-ons"
 	BEGIN
-		MENUITEM "Viewer plugins", IDM_VIEWER_PLUGINS
-		MENUITEM "SQlite extensions", IDM_EXTENSIONS
+		MENUITEM "Value viewer plugins", IDM_VIEWER_PLUGINS
+		MENUITEM "Column modifier plugins", IDM_MODIFIER_PLUGINS
+		MENUITEM "SQLite extensions", IDM_EXTENSIONS
 	END
 
 	POPUP "?"
@@ -999,7 +1006,11 @@ BEGIN
 		MENUITEM "View as chart", IDM_RESULT_CHART
 		MENUITEM "Filter by value", IDM_RESULT_VALUE_FILTER
 		MENUITEM "Transpose", IDM_RESULT_TRANSPOSE
-		MENUITEM "Heat map", IDM_RESULT_HEATMAP
+		MENUITEM SEPARATOR
+		POPUP  "Column modifier"
+		BEGIN
+			MENUITEM "No plugin installed", IDM_RESULT_MODIFIER, GRAYED
+		END
 		MENUITEM SEPARATOR
 		MENUITEM "Save as table", IDM_RESULT_AS_TABLE
 		MENUITEM "Export to csv", IDM_RESULT_EXPORT
@@ -1087,6 +1098,8 @@ BEGIN
 	BEGIN
 		MENUITEM "Copy to clipboard", IDM_EXPORT_CLIPBOARD
 		MENUITEM "Save as .png", IDM_EXPORT_PNG
+		MENUITEM SEPARATOR
+		MENUITEM "Reset zoom", IDM_CHART_RESET
 	END
 END
 
@@ -1166,6 +1179,7 @@ BEGIN
 		"Ctrl + Alt + Escape/Backspace - Close the current editor\n" \
 		"Ctrl + Alt + Left/Right - Toggle the editor's tab or switch between data windows\n\n" \
 		"Navigation tree\n" \
+		"Ctrl + F - show find-in-tree filter\n" \
 		"Ctrl + C - copy the text of the selected item to the clipboard\n" \
 		"Ctrl + Shift + C - copy the DDL of the selected item to the clipboard\n\n" \
 		"Editor\n" \
@@ -1231,11 +1245,9 @@ BEGIN
 		"   Use >N or <N to find rows with more or less N\n" \
 		"   Use /smth to filter data by regular expression e.g. /^ABC\\b\n\n" \
 		"* Resultset and Data Edit dialog filters have the same functionality except /smth. These filters work only with fetched data in memory.\n\n"
-		"* The heat map for a resultset can be customized. Hold Ctrl if all columns\n   should have a common range. Hold Shift to invert colors.\n\n"
 		"* SQLite supports a limited subset of ALTER. So there is no UI to\n   change constrains or reorder columns in an existing table.\n\n" \
 		"* Do you need a newer version of SQLite? Check Wiki to get more details.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
-		"* Copy and Export result rows operations use the same settings as Tools >\n   Export as CSV file. Settings are updated when you export any table.\n\n" \
 		"* To import Excel data, copy it to clipboard and paste to an editor\n\n" \
 		"* A beep when a database is opened indicates that REST API is available"
 
@@ -1277,7 +1289,8 @@ BEGIN
 		"You can install exec-extension and use it to call non-SQL functions e.g. \n"\
 		"select exec('powershell -nologo ""Get-Content ?1""')\n\n"
 		"Be aware, these functions exist only in the sqlite-gui and they are \n" \
-		"very slow. Only scalar functions are supported."
+		"very slow. Only scalar functions are supported.\n\n" \
+		"Single argument function can be used as a column modifier.\n"
 
 	IDS_TEMP_EXPLAIN "Each tab uses an own independed connection to the database and hence " \
 		"has own TEMP-schema (SQLite limitation). The navigation tree shows TEMP-schema of a current tab. " \

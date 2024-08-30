@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 88;
+	const int ICOUNT = 89;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -14,7 +14,7 @@ namespace prefs {
 		"use-autocomplete", "autocomplete-by-tab", "disable-autocomplete-help", "use-foreign-keys", "use-legacy-rename", "editor-indent",
 		"editor-tab-count", "editor-tab-current", "highlight-delay",
 		"ask-delete", "word-wrap", "clear-values", "recent-count", "auto-filters", "edit-data-filter-mode",
-		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns",
+		"csv-export-is-unix-line", "csv-export-delimiter", "csv-export-is-columns", "copy-to-clipboard-delimiter",
 		"csv-import-encoding", "csv-import-delimiter", "csv-import-is-columns", "csv-import-is-create-table", "csv-import-is-truncate", "csv-import-is-replace", "csv-import-trim-values", "csv-import-skip-empty", "csv-import-abort-on-error",
 		"odbc-strategy",
 		"sql-export-multiple-insert", "extended-query-plan",
@@ -41,7 +41,7 @@ namespace prefs {
 		1, 1, 0, 0, 0, 0, // use
 		1, 0, 30,
 		0, 0, 0, 10, 1, 0,
-		0, 0, 1,
+		0, 0, 1, 0,
 		0, 0, 1, 1, 0, 1, 1, 1, 0, // csv-import
 		0,
 		0, 0,

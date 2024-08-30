@@ -65,6 +65,7 @@ namespace utils {
 	POINTFLOAT getDlgScale(HWND hWnd);
 	POINTFLOAT getWndScale(HWND hWnd);
 	int getEditHeight(HWND hWnd);
+	int getEditHeightByFont(HWND hWnd);
 	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess = false, bool doMore = false);
 
 	int getBlobSize (const unsigned char* data);

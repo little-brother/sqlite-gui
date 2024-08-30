@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.9.1"
-#define GUI_VERSION2               1, 9, 1, 0
+#define GUI_VERSION                "1.9.2"
+#define GUI_VERSION2               1, 9, 2, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -9,6 +9,7 @@
 #define EXTENSION_REPOSITORY       "little-brother/sqlite-extensions"
 #define EXTENSION_DIRECTORY        "\\extensions\\"
 #define VIEWER_REPOSITORY          "little-brother/sqlite-gui-value-viewers"
+#define MODIFIER_REPOSITORY        "little-brother/sqlite-gui-column-modifiers"
 #define PLUGIN_DIRECTORY           "\\plugins\\"
 
 #define IDD_ADDVIEWEDIT            11
@@ -88,12 +89,13 @@
 #define IDC_EDITOR                 263
 #define IDC_TAB                    264
 #define IDC_TREE                   265
-#define IDC_SCHEMA                 266
-#define IDC_EDITOR_SEARCH          267
-#define IDC_EDITOR_SEARCH_STRING   268
-#define IDC_EDITOR_SEARCH_PREV     269
-#define IDC_EDITOR_SEARCH_NEXT     270
-#define IDC_EDITOR_SEARCH_CLOSE    271
+#define IDC_TREE_SEARCH            266
+#define IDC_SCHEMA                 267
+#define IDC_EDITOR_SEARCH          270
+#define IDC_EDITOR_SEARCH_STRING   271
+#define IDC_EDITOR_SEARCH_PREV     272
+#define IDC_EDITOR_SEARCH_NEXT     273
+#define IDC_EDITOR_SEARCH_CLOSE    274
 #define IDC_CLI_EDITOR             275
 #define IDC_CLI_RESULT             276
 #define IDC_CLI_RAWDATA            277
@@ -261,10 +263,13 @@
 #define IDC_DLG_DATASET_NAME       482
 #define IDC_DLG_DATASET            483
 #define IDC_DLG_ADDON_LIST         484
+#define IDC_DLG_DELIMITER_LABEL    485
 #define IDC_DLG_EXTENSION_REPOSITORY        486
 #define IDC_DLG_EXTENSION_REPOSITORY_LABEL  487
 #define IDC_DLG_VIEWER_REPOSITORY           488
 #define IDC_DLG_VIEWER_REPOSITORY_LABEL     489
+#define IDC_DLG_MODIFIER_REPOSITORY         490
+#define IDC_DLG_MODIFIER_REPOSITORY_LABEL   491
 
 #define IDC_DLG_CIPHER_KEY                  601
 #define IDC_DLG_CIPHER_SHOW_KEY             602
@@ -322,10 +327,11 @@
 #define IDM_ATTACH_ODBC            1005
 #define IDM_ENCRYPTION             1006
 #define IDM_VIEWER_PLUGINS         1007
-#define IDM_EXTENSIONS             1008
-#define IDM_CUSTOM_FUNCTIONS       1009
-#define IDM_SETTINGS               1010
-#define IDM_EXIT                   1011
+#define IDM_MODIFIER_PLUGINS       1008
+#define IDM_EXTENSIONS             1009
+#define IDM_CUSTOM_FUNCTIONS       1020
+#define IDM_SETTINGS               1021
+#define IDM_EXIT                   1022
 
 #define IDM_RECENT                 1100 // iterable
 #define IDM_RECENT_ATTACHED        1150 // iterable
@@ -410,15 +416,11 @@
 #define IDM_RESULT_EXPORT          1627
 #define IDM_RESULT_EXCEL           1628
 #define IDM_RESULT_TRANSPOSE       1629
-#define IDM_RESULT_HEATMAP         1630
 
-//#define IDM_BLOB_VIEW              1680
-#define IDM_VALUE_FILE_OPEN              1681
-#define IDM_VALUE_FILE_SAVE              1682
-#define IDM_VALUE_FILE_SET               1683
-#define IDM_VALUE_FILE_EDIT              1684
-// #define IDM_BLOB_IMPORT            1682
-// #define IDM_BLOB_EXPORT            1683
+#define IDM_VALUE_FILE_OPEN        1681
+#define IDM_VALUE_FILE_SAVE        1682
+#define IDM_VALUE_FILE_SET         1683
+#define IDM_VALUE_FILE_EDIT        1684
 
 #define IDM_DEMODB_BOOKSTORE       1685
 #define IDM_DEMODB_CHINOOK         1686
@@ -468,6 +470,7 @@
 #define IDM_EXPORT_FILE            1731
 #define IDM_FILTER_TYPE            1732
 #define IDM_COMPARE_TEXTS          1733
+#define IDM_CHART_RESET            1734
 
 #define IDM_CLI_COPY               1740
 #define IDM_CLI_CUT                1741
@@ -478,9 +481,10 @@
 
 #define IDM_TEST                   1760
 
-#define IDM_RESULT_COMPARE         1800 // iterable, 50
-#define IDM_MENU_TRIGGER           1900 // iterable, 50
-#define IDM_MENU_INDEX             1950 // iterable, 50
+#define IDM_RESULT_COMPARE         1800 // iterable, 100
+#define IDM_RESULT_MODIFIER        1900 // iterable, MAX_PLUGIN_COUNT
+#define IDM_MENU_TRIGGER           2200 // iterable, 50
+#define IDM_MENU_INDEX             2250 // iterable, 50
 
 // Iterable. Should have a gap.
 #define IDC_HEADER_EDIT            2500
@@ -586,7 +590,6 @@
 #define WMU_UPDATE_SB_RESULTSET    WM_USER + 50
 #define WMU_RESULT_SEARCH          WM_USER + 51
 #define WMU_COMPARE                WM_USER + 52
-#define WMU_HEATMAP                WM_USER + 53
 #define WMU_UPDATE_SHEET_IDS       WM_USER + 54
 #define WMU_UPDATE_SHEET_PREVIEW   WM_USER + 55
 #define WMU_SET_THEME              WM_USER + 56
@@ -595,7 +598,8 @@
 #define WMU_UPDATE_META            WM_USER + 59
 #define WMU_SET_SCROLL_HEIGHT      WM_USER + 60
 #define WMU_ADD_EMPTY_ROW          WM_USER + 61
-#define WMU_TEST          WM_USER + 62
+#define WMU_TEST                   WM_USER + 62
+#define WMU_RESET_MODIFIER         WM_USER + 63
 
 // ricedit.h has own WM_USER + N message, but N less 210
 #define WMU_HIGHLIGHT              WM_USER + 260

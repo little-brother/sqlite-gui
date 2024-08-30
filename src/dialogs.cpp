@@ -1346,7 +1346,7 @@ namespace dialogs {
 				sqlite3_stmt *stmt;
 				char query8[2048];
 				snprintf(query8, 2047, "select count(1) from \"%s\".\"%s\"", schema8, tablename8);
-				//MessageBoxA(hWnd, query8, 0, 0);
+
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					sqlite3_step(stmt);
 					TCHAR count16[32];
@@ -1919,19 +1919,10 @@ namespace dialogs {
 				if (cmd == IDM_VALUE_VIEW) {
 					int rowNo = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTROW"));
 					int colNo = (int)(LONG_PTR)GetProp(hWnd, TEXT("CURRENTCOLUMN"));
-					int colCount = ListView_GetColumnCount(hListWnd);
-					int no = colNo + resultset[rowNo] * (colCount - 1);
-					TCHAR* text16 = cache[resultset[rowNo]][colNo];
 
-					if (datatypes[no] == SQLITE_NULL)
-						return 0;
-
-					TDlgValueParam data = {0};
-					if (datatypes[no] == SQLITE_BLOB)
-						data = {SQLITE_BLOB, blobs[no]};
-					else
-						data = {SQLITE_TEXT, (const unsigned char*)text16};
-					openDialog(IDD_VALUE_VIEWER, (DLGPROC)dialogs::cbDlgValueViewer, (LPARAM)&data);
+					TValue value = {0};
+					if (ListView_GetItemValue(hListWnd, rowNo, colNo, &value))
+						openDialog(IDD_VALUE_VIEWER, (DLGPROC)cbDlgValueViewer, (LPARAM)&value);
 				}
 
 				if (cmd == IDM_VALUE_EDIT) {
@@ -2525,11 +2516,17 @@ namespace dialogs {
 				SetProp(hPreviewWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hPreviewWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewValueViewer));
 				SetProp(hPreviewWnd, TEXT("INFO"), (HANDLE)(new TCHAR[255]));
 				SetProp(hPreviewWnd, TEXT("EXT"), (HANDLE)(new TCHAR[32]));
+
+				TValue* value = (TValue*)lParam;
+				SetProp(hPreviewWnd, TEXT("DATA"), (HANDLE)value->data);
+				SetProp(hPreviewWnd, TEXT("DATATYPE"), IntToPtr(value->dataType));
+				SetProp(hPreviewWnd, TEXT("DATALEN"), IntToPtr(value->dataLen));
+
 				SendMessage(hPreviewWnd, WM_SETFONT, (LPARAM)hFont, 0);
 				CreateWindowEx(WS_EX_TOPMOST, WC_STATIC, NULL, WS_VISIBLE | WS_CHILD | SS_CENTER | SS_CENTERIMAGE | SS_NOTIFY, 20, 20, 100, 100, hPreviewWnd, (HMENU)IDC_PREVIEW_INFO, GetModuleHandle(0), NULL);
 
-				TDlgValueParam* param = (TDlgValueParam*)lParam;
-				PostMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, (WPARAM)param->dataType, (LPARAM)param->data);
+				SetWindowLongPtr(hPreviewWnd, GWLP_USERDATA, lParam);
+				PostMessage(hPreviewWnd, WMU_UPDATE_PREVIEW, 0, 0);
 
 				utils::alignDialog(hWnd, hMainWnd);
 			}
@@ -2563,6 +2560,7 @@ namespace dialogs {
 		return false;
 	}
 
+	// USERDATA = TValue
 	LRESULT CALLBACK cbNewValueViewer (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_SIZE: {
@@ -2616,8 +2614,9 @@ namespace dialogs {
 
 				if (cmd == IDM_PREVIEW_TO_FILE || cmd == IDM_PREVIEW_AS_FILE) {
 					TCHAR* ext16 = (TCHAR*)GetProp(hWnd, TEXT("EXT"));
-					unsigned char* data = (unsigned char*)GetProp(hWnd, TEXT("DATA"));
+					const unsigned char* data = (const unsigned char*)GetProp(hWnd, TEXT("DATA"));
 					int dataType = PtrToInt(GetProp(hWnd, TEXT("DATATYPE")));
+					int dataLen = PtrToInt(GetProp(hWnd, TEXT("DATALEN")));
 
 					TCHAR path16[MAX_PATH + 1] {0};
 					if (cmd == IDM_PREVIEW_TO_FILE) {
@@ -2632,7 +2631,7 @@ namespace dialogs {
 
 					if (dataType == SQLITE_BLOB) {
 						FILE* f = _tfopen(path16, TEXT("wb"));
-						fwrite(data + 4, utils::getBlobSize(data) - 4, 1, f);
+						fwrite(data, dataLen, 1, f);
 						fclose(f);
 					} else {
 						FILE* f = _tfopen(path16, TEXT("wb, ccs=UTF-8"));
@@ -2653,7 +2652,7 @@ namespace dialogs {
 
 				if (cmd == IDM_PREVIEW_SWITCH_PLUGIN) {
 					SetProp(hWnd, TEXT("SWITCH"), IntToPtr(1));
-					SendMessage(hWnd, WMU_UPDATE_PREVIEW, (WPARAM)GetProp(hWnd, TEXT("DATATYPE")), (LPARAM)GetProp(hWnd, TEXT("DATA")));
+					SendMessage(hWnd, WMU_UPDATE_PREVIEW, 0, 0);
 				}
 			}
 			break;
@@ -2668,37 +2667,32 @@ namespace dialogs {
 				if(!GetProp(hWnd, TEXT("SWITCH")))
 					RemoveProp(hWnd, TEXT("PLUGINNO"));
 
-				RemoveProp(hWnd, TEXT("DATA"));
-				RemoveProp(hWnd, TEXT("DATATYPE"));
-
 				HWND hInfoWnd = GetDlgItem(hWnd, IDC_PREVIEW_INFO);
 				ShowWindow(hInfoWnd, SW_HIDE);
 			}
 			break;
 
-			// wParam = SQLite type, lParam = data
+			// wParam = cell
 			case WMU_UPDATE_PREVIEW: {
 				SendMessage(hWnd, WMU_RESET_PREVIEW, 0, 0);
-				SetProp(hWnd, TEXT("DATATYPE"), (HANDLE)wParam);
-				SetProp(hWnd, TEXT("DATA"), (HANDLE)lParam);
+
 
 				bool isSwitch = PtrToInt(GetProp(hWnd, TEXT("SWITCH")));
 				RemoveProp(hWnd, TEXT("SWITCH"));
 
-				int dataType = wParam;
 				HWND hInfoWnd = GetDlgItem(hWnd, IDC_PREVIEW_INFO);
 				ShowWindow(hInfoWnd, SW_HIDE);
+
+				const unsigned char* data = (const unsigned char*)GetProp(hWnd, TEXT("DATA"));
+				int dataType = PtrToInt(GetProp(hWnd, TEXT("DATATYPE")));
+				int dataLen = PtrToInt(GetProp(hWnd, TEXT("DATALEN")));
 
 				if (dataType == SQLITE_NULL) {
 					SetWindowText(hWnd, TEXT("The value is NULL"));
 					return 0;
 				}
 
-				const unsigned char* blob = (const unsigned char*)lParam;
-				TCHAR* text = (TCHAR*)lParam;
 				TCHAR infoText16[255] = {0x25B2, 0};
-				const unsigned char* data = dataType == SQLITE_BLOB ? blob + 4 : (const unsigned char *)text;
-				int dataLen = dataType == SQLITE_BLOB ? utils::getBlobSize(blob) - 4 : _tcslen(text);
 				TCHAR* info16 = (TCHAR*)GetProp(hWnd, TEXT("INFO"));
 				TCHAR* ext16 = (TCHAR*)GetProp(hWnd, TEXT("EXT"));
 
@@ -4059,7 +4053,7 @@ namespace dialogs {
 				HWND hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE, NULL, hWnd, IDC_DLG_STATUSBAR);
 
 				int type = lParam;
-				const TCHAR* type16 = ADDON_TYPES16[type];
+				const TCHAR* type16 = ADDON_EXTS16[type];
 				SetWindowLongPtr(hWnd, GWLP_USERDATA, type);
 
 				sqlite3_exec(prefs::db, "create table if not exists temp.addons (name primary key, enable, version, installed_version, installed, author, homepage, brief, description)", 0, 0, 0);
@@ -4073,7 +4067,9 @@ namespace dialogs {
 				SHFileOperation(&fo);
 				SHCreateDirectoryEx(0, uploadPath16, 0);
 
-				char* repository8 = type == ADDON_SQLITE_EXTENSION ? prefs::get("extension-repository", EXTENSION_REPOSITORY) : prefs::get("viewer-repository", VIEWER_REPOSITORY);
+				char* repository8 = type == ADDON_SQLITE_EXTENSION ? prefs::get("extension-repository", EXTENSION_REPOSITORY) :
+					type == ADDON_COLUMN_MODIFIER ? prefs::get("modifier-repository", MODIFIER_REPOSITORY) :
+					prefs::get("viewer-repository", VIEWER_REPOSITORY);
 				SetProp(hWnd, TEXT("REPOSITORY8"), repository8);
 
 				// Repo
@@ -4082,7 +4078,7 @@ namespace dialogs {
 				char* repo8 = utils::httpRequest("GET", "raw.githubusercontent.com", url8);
 
 				char title8[1024];
-				snprintf(title8, 1023, "%s - github.com/%s", type == ADDON_VALUE_VIEWER ? "Viewer plugin manager" : "SQLite extension manager", repository8);
+				snprintf(title8, 1023, "%s - github.com/%s", type == ADDON_VALUE_VIEWER ? "Value viewer plugin manager" : type == ADDON_COLUMN_MODIFIER ? "Column modifier plugin manager" : "SQLite extension manager", repository8);
 				TCHAR* title16 = utils::utf8to16(title8);
 				SetWindowText(hWnd, title16);
 				delete [] title16;
@@ -4229,7 +4225,7 @@ namespace dialogs {
 			case WM_NOTIFY: {
 				NMHDR* pHdr = (LPNMHDR)lParam;
 				int type = GetWindowLongPtr(hWnd, GWLP_USERDATA);
-				const TCHAR* type16 = ADDON_TYPES16[type];
+				const TCHAR* type16 = ADDON_EXTS16[type];
 
 				if (pHdr->code == (DWORD)LVN_ITEMCHANGING && pHdr->idFrom == IDC_DLG_ADDON_LIST && IsWindowVisible(hWnd)) {
 					NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
@@ -4507,6 +4503,7 @@ namespace dialogs {
 						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
 						int no = ListBox_AddString(hListWnd, name16);
 						ListBox_SetItemData(hListWnd, no, sqlite3_column_int(stmt, 0));
+						delete [] name16;
 					}
 				}
 				sqlite3_finalize(stmt);
@@ -5148,6 +5145,21 @@ namespace dialogs {
 			DeleteObject(hNullBrush);
 		}
 
+		if (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) {
+			double zoom = PtrToInt(GetProp(hChartWnd, TEXT("ZOOM"))) / 10.0;
+			minX /= zoom;
+			maxX /= zoom;
+
+			RECT rc{0};
+			GetClientRect(hChartWnd, &rc);
+			int w = rc.right;
+			double offsetX = (double)PtrToInt(GetProp(hChartWnd, TEXT("POSITION")));
+			offsetX = map(offsetX, 0, w - 2 * CHART_BORDER, 0, maxX - minX);
+
+			minX -= offsetX;
+			maxX -= offsetX;
+		}
+
 		// Grid
 		if (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) {
 			HPEN hPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
@@ -5188,8 +5200,10 @@ namespace dialogs {
 					_tcsftime(val, 64, d < DAY ? TEXT("%Y-%m-%d %H:%M") : TEXT("%Y-%m-%d"), &ts);
 
 					RECT rc {x - 30, 10, x + 30, CHART_BORDER + 5};
+					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_WORDBREAK | DT_CENTER | DT_CALCRECT);
 					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_WORDBREAK | DT_CENTER);
 					RECT rc2 {x - 30, h - CHART_BORDER + 10, x + 30, h};
+					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER | DT_CALCRECT);
 					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER);
 				}
 			} else {
@@ -5208,8 +5222,11 @@ namespace dialogs {
 					_sntprintf(val, 63, TEXT("%g"), x0);
 
 					RECT rc {x - 30, 0, x + 30, CHART_BORDER - 5};
+					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_SINGLELINE | DT_CENTER | DT_CALCRECT);
 					DrawText(hdc, val, _tcslen(val), &rc, DT_BOTTOM | DT_SINGLELINE | DT_CENTER);
+
 					RECT rc2 {x - 30, h - CHART_BORDER + 5, x + 30, h};
+					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_SINGLELINE | DT_CENTER | DT_CALCRECT);
 					DrawText(hdc, val, _tcslen(val), &rc2, DT_TOP | DT_SINGLELINE | DT_CENTER);
 				}
 			}
@@ -5238,6 +5255,7 @@ namespace dialogs {
 			DeleteObject(hPen);
 		}
 
+		// Graph
 		int lineNo = 0;
 		if (type == CHART_LINES || type == CHART_DOTS) {
 			for (int colNo = 1; colNo < colCount; colNo++) {
@@ -5254,14 +5272,17 @@ namespace dialogs {
 				int pointCount = 0;
 
 				for (int rowNo = 0; rowNo < rowCount; rowNo++) {
-					if (data[colNo + rowNo * colCount] == CHART_NULL)
+					double valX = data[colBase + rowNo * colCount];
+					double valY = data[colNo + rowNo * colCount];
+
+					if (valX == CHART_NULL || valY == CHART_NULL)
 						continue;
 
-					if (data[colBase + rowNo * colCount] == CHART_NULL)
+					if (valX < minX || valX > maxX)
 						continue;
 
-					double x = map(data[colBase + rowNo * colCount], minX, maxX, CHART_BORDER, w - CHART_BORDER);
-					double y = h - map(data[colNo + rowNo * colCount], minY, maxY, CHART_BORDER, h - CHART_BORDER);
+					double x = map(valX, minX, maxX, CHART_BORDER, w - CHART_BORDER);
+					double y = h - map(valY, minY, maxY, CHART_BORDER, h - CHART_BORDER);
 
 					if (type == CHART_LINES) {
 						if (!pointCount) {
@@ -5668,6 +5689,8 @@ namespace dialogs {
 				float d = ceil(log10(maxY - minY));
 				minmax[2] = floor(minY/d) * d;
 				minmax[3] = ceil(maxY/d) * d;
+
+				SendMessage(GetDlgItem(hWnd, IDC_DLG_CHART), WM_COMMAND, IDM_CHART_RESET, 0);
 			}
 			break;
 
@@ -6175,14 +6198,21 @@ namespace dialogs {
 				char* viewerRepository8 = prefs::get("viewer-repository", VIEWER_REPOSITORY);
 				TCHAR* viewerRepository16 = utils::utf8to16(viewerRepository8);
 				SetDlgItemText(hTabWnd, IDC_DLG_VIEWER_REPOSITORY, viewerRepository16);
-				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_VIEWER_REPOSITORY), viewerRepository16);
+				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_VIEWER_REPOSITORY), TEXT(VIEWER_REPOSITORY));
 				delete [] viewerRepository16;
 				delete [] viewerRepository8;
+
+				char* modifierRepository8 = prefs::get("modifier-repository", MODIFIER_REPOSITORY);
+				TCHAR* modifierRepository16 = utils::utf8to16(modifierRepository8);
+				SetDlgItemText(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY, modifierRepository16);
+				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY), TEXT(MODIFIER_REPOSITORY));
+				delete [] modifierRepository16;
+				delete [] modifierRepository8;
 
 				char* extensionRepository8 = prefs::get("extension-repository", EXTENSION_REPOSITORY);
 				TCHAR* extensionRepository16 = utils::utf8to16(extensionRepository8);
 				SetDlgItemText(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY, extensionRepository16);
-				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY), extensionRepository16);
+				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY), TEXT(EXTENSION_REPOSITORY));
 				delete [] extensionRepository16;
 				delete [] extensionRepository8;
 
@@ -6190,6 +6220,11 @@ namespace dialogs {
 				for (int i = 0; i < 3; i++)
 					ComboBox_AddString(hIndent, INDENT_LABELS[i]);
 				ComboBox_SetCurSel(hIndent, prefs::get("editor-indent"));
+
+				HWND hDelimiter = GetDlgItem(hTabWnd, IDC_DLG_DELIMITER);
+				for (int i = 0; i < 4; i++)
+					ComboBox_AddString(hDelimiter, i != 2 ? tools::DELIMITERS[i] : TEXT("Tab"));
+				ComboBox_SetCurSel(hDelimiter, prefs::get("copy-to-clipboard-delimiter"));
 
 				HBRUSH* brushes = new HBRUSH[SETTING_COLOR_COUNT]{0};
 				brushes[0] = CreateSolidBrush(prefs::get("color-keyword"));
@@ -6240,6 +6275,7 @@ namespace dialogs {
 					prefs::set("editor-indent", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_INDENT)));
 					prefs::set("use-foreign-keys", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_FOREIGN_KEYS)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_LEGACY_RENAME)));
+					prefs::set("copy-to-clipboard-delimiter", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_DELIMITER)));
 
 					GetDlgItemText(hTabWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
@@ -6268,6 +6304,11 @@ namespace dialogs {
 					char* viewerRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(VIEWER_REPOSITORY));
 					prefs::set("viewer-repository", viewerRepository8);
 					delete [] viewerRepository8;
+
+					GetDlgItemText(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY, buf, 254);
+					char* modifierRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(MODIFIER_REPOSITORY));
+					prefs::set("modifier-repository", modifierRepository8);
+					delete [] modifierRepository8;
 
 					GetDlgItemText(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY, buf, 254);
 					char* extensionRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(EXTENSION_REPOSITORY));
@@ -6321,12 +6362,14 @@ namespace dialogs {
 						IDC_DLG_COLOR + 6, IDC_DLG_COLOR + 7, IDC_DLG_COLOR + 8, IDC_DLG_COLOR + 9, IDC_DLG_COLOR + 10,
 						IDC_DLG_COLOR + 11, IDC_DLG_ESCAPE_LABEL, IDC_DLG_EXIT_BY_ESCAPE, IDC_DLG_INDENT_LABEL, IDC_DLG_INDENT,
 						IDC_DLG_ROW_LIMIT_LABEL, IDC_DLG_ROW_LIMIT, IDC_DLG_CLI_ROW_LIMIT_LABEL, IDC_DLG_CLI_ROW_LIMIT,
-						IDC_DLG_BEEP_LABEL, IDC_DLG_BEEP_ON_QUERY_END
+						IDC_DLG_BEEP_LABEL, IDC_DLG_BEEP_ON_QUERY_END,
+						IDC_DLG_DELIMITER_LABEL, IDC_DLG_DELIMITER
 					},
 					{
 						IDC_DLG_STARTUP, IDC_DLG_STARTUP_LABEL, IDC_DLG_FOREIGN_KEYS, IDC_DLG_LEGACY_RENAME,
 						IDC_DLG_GOOGLE_KEY_LABEL, IDC_DLG_GOOGLE_KEY,
 						IDC_DLG_VIEWER_REPOSITORY, IDC_DLG_VIEWER_REPOSITORY_LABEL,
+						IDC_DLG_MODIFIER_REPOSITORY, IDC_DLG_MODIFIER_REPOSITORY_LABEL,
 						IDC_DLG_EXTENSION_REPOSITORY, IDC_DLG_EXTENSION_REPOSITORY_LABEL
 					}
 				};
@@ -7215,30 +7258,35 @@ namespace dialogs {
 		switch (msg) {
 			case WM_DESTROY: {
 				RemoveProp(hWnd, TEXT("SCROLLY"));
-			}
-			break;
-
-			case WM_ERASEBKGND: {
-				RECT rc{0};
-				GetClientRect(hWnd, &rc);
-				FillRect((HDC)wParam, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
-
-				return true;
+				RemoveProp(hWnd, TEXT("ZOOM"));
+				RemoveProp(hWnd, TEXT("POSITION"));
 			}
 			break;
 
 			case WM_PAINT : {
-				InvalidateRect(hWnd, NULL, true);
+				InvalidateRect(hWnd, NULL, TRUE);
 				RECT rc{0};
 				GetClientRect(hWnd, &rc);
 				int w = rc.right;
 				int h = rc.bottom;
 
 				PAINTSTRUCT ps{0};
-				ps.fErase = true;
+				ps.fErase = FALSE;
 				HDC hdc = BeginPaint(hWnd, &ps);
 
-				drawChart(hWnd, hdc, w, h, (int)(LONG_PTR)GetProp(hWnd, TEXT("SCROLLY")));
+				// Double buffering https://stackoverflow.com/a/25461603/6121703
+				HDC memDC = CreateCompatibleDC(hdc);
+				HBITMAP hBmp = CreateCompatibleBitmap(hdc, w, h);
+				HBITMAP hOldBmp = (HBITMAP)SelectObject(memDC, hBmp);
+
+				FillRect(memDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+				drawChart(hWnd, memDC, w, h, (int)(LONG_PTR)GetProp(hWnd, TEXT("SCROLLY")));
+				BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
+
+				SelectObject(memDC, hOldBmp);
+				DeleteObject(hBmp);
+				DeleteDC(memDC);
+
 				EndPaint(hWnd, &ps);
 
 				return true;
@@ -7291,19 +7339,41 @@ namespace dialogs {
 					ReleaseDC(hWnd, hDC);
 					DeleteObject(hBitmap);
 				}
+
+				if (wParam == IDM_CHART_RESET) {
+					SetProp(hWnd, TEXT("ZOOM"), IntToPtr(10));
+					SetProp(hWnd, TEXT("POSITION"), 0);
+					InvalidateRect(hWnd, NULL, TRUE);
+				}
 			}
 			break;
 
 			case WM_LBUTTONDOWN: {
+				SetProp(hWnd, TEXT("LAST_POSITION"), IntToPtr(GET_X_LPARAM(lParam)));
+				SetCapture(hWnd);
 				SetFocus(hWnd);
+				return true;
+			}
+			break;
+
+			case WM_LBUTTONUP: {
+				ReleaseCapture();
 				return true;
 			}
 			break;
 
 			case WM_MOUSEMOVE: {
 				HWND hParentWnd = GetParent(hWnd);
-
 				int type = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("TYPE"));
+
+				if (wParam & MK_LBUTTON) {
+					int pos = PtrToInt(GetProp(hWnd, TEXT("POSITION")));
+					int delta = PtrToInt(GetProp(hWnd, TEXT("LAST_POSITION"))) - GET_X_LPARAM(lParam);
+					SetProp(hWnd, TEXT("POSITION"), IntToPtr(pos - delta));
+					SetProp(hWnd, TEXT("LAST_POSITION"), IntToPtr(GET_X_LPARAM(lParam)));
+					InvalidateRect(hWnd, NULL, TRUE);
+				}
+
 				if (type == CHART_LINES || type == CHART_DOTS || type == CHART_AREAS || type == CHART_HISTOGRAM) {
 					int* colTypes = (int*)GetProp(hParentWnd, TEXT("COLTYPES"));
 					int colBase = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("COLBASE"));
@@ -7320,9 +7390,14 @@ namespace dialogs {
 					int w = rc.right;
 					int h = rc.bottom;
 
+					double zoom = PtrToInt(GetProp(hWnd, TEXT("ZOOM"))) / 10.0;
+					minX /= zoom;
+					maxX /= zoom;
+					int offsetX = PtrToInt(GetProp(hWnd, TEXT("POSITION")));
+
 					TCHAR title[255]{0};
-					double x = LOWORD(lParam);
-					double y = h - HIWORD(lParam);
+					double x = GET_X_LPARAM(lParam) - offsetX;
+					double y = h - GET_Y_LPARAM(lParam);
 					x = map(x, CHART_BORDER, w - CHART_BORDER, minX, maxX);
 					y = map(y, CHART_BORDER, h - CHART_BORDER, minY, maxY);
 
@@ -7336,6 +7411,38 @@ namespace dialogs {
 						_sntprintf(title, 63, TEXT("X: %g, Y: %g"), x, y);
 					}
 					SetWindowText(hParentWnd, title);
+				}
+			}
+			break;
+
+			case WM_MOUSEWHEEL: {
+				HWND hParentWnd = GetParent(hWnd);
+
+				int type = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("TYPE"));
+				bool isUp = GET_WHEEL_DELTA_WPARAM(wParam) > 0;
+				if (type == CHART_BARS) {
+					int action = isUp ? SB_LINEUP : SB_LINEDOWN;
+					SendMessage(hWnd, WM_VSCROLL, MAKELPARAM(action, 0), 0);
+				} else {
+					RECT rc{0};
+					GetClientRect(hWnd, &rc);
+					int w = rc.right;
+
+					POINT p = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+					ScreenToClient(hWnd, &p);
+					double aspect = (double)(p.x - CHART_BORDER) / (w - 2.0 * CHART_BORDER);
+
+					int zoom = PtrToInt(GetProp(hWnd, TEXT("ZOOM")));
+					int pos = PtrToInt(GetProp(hWnd, TEXT("POSITION")));
+
+					int prevZoom = zoom;
+					zoom = MAX(zoom + (isUp ? 2 : -2), 10);
+					pos -= (w - 2.0 * CHART_BORDER) * (zoom - prevZoom) / 10. * aspect;
+
+					SetProp(hWnd, TEXT("ZOOM"), IntToPtr(zoom));
+					SetProp(hWnd, TEXT("POSITION"), IntToPtr(pos));
+
+					InvalidateRect(hWnd, NULL, TRUE);
 				}
 			}
 			break;
@@ -7397,23 +7504,13 @@ namespace dialogs {
 					si.nTrackPos = 0;
 					SetScrollInfo(hWnd, SB_VERT, &si, true);
 					SetProp(hWnd, TEXT("SCROLLY"), 0);
+				} else {
+					PostMessage(hWnd, WM_COMMAND, IDM_CHART_RESET, 0);
 				}
 
-				InvalidateRect(hWnd, 0, true);
+				InvalidateRect(hWnd, 0, TRUE);
 
 				return true;
-			}
-			break;
-
-			case WM_MOUSEWHEEL: {
-				HWND hParentWnd = GetParent(hWnd);
-
-				int type = (int)(LONG_PTR)GetProp(hParentWnd, TEXT("TYPE"));
-				if (type != CHART_BARS)
-					return true;
-
-				int action = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN;
-				SendMessage(hWnd, WM_VSCROLL, MAKELPARAM(action, 0), 0);
 			}
 			break;
 		}
@@ -7548,7 +7645,6 @@ namespace dialogs {
 						PostMessage(hChartWnd, WM_SIZE, 0, MAKELPARAM(rc.right, rc.bottom));
 					}
 				}
-
 			}
 			break;
 		}

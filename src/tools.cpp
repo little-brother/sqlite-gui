@@ -2672,7 +2672,7 @@ namespace tools {
 		return false;
 	}
 
-// lParam = TDlgParam
+	// lParam = TDlgParam
 	BOOL CALLBACK cbDlgTextComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -3137,17 +3137,16 @@ namespace tools {
 		delete [] delete8;
 		fclose(f);
 
-		if (rc && isAutoTransaction)
-			sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
-
 		if (!rc) {
 			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
 			_sntprintf(err16, 1023, TEXT("Error: %s"), _err16);
 			delete [] _err16;
-			return -1;
 		}
 
-		return rowNo;
+		if (isAutoTransaction)
+			sqlite3_exec(db, rc ? "commit" : "rollback", NULL, 0, NULL);
+
+		return rc ? rowNo : -1;
 	}
 
 	int exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16) {
