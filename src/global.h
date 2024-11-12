@@ -188,6 +188,6 @@ ULONG_PTR Menu_GetItemData(HMENU hMenu, UINT wID);
 COLORREF RichEdit_GetTextColor (HWND hWnd, int pos);
 int TabCtrl_GetItemText(HWND hWnd, int iItem, TCHAR* pszText, int cchTextMax);
 LRESULT onListViewMenu(HWND hListWnd, int rowNo, int colNo, int cmd, bool ignoreLastColumn = false);
-TCHAR* getDDL(const TCHAR* schema16, const TCHAR* name16, int type, bool withDrop = false);
+TCHAR* getDDL(const TCHAR* schema16, const TCHAR* name16, int type, int mode = 0);
 bool showDbError(HWND hWnd);
 #endif

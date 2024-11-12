@@ -150,6 +150,12 @@ namespace tools {
 						return true;
 					}
 
+					SYSTEMTIME st;
+					GetLocalTime(&st);
+					fprintf(f, "-- %s\n", sqlite3_db_filename(db, 0));
+					fprintf(f, "-- %.4u-%.2u-%.2u %.2u:%.2u\n\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+					fprintf(f, "pragma defer_foreign_keys = 1;\n\n");
+
 					bool isDDL = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DDLONLY));
 					bool isData = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATADDL)) || Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_DATAONLY));
 					bool isMultipleInsert = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_MULTIPLE_INSERT));
@@ -231,6 +237,9 @@ namespace tools {
 							delete [] table8;
 						}
 					}
+
+					fprintf(f, "pragma defer_foreign_keys = 0;");
+
 					fclose(f);
 
 					if (rc) {
@@ -1359,9 +1368,975 @@ namespace tools {
 		return false;
 	}
 
+	// Diagram
+	typedef struct TDiagramTable {
+		int x;
+		int y;
+		int width;
+		int colCount;
+		int offset;
+		int isView;
+		int isHidden;
+	} TDiagramTable;
+
+	typedef struct TDiagramLinks {
+		int tblFrom;
+		int colFrom; // -1 for View and Trigger
+		int tblTo;
+		int colTo;   // -1 for View and Trigger
+		int type;    // 1 = FK, 2 = View, 3 = Trigger
+	} TDiagramLink;
+
+	HMENU hDiagramMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_DIAGRAM)), 0);
+	HMENU hDiagramTableMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_DIAGRAM_TABLE)), 0);
+
+	void drawDiagram(HWND hWnd, HDC hDC, int w, int h, POINT* screenOffset) {
+		TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+		TDiagramLink* links = (TDiagramLink*)GetProp(hWnd, TEXT("LINKS"));
+		TCHAR** strings = (TCHAR**)GetProp(hWnd, TEXT("STRINGS"));
+		int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+		int linkCount = PtrToInt(GetProp(hWnd, TEXT("LINKCOUNT")));
+		int lineHeight = PtrToInt(GetProp(hWnd, TEXT("LINEHEIGHT")));
+		int lineHeight2 = PtrToInt(GetProp(hWnd, TEXT("LINEHEIGHT2")));
+		int isolatedTableNo = PtrToInt(GetProp(hWnd, TEXT("ISOLATEDTABLE")));
+		TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+
+		RECT rc = {0, 0, w, h};
+		FillRect(hDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+		COLORREF captionColor = RGB(240, 200, 180);
+		COLORREF captionColor2 = RGB(200, 255, 255);
+		COLORREF captionColor3 = RGB(255, 0, 0);
+		HBRUSH hCaptionBrush = CreateSolidBrush(captionColor);
+		HBRUSH hCaptionBrush2 = CreateSolidBrush(captionColor2);
+		HBRUSH hCaptionBrush3 = CreateSolidBrush(captionColor3);
+		HPEN hBorderPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+		HPEN hCaptionPen = CreatePen(PS_SOLID, 1, captionColor);
+		HPEN hCaptionPen2 = CreatePen(PS_SOLID, 1, captionColor2);
+		HPEN hCaptionPen3 = CreatePen(PS_SOLID, 1, captionColor3);
+
+		COLORREF linkColor = RGB(0, 0, 0);
+		HPEN hLinkPen = CreatePen(PS_SOLID, 1, linkColor);
+		HBRUSH hLinkBrush = CreateSolidBrush(linkColor);
+
+		HBRUSH hOldBrush = (HBRUSH)SelectObject(hDC, GetStockObject(WHITE_BRUSH));
+		HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
+		HPEN hOldPen = (HPEN)SelectObject(hDC, hBorderPen);
+
+		// Diagram Border
+		if (1) {
+			RECT rc = {0};
+			SendMessage(hWnd, WMU_GET_DIAGRAM_RECT, (WPARAM)&rc, 0);
+
+			HPEN hPen = CreatePen(PS_DOT, 1, RGB(200, 200, 200));
+			SelectObject(hDC, hPen);
+			Rectangle(hDC, rc.left + screenOffset->x - 1, rc.top + screenOffset->y - 1, rc.right + screenOffset->x + 1, rc.bottom + screenOffset->y + 1);
+			DeleteObject(hPen);
+		}
+
+		// Links
+		for (int linkNo = 0; linkNo < linkCount && prefs::get("show-fk-links"); linkNo++) {
+			TDiagramLink link = links[linkNo];
+
+			TDiagramTable from = tables[link.tblFrom];
+			TDiagramTable to = tables[link.tblTo];
+
+			if (link.type != 1)
+				continue;
+
+			if (to.isHidden || from.isHidden)
+				continue;
+
+			SelectObject(hDC, hLinkPen);
+			SelectObject(hDC, hLinkBrush);
+
+			int caseNo = 0;
+			int ax = 0;
+			int bx = 0;
+
+			if (from.x + from.width + 10 < to.x) {
+				caseNo = 1;
+				ax = from.x + from.width;
+				bx = to.x;
+			} else if (to.x + to.width + 10 < from.x) {
+				caseNo = 2;
+				ax = from.x;
+				bx = to.x + to.width;
+			} else {
+				caseNo = 3;
+				ax = from.x + from.width;
+				bx = to.x + to.width;
+			}
+
+			int ay = from.y + lineHeight + 10 + link.colFrom * lineHeight + lineHeight / 2;
+			int by = to.y + lineHeight + 10 + link.colTo * lineHeight + lineHeight / 2;
+			int mx = (caseNo == 3 ? MAX(ax, bx) + 20 : (ax + bx) / 2) + (link.type - 1) * 5;
+
+			MoveToEx(hDC, screenOffset->x + ax, screenOffset->y + ay, NULL);
+			LineTo(hDC, screenOffset->x + mx, screenOffset->y + ay);
+			LineTo(hDC, screenOffset->x + mx, screenOffset->y + by);
+			LineTo(hDC, screenOffset->x + bx, screenOffset->y + by);
+
+			// Draw arrow
+			int px = caseNo == 1 ? bx - 7 : bx + 7;
+			POINT arrow[4] = {
+				{screenOffset->x + bx, screenOffset->y + by},
+				{screenOffset->x + px, screenOffset->y + by + 4},
+				{screenOffset->x + px, screenOffset->y + by - 4},
+				{screenOffset->x + bx, screenOffset->y + by}};
+
+			Polygon(hDC, arrow, 4);
+		}
+
+		// Isolated reasons
+		if (isolatedTableNo && prefs::get("show-isolation-reasons")) {
+			SelectObject(hDC, hMenuFont);
+			for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+				TDiagramTable tbl = tables[tblNo];
+
+				if (tbl.isHidden || isolatedTableNo == tblNo)
+					continue;
+
+				int reasonNo = 0;
+				for (int linkNo = 0; linkNo < linkCount; linkNo++) {
+					bool isRefBy = (links[linkNo].tblTo == tblNo) && (links[linkNo].tblFrom == isolatedTableNo);
+					bool isRefTo = (links[linkNo].tblFrom == tblNo) && (links[linkNo].tblTo == isolatedTableNo);
+					if (isRefBy || isRefTo) {
+						SetTextColor(hDC, isRefBy ? captionColor3 : RGB(0, 0, 0));
+						rc = {
+							screenOffset->x + tbl.x + 5,
+							screenOffset->y + tbl.y + lineHeight + 10 + lineHeight * tbl.colCount + lineHeight2 * (reasonNo),
+							screenOffset->x + tbl.x + tbl.width + 400,
+							screenOffset->y + tbl.y + lineHeight + 10 + lineHeight * tbl.colCount + lineHeight2 * (reasonNo + 1)
+						};
+
+						TDiagramLink link = links[linkNo];
+						DrawText(hDC,
+							link.type == 2 && isRefTo ? TEXT("Uses as a source") :
+							link.type == 2 && isRefBy ? TEXT("Used as a source") :
+							link.type == 3 && isRefTo ? TEXT("Has ref in a trigger") :
+							link.type == 3 && isRefBy ? TEXT("Has ref in a trigger") :
+							TEXT("Linked by foreign key"),
+							-1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+						reasonNo++;
+					}
+				}
+			}
+		}
+
+		// Tables
+		bool isShowColumnTypes = prefs::get("show-column-types");
+		for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+			TDiagramTable tbl = tables[tblNo];
+
+			if (tbl.isHidden)
+				continue;
+
+			// Table border
+			SelectObject(hDC, hBorderPen);
+			SelectObject(hDC, GetStockObject(WHITE_BRUSH));
+			RECT rc = {
+				screenOffset->x + tbl.x,
+				screenOffset->y + tbl.y,
+				screenOffset->x + tbl.x + tbl.width,
+				screenOffset->y + tbl.y + (tables[tblNo].colCount + 1) * lineHeight + 10
+			};
+			Rectangle(hDC, rc.left, rc.top, rc.right, rc.bottom + 1);
+
+			// Table caption
+			SelectObject(hDC, hFont);
+			SetTextColor(hDC, tblNo == isolatedTableNo ? RGB(255, 255, 255) : RGB(0, 0, 0));
+			SetBkColor(hDC, tblNo == isolatedTableNo ? captionColor3 : tbl.isView ? captionColor2 : captionColor);
+			SelectObject(hDC, tblNo == isolatedTableNo ? hCaptionBrush3 : tbl.isView ? hCaptionBrush2 : hCaptionBrush);
+			SelectObject(hDC, tblNo == isolatedTableNo ? hCaptionPen3 : tbl.isView ? hCaptionPen2 : hCaptionPen);
+			rc = {
+				screenOffset->x + tbl.x,
+				screenOffset->y + tbl.y,
+				screenOffset->x + tbl.x + tbl.width,
+				screenOffset->y + tbl.y + lineHeight + 10
+			};
+			Rectangle(hDC, rc.left, rc.top, rc.right, rc.bottom);
+			TCHAR* table16 = strings[tbl.offset];
+			DrawText(hDC, table16, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+			// Columns
+			SelectObject(hDC, hFont);
+			SetBkColor(hDC, RGB(255, 255, 255));
+			SelectObject(hDC, GetStockObject(WHITE_BRUSH));
+			for (int colNo = 0; colNo < tbl.colCount; colNo++) {
+				rc = {
+					screenOffset->x + tbl.x + 5,
+					screenOffset->y + tbl.y + lineHeight * (colNo + 1) + 10,
+					screenOffset->x + tbl.x + tbl.width - 5,
+					screenOffset->y + tbl.y + lineHeight * (colNo + 2) + 10
+				};
+
+				// Column name
+				SetTextColor(hDC, RGB(0, 0, 0));
+				TCHAR* info16 = strings[tbl.offset + colNo + 1];
+				int len = _tcslen(info16);
+				TCHAR* sep = _tcschr(info16, TEXT(':'));
+				int len2 = _tcslen(sep);
+				DrawText(hDC, info16, len - len2, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+				// Column type
+				if (isShowColumnTypes) {
+					SetTextColor(hDC, RGB(200, 200, 200));
+					TCHAR* sep2 = _tcschr(sep + 1, TEXT(':'));
+					int len3 = _tcslen(sep2);
+					DrawText(hDC, sep + 1, len2 - len3 - 1, &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+				}
+			}
+		}
+
+		// Zero
+		if (screenOffset->x >= 0 && screenOffset->y >= 0 && screenOffset->x < w && screenOffset->y < h) {
+			SelectObject(hDC, GetStockObject(BLACK_PEN));
+			MoveToEx(hDC, screenOffset->x - 20, screenOffset->y, NULL);
+			LineTo(hDC, screenOffset->x + 20, screenOffset->y);
+			MoveToEx(hDC, screenOffset->x, screenOffset->y - 20, NULL);
+			LineTo(hDC, screenOffset->x, screenOffset->y + 20);
+		}
+
+		// Input
+		if (_tcslen(input)) {
+			SetTextColor(hDC, RGB(0, 0, 0));
+			RECT rc = {0, 0, w - 5, h};
+			DrawText(hDC, input, -1, &rc, DT_RIGHT | DT_BOTTOM | DT_SINGLELINE);
+		}
+
+		SelectObject(hDC, hOldBrush);
+		SelectObject(hDC, hOldFont);
+		SelectObject(hDC, hOldPen);
+
+		DeleteObject(hCaptionBrush);
+		DeleteObject(hCaptionBrush2);
+		DeleteObject(hBorderPen);
+		DeleteObject(hCaptionPen);
+		DeleteObject(hCaptionPen2);
+		DeleteObject(hCaptionPen3);
+		DeleteObject(hLinkPen);
+		DeleteObject(hLinkBrush);
+	}
+
+	// lParam (optional) = tablename16
+	BOOL CALLBACK cbDlgDatabaseDiagram (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_GETDLGCODE: {
+				LRESULT lRes = DLGC_WANTALLKEYS | CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+				SetWindowLongPtr(hWnd, DWLP_MSGRESULT, lRes);
+				return lRes;
+			}
+			break;
+
+			case WM_INITDIALOG: {
+				SetProp(hWnd, TEXT("IDD"), IntToPtr(IDD_TOOL_DATABASE_DIAGRAM));
+
+				int maxStrCount = 1000;
+				int maxLinkCount = 1000;
+				TDiagramTable* tables = new TDiagramTable[MAX_ENTITY_COUNT];
+				TCHAR** strings = (TCHAR**)calloc(maxStrCount, sizeof(TCHAR*));
+				TDiagramLink* links = (TDiagramLink*)calloc(maxLinkCount, sizeof(TDiagramLink));
+
+				for (int tblNo = 0; tblNo < MAX_ENTITY_COUNT; tblNo++)
+					tables[tblNo] = {0};
+
+				int tblNo = 0;
+				int offset = 0;
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select t.name tblname, printf('%s:%s:%s', c.name, c.type, iif(c.pk, 1, 0)) colname, c.cid, t.ttype = 'view' " \
+					"from sqlite_master t, pragma_table_xinfo(t.tbl_name) c " \
+					"where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table')" \
+					"order by 1, 3", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						int colNo = sqlite3_column_int(stmt, 2);
+						if (colNo == 0) {
+							offset = tblNo == 0 ? 0 : tables[tblNo].offset + tables[tblNo].colCount + 1;
+
+							tblNo++;
+							tables[tblNo].offset = offset;
+							tables[tblNo].isView = sqlite3_column_int(stmt, 4);
+							strings[offset] = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							tables[tblNo].colCount = 0;
+
+						}
+
+						if (offset + 1 + colNo > maxStrCount - 10) {
+							maxStrCount += 1000;
+							strings = (TCHAR**)realloc(strings, maxStrCount * sizeof(TCHAR*));
+						}
+
+						strings[offset + 1 + colNo] = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+						tables[tblNo].colCount++;
+
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				if (SQLITE_OK != sqlite3_errcode(db) || tblNo == 0) {
+					offset = 0;
+
+					sqlite3_prepare_v2(db, "select name, t.type = 'view' from sqlite_master t where t.sql is not null and t.name not like 'sqlite_%' and t.type in ('view', 'table') order by 1", -1, &stmt, 0);
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						const char* table8 = (const char*)sqlite3_column_text(stmt, 0);
+
+						offset = tblNo == 0 ? 0 : tables[tblNo].offset + tables[tblNo].colCount + 1;
+						tblNo++;
+						tables[tblNo].offset = offset;
+						tables[tblNo].isView = sqlite3_column_int(stmt, 1);
+						strings[offset] = utils::utf8to16(table8);
+						tables[tblNo].colCount = 0;
+
+						sqlite3_stmt* substmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select printf('%s:%s:%s', c.name, c.type, iif(c.pk, 1, 0)), cid from pragma_table_xinfo(?1) c order by cid", -1, &substmt, 0)) {
+							sqlite3_bind_text(substmt, 1, table8, -1, SQLITE_TRANSIENT);
+							while (SQLITE_ROW == sqlite3_step(substmt)) {
+								int colNo = sqlite3_column_int(substmt, 1);
+
+								if (offset + 1 + colNo > maxStrCount - 10) {
+									maxStrCount += 1000;
+									strings = (TCHAR**)realloc(strings, maxStrCount * sizeof(TCHAR*));
+								}
+
+								strings[offset + 1 + colNo] = utils::utf8to16((const char*)sqlite3_column_text(substmt, 0));
+								tables[tblNo].colCount++;
+							}
+						}
+						sqlite3_finalize(substmt);
+
+						if (tables[tblNo].colCount == 0) {
+							tables[tblNo].colCount = 1;
+							strings[offset + 1] = utils::utf8to16("<<Error>>::");
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
+
+				int tblCount = tblNo;
+				for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+					TCHAR* table16 = strings[tables[tblNo].offset];
+
+					tables[tblNo].x = 10 + (tblNo % 5) * 150;
+					tables[tblNo].y = 40 + 150 * (tblNo / 5);
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select x, y from diagrams where dbname = ?1 and tblname = ?2", -1, &stmt, 0)) {
+						char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+						char* table8 = utils::utf16to8(table16);
+						sqlite3_bind_text(stmt, 1, dbname8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, table8, -1, SQLITE_TRANSIENT);
+						delete [] dbname8;
+						delete [] table8;
+
+						if (sqlite3_step(stmt) == SQLITE_ROW) {
+							tables[tblNo].x = sqlite3_column_int(stmt, 0);
+							tables[tblNo].y = sqlite3_column_int(stmt, 1);
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
+
+				sqlite3_exec(db, "drop table temp.diagram_tables", 0, 0, 0);
+				sqlite3_exec(db, "create table temp.diagram_tables (tblname text, idx integer)", 0, 0, 0);
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "insert into temp.diagram_tables (tblname, idx) values (?1, ?2)", -1, &stmt, 0)) {
+					for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+						TCHAR* table16 = strings[tables[tblNo].offset];
+						char* table8 = utils::utf16to8(table16);
+						sqlite3_bind_text(stmt, 1, table8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_int(stmt, 2, tblNo);
+						sqlite3_step(stmt);
+						sqlite3_reset(stmt);
+					}
+				}
+				sqlite3_finalize(stmt);
+
+
+				sqlite3_exec(db, "drop table temp.diagram_links", 0, 0, 0);
+				sqlite3_exec(db, "create table temp.diagram_links (from_tbl integer, from_col integer, to_tbl integer, to_col integer, type integer)", 0, 0, 0);
+				// FK-links
+				sqlite3_exec(db,
+					"with t as (select t.name tblfrom, c.'from' colfrom, c.'table' tblto, c.'to' colto " \
+					"from sqlite_master t, pragma_foreign_key_list(t.tbl_name) c " \
+					"where t.sql is not null and t.type in ('view', 'table') " \
+					"order by 1, 2, 3) " \
+					"insert into temp.diagram_links (from_tbl, from_col, to_tbl, to_col, type)"
+					"select tfrom.idx, ifrom.cid, tto.idx, ito.cid, 1 " \
+					"from t " \
+					"inner join temp.diagram_tables tfrom on t.tblfrom = tfrom.tblname " \
+					"inner join pragma_table_xinfo ifrom on t.tblfrom = ifrom.arg and t.colfrom = ifrom.name and ifrom.schema = 'main' " \
+					"inner join temp.diagram_tables tto on t.tblto = tto.tblname " \
+					"inner join pragma_table_xinfo ito on t.tblto = ito.arg and t.colto = ito.name and ito.schema = 'main'", 0, 0, 0);
+				// View + Trigger-links
+				if (SQLITE_OK != sqlite3_exec(db,
+					"with t as (select sm.tbl_name tblfrom, ref.name tblto, iif(sm.type = 'view', 2, 3) type " \
+					"from sqlite_master sm inner join sqlite_master ref " \
+					"on sm.type in ('view', 'trigger') and ref.type in ('table', 'view') " \
+					"and lower(sm.sql) regexp '(from |join |into )([ \"''])*' || lower(ref.name) || '(\\D|\\b|''])+')" \
+					"insert into temp.diagram_links (from_tbl, from_col, to_tbl, to_col, type)"
+					"select tfrom.idx, -1, tto.idx, -1, t.type " \
+					"from t " \
+					"inner join temp.diagram_tables tfrom on t.tblfrom = tfrom.tblname " \
+					"inner join temp.diagram_tables tto on t.tblto = tto.tblname ", 0, 0, 0)) {
+					TCHAR error16[MAX_TEXT_LENGTH];
+					LoadString(GetModuleHandle(0), IDS_DIAGRAM_LINKS_ERROR, error16, MAX_TEXT_LENGTH);
+					MessageBox(hWnd, error16, NULL, MB_OK);
+				}
+
+				int linkNo = 0;
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select * from temp.diagram_links", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						links[linkNo].tblFrom = sqlite3_column_int(stmt, 0);
+						links[linkNo].colFrom = sqlite3_column_int(stmt, 1);
+						links[linkNo].tblTo = sqlite3_column_int(stmt, 2);
+						links[linkNo].colTo = sqlite3_column_int(stmt, 3);
+						links[linkNo].type = sqlite3_column_int(stmt, 4);
+
+						if (linkNo > maxLinkCount - 10) {
+							maxLinkCount += 1000;
+							links = (TDiagramLink*)realloc(links, maxLinkCount * sizeof(TDiagramLink));
+						}
+
+						linkNo++;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				SIZE s = utils::getTextSize(hFont, TEXT("Ag"));
+				int lineHeight = s.cy;
+				SetProp(hWnd, TEXT("LINEHEIGHT"), IntToPtr(lineHeight));
+
+				utils::getTextSize(hMenuFont, TEXT("Ag"));
+				lineHeight = s.cy;
+				SetProp(hWnd, TEXT("LINEHEIGHT2"), IntToPtr(lineHeight));
+
+				SetProp(hWnd, TEXT("TABLES"), tables);
+				SetProp(hWnd, TEXT("STRINGS"), strings);
+				SetProp(hWnd, TEXT("LINKS"), links);
+				SetProp(hWnd, TEXT("TABLECOUNT"), IntToPtr(tblCount));
+				SetProp(hWnd, TEXT("LINKCOUNT"), IntToPtr(linkNo));
+
+
+				SetProp(hWnd, TEXT("CURRENTTABLE"), 0);
+				SetProp(hWnd, TEXT("ISDRAG"), 0);
+				SetProp(hWnd, TEXT("PREVPOSITION"), new POINT());
+				SetProp(hWnd, TEXT("SCREENOFFSET"), new POINT());
+				SetProp(hWnd, TEXT("CLICKOFFSET"), new POINT());
+
+				TCHAR* input16 = new TCHAR[256] {0};
+				SetProp(hWnd, TEXT("INPUT"), input16);
+				if (lParam) {
+					_sntprintf(input16, 255, (TCHAR*)lParam);
+					SendMessage(hWnd, WM_TIMER, IDT_DIAGRAM_INPUT, 0);
+				}
+
+				SendMessage (hWnd, WMU_RECALC_WIDTH, 0, 0);
+
+				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
+				utils::alignDialog(hWnd, hMainWnd);
+			}
+			break;
+
+			case WM_PAINT : {
+				RECT rc{0};
+				GetClientRect(hWnd, &rc);
+				int w = rc.right;
+				int h = rc.bottom;
+
+				PAINTSTRUCT ps{0};
+				ps.fErase = FALSE;
+				HDC hdc = BeginPaint(hWnd, &ps);
+
+				// Double buffering https://stackoverflow.com/a/25461603/6121703
+				HDC memDC = CreateCompatibleDC(hdc);
+				HBITMAP hBmp = CreateCompatibleBitmap(hdc, w, h);
+				HBITMAP hOldBmp = (HBITMAP)SelectObject(memDC, hBmp);
+
+				POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+				drawDiagram(hWnd, memDC, w, h, screenOffset);
+				BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
+
+				SelectObject(memDC, hOldBmp);
+				DeleteObject(hBmp);
+				DeleteDC(memDC);
+
+				EndPaint(hWnd, &ps);
+				return true;
+			}
+			break;
+
+			case WM_KILLFOCUS: {
+				if (GetForegroundWindow() == hWnd)
+					SetFocus(hWnd);
+			}
+			break;
+
+			case WM_LBUTTONDOWN: {
+				int x = GET_X_LPARAM(lParam);
+				int y = GET_Y_LPARAM(lParam);
+
+				int tableNo = SendMessage(hWnd, WMU_GET_TABLE, x, y);
+				SetProp(hWnd, TEXT("CURRENTTABLE"), IntToPtr(tableNo));
+
+				POINT* prevPosition = (POINT*)GetProp(hWnd, TEXT("PREVPOSITION"));
+				prevPosition->x = x;
+				prevPosition->y = y;
+
+				if (tableNo) {
+					TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+					POINT* clickOffset = (POINT*)GetProp(hWnd, TEXT("CLICKOFFSET"));
+					clickOffset->x = x - tables[tableNo].x;
+					clickOffset->y = y - tables[tableNo].y;
+				}
+
+				SetProp(hWnd, TEXT("ISDRAG"), IntToPtr(TRUE));
+				SetCapture(hWnd);
+			}
+			break;
+
+			case WM_LBUTTONUP: {
+				if (GetProp(hWnd, TEXT("ISDRAG"))) {
+					SetProp(hWnd, TEXT("ISDRAG"), 0);
+					SetProp(hWnd, TEXT("CURRENTTABLE"), 0);
+					ReleaseCapture();
+				}
+			}
+			break;
+
+			case WM_LBUTTONDBLCLK: {
+				int x = GET_X_LPARAM(lParam);
+				int y = GET_Y_LPARAM(lParam);
+
+				int tableNo = SendMessage(hWnd, WMU_GET_TABLE, x, y);
+				SetProp(hWnd, TEXT("CURRENTTABLE"), IntToPtr(tableNo));
+
+				SendMessage(hWnd, WM_COMMAND, IDM_EDIT_DATA, 0);
+			}
+			break;
+
+			case WM_MOUSEMOVE: {
+				if (!GetProp(hWnd, TEXT("ISDRAG")) || wParam != MK_LBUTTON)
+					break;
+
+				int x = GET_X_LPARAM(lParam);
+				int y = GET_Y_LPARAM(lParam);
+
+				POINT* prevPosition = (POINT*)GetProp(hWnd, TEXT("PREVPOSITION"));
+
+				int tableNo = PtrToInt(GetProp(hWnd, TEXT("CURRENTTABLE")));
+				if (tableNo) {
+					TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+					POINT* clickOffset = (POINT*)GetProp(hWnd, TEXT("CLICKOFFSET"));
+					tables[tableNo].x = x - clickOffset->x;
+					tables[tableNo].y = y - clickOffset->y;
+				} else {
+					POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+					screenOffset->x += x - prevPosition->x;
+					screenOffset->y += y - prevPosition->y;
+				}
+
+				prevPosition->x = x;
+				prevPosition->y = y;
+
+				InvalidateRect(hWnd, NULL, FALSE);
+			}
+			break;
+
+			case WM_CONTEXTMENU: {
+				int x = GET_X_LPARAM(lParam);
+				int y = GET_Y_LPARAM(lParam);
+
+				POINT p = {x, y};
+				ScreenToClient(hWnd, &p);
+
+				int tableNo = SendMessage(hWnd, WMU_GET_TABLE, p.x, p.y);
+				SetProp(hWnd, TEXT("CURRENTTABLE"), IntToPtr(tableNo));
+
+				if (tableNo) {
+					int isolatedTableNo = PtrToInt(GetProp(hWnd, TEXT("ISOLATEDTABLE")));
+					Menu_SetItemState(hDiagramTableMenu, IDM_ISOLATE, isolatedTableNo == tableNo ? MF_CHECKED : MF_UNCHECKED);
+					TrackPopupMenu(hDiagramTableMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, x, y, 0, hWnd, NULL);
+				} else {
+					Menu_SetItemState(hDiagramMenu, IDM_SHOW_FKLINKS, prefs::get("show-fk-links") ? MF_CHECKED : MF_UNCHECKED);
+					Menu_SetItemState(hDiagramMenu, IDM_SHOW_COLTYPES, prefs::get("show-column-types") ? MF_CHECKED : MF_UNCHECKED);
+					Menu_SetItemState(hDiagramMenu, IDM_SHOW_REASONS, prefs::get("show-isolation-reasons") ? MF_CHECKED : MF_UNCHECKED);
+					TrackPopupMenu(hDiagramMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, x, y, 0, hWnd, NULL);
+				}
+			}
+			break;
+
+			case WM_KEYDOWN: {
+				if (wParam == VK_ESCAPE)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+
+				if (wParam == VK_LEFT || wParam == VK_UP || wParam == VK_RIGHT || wParam == VK_DOWN) {
+					POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+					if (wParam == VK_LEFT || wParam == VK_RIGHT)
+						screenOffset->x += (wParam == VK_LEFT ? - 1 : 1) * 20;
+					if (wParam == VK_UP || wParam == VK_DOWN)
+						screenOffset->y += (wParam == VK_UP ? - 1 : 1) * 20;
+
+					InvalidateRect(hWnd, NULL, FALSE);
+					return true;
+				}
+
+				if (wParam == VK_BACK) {
+					TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+					int len = _tcslen(input);
+					if (len) {
+						input[len - 1] = 0;
+						SetTimer(hWnd, IDT_DIAGRAM_INPUT, 1000, NULL);
+						InvalidateRect(hWnd, NULL, FALSE);
+					}
+					return true;
+				}
+
+				if (wParam == 0x56 && HIWORD(GetKeyState(VK_CONTROL))) { // Ctrl + V
+					TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+					TCHAR* clipboard16 = utils::getClipboardText();
+					_sntprintf(input, 255, clipboard16);
+					delete [] clipboard16;
+
+					SetTimer(hWnd, IDT_DIAGRAM_INPUT, 100, NULL);
+					InvalidateRect(hWnd, NULL, FALSE);
+					return true;
+				}
+
+				if ((wParam >= 0x30 && wParam <= 0x6F) || (wParam >= 0xBA && wParam <= 0xDF)) { // 0 .. Divide + VK_OEM_1 .. VK_OEM_8
+					// Limitation: Shift is ignored e.g. Shift + '-' will be '-' instead of '_'
+					// Since _ and $ are common used in table names then some duck-tape is applied for them
+					// https://stackoverflow.com/a/55460832/6121703
+					BYTE keyState[256] {0};
+					TCHAR buf[2]{0};
+					UINT scanCode = (lParam >> 16) & 0xFF;
+					ToUnicode(wParam, scanCode, keyState, buf, 1, 0);
+
+					if (_istprint(buf[0])) {
+						TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+						if ((buf[0] == TEXT('-') || buf[0] == TEXT('4')) && HIWORD(GetKeyState(VK_SHIFT)))
+							buf[0] = buf[0] == TEXT('-') ? TEXT('_') : TEXT('$');
+
+						if (_tcslen(input) < 255) {
+							_tcscat(input, buf);
+
+							SetTimer(hWnd, IDT_DIAGRAM_INPUT, 1000, NULL);
+							InvalidateRect(hWnd, NULL, FALSE);
+						}
+
+						return true;
+					}
+				}
+			}
+			break;
+
+			case WM_SIZE: {
+				InvalidateRect(hWnd, NULL, FALSE);
+			}
+			break;
+
+			case WM_TIMER: {
+				if (wParam == IDT_DIAGRAM_INPUT) {
+					TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+					int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+					TCHAR** strings = (TCHAR**)GetProp(hWnd, TEXT("STRINGS"));
+					POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+					TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+					int lineHeight = PtrToInt(GetProp(hWnd, TEXT("LINEHEIGHT")));
+
+					for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+						TDiagramTable tbl = tables[tblNo];
+
+						if (tbl.isHidden)
+							continue;
+
+						TCHAR* table16 = strings[tbl.offset];
+						if (FindNLSString(0, LINGUISTIC_IGNORECASE, table16, -1, input, -1, NULL) == 0) {
+							RECT rc;
+							GetClientRect(hWnd, &rc);
+							int w = rc.right;
+							int h = rc.bottom;
+
+							screenOffset->x = w/2 - tbl.x - tbl.width / 2;
+							screenOffset->y = h/2 - tbl.y - ((tbl.colCount + 1) * lineHeight + 10) / 2;
+
+							break;
+						}
+					}
+
+					input[0] = 0;
+					InvalidateRect(hWnd, NULL, FALSE);
+                    KillTimer(hWnd, IDT_DIAGRAM_INPUT);
+				}
+			}
+			break;
+
+			case WM_COMMAND: {
+				TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+				TCHAR** strings = (TCHAR**)GetProp(hWnd, TEXT("STRINGS"));
+				int tableNo = PtrToInt(GetProp(hWnd, TEXT("CURRENTTABLE")));
+
+				if (tableNo) {
+					TCHAR* table16 = strings[tables[tableNo].offset];
+					TCHAR* fullname16 = utils::getFullTableName(TEXT("main"), table16, false);
+					if (wParam == IDM_EDIT_DATA) {
+						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA), hWnd, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)fullname16);
+					}
+
+					if (wParam == IDM_DDL) {
+						int len = _tcslen(fullname16) + 2;
+						TCHAR buf16[len + 1];
+						_sntprintf(buf16, len, TEXT(" %ls"), fullname16);
+						buf16[0] = MAKEWORD(3, tables[tableNo].isView ? VIEW : TABLE);
+
+						DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDVIEWEDIT), hWnd, (DLGPROC)&dialogs::cbDlgAddViewEdit, (LPARAM)buf16);
+					}
+
+					if (wParam == IDM_ISOLATE) {
+						TDiagramLink* links = (TDiagramLink*)GetProp(hWnd, TEXT("LINKS"));
+						int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+						int linkCount = PtrToInt(GetProp(hWnd, TEXT("LINKCOUNT")));
+						int isolatedTableNo = PtrToInt(GetProp(hWnd, TEXT("ISOLATEDTABLE")));
+
+						if (isolatedTableNo == tableNo) {
+							for (int tblNo = 1; tblNo <= tblCount; tblNo++)
+								tables[tblNo].isHidden = false;
+
+							SetProp(hWnd, TEXT("ISOLATEDTABLE"), 0);
+						} else {
+							for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+								tables[tblNo].isHidden = tblNo != tableNo;
+
+								for (int linkNo = 1; linkNo < linkCount && tables[tblNo].isHidden; linkNo++) {
+									bool isLinked = ((links[linkNo].tblFrom == tblNo) && (links[linkNo].tblTo == tableNo)) || ((links[linkNo].tblTo == tblNo) && (links[linkNo].tblFrom == tableNo));
+									tables[tblNo].isHidden = !isLinked;
+								}
+							}
+							SetProp(hWnd, TEXT("ISOLATEDTABLE"), IntToPtr(tableNo));
+						}
+
+						InvalidateRect(hWnd, NULL, FALSE);
+					}
+
+					delete [] fullname16;
+				}
+
+				if (wParam == IDM_SHOW_FKLINKS || wParam == IDM_SHOW_COLTYPES || wParam == IDM_SHOW_REASONS) {
+					if (wParam == IDM_SHOW_FKLINKS)
+						prefs::set("show-fk-links", !prefs::get("show-fk-links"));
+
+					if (wParam == IDM_SHOW_COLTYPES) {
+						prefs::set("show-column-types", !prefs::get("show-column-types"));
+						SendMessage (hWnd, WMU_RECALC_WIDTH, 0, 0);
+					}
+
+					if (wParam == IDM_SHOW_REASONS)
+						prefs::set("show-isolation-reasons", !prefs::get("show-isolation-reasons"));
+
+					InvalidateRect(hWnd, NULL, FALSE);
+				}
+
+				if (wParam == IDM_EXPORT_PNG || wParam == IDM_EXPORT_CLIPBOARD) {
+					RECT rc;
+					SendMessage(hWnd, WMU_GET_DIAGRAM_RECT, (WPARAM)&rc, 0);
+
+					HDC hDC = GetDC(hWnd);
+					HDC hCompatDC = CreateCompatibleDC(hDC);
+					HBITMAP hBitmap = CreateCompatibleBitmap(hDC, rc.right - rc.left, rc.bottom - rc.top);
+					SelectObject(hCompatDC, hBitmap);
+
+					POINT screenOffset = {-rc.left, -rc.top};
+					drawDiagram(hWnd, hCompatDC, rc.right - rc.left, rc.bottom - rc.top, &screenOffset);
+
+					TCHAR path[MAX_PATH + 1];
+					_sntprintf(path, MAX_PATH, TEXT("diagram.png"));
+					if (wParam == IDM_EXPORT_PNG && utils::saveFile(path, TEXT("PNG files\0*.png\0All\0*.*\0"), TEXT("png"), hWnd)) {
+						const CLSID pngClsid = { 0x557cf406, 0x1a04, 0x11d3, {0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
+
+						Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(hBitmap, NULL);
+						bitmap->Save(path, &pngClsid, NULL);
+						delete bitmap;
+					}
+
+					if (wParam == IDM_EXPORT_CLIPBOARD) {
+						OpenClipboard(hWnd);
+						EmptyClipboard();
+						SetClipboardData(CF_BITMAP, hBitmap);
+						CloseClipboard();
+					}
+
+					DeleteDC(hCompatDC);
+					ReleaseDC(hWnd, hDC);
+					DeleteObject(hBitmap);
+				}
+			}
+			break;
+
+			case WMU_GET_TABLE: {
+				int x = wParam;
+				int y = lParam;
+				POINT p = {x, y};
+
+				TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+				int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+				int lineHeight = PtrToInt(GetProp(hWnd, TEXT("LINEHEIGHT")));
+				POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+
+				int tableNo = 0;
+				for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+					TDiagramTable tbl = tables[tblNo];
+
+					if (tbl.isHidden)
+						continue;
+
+					RECT rc = {
+						screenOffset->x + tbl.x,
+						screenOffset->y + tbl.y,
+						screenOffset->x + tbl.x + tbl.width,
+						screenOffset->y + tbl.y + (tables[tblNo].colCount + 1) * lineHeight + 10
+ 					};
+
+					if (PtInRect(&rc, p)) {
+						tableNo = tblNo;
+						break;
+					}
+				}
+
+				SetWindowLongPtr(hWnd, DWLP_MSGRESULT, tableNo);
+				return TRUE;
+			}
+			break;
+
+			case WMU_RECALC_WIDTH: {
+				bool isShowColumnTypes = prefs::get("show-column-types");
+
+				TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+				int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+				TCHAR** strings = (TCHAR**)GetProp(hWnd, TEXT("STRINGS"));
+
+				for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+					TCHAR* table16 = strings[tables[tblNo].offset];
+					SIZE s = utils::getTextSize(hFont, table16);
+
+					tables[tblNo].width = s.cx;
+					for (int i = 1; i <= tables[tblNo].colCount; i++) {
+						TCHAR* info16 = strings[tables[tblNo].offset + i];
+						TCHAR* sep = _tcschr(info16, TEXT(':'));
+						TCHAR c = sep[0];
+						sep[0] = isShowColumnTypes ? TEXT(':') : 0;
+						s = utils::getTextSize(hFont, info16);
+						sep[0] = c;
+						tables[tblNo].width = MAX(s.cx, tables[tblNo].width);
+					}
+					tables[tblNo].width += 10;
+				}
+			}
+			break;
+
+			// wParam is in-out rect
+			case WMU_GET_DIAGRAM_RECT: {
+				RECT rc = {10000, 10000, -10000, -10000};
+				TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+				int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+				int lineHeight = PtrToInt(GetProp(hWnd, TEXT("LINEHEIGHT")));
+
+				for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+					TDiagramTable tbl = tables[tblNo];
+
+					if (tbl.isHidden)
+						continue;
+
+					rc.left = MIN(rc.left, tbl.x);
+					rc.right = MAX(rc.right, tbl.x + tbl.width);
+					rc.top = MIN(rc.top, tbl.y);
+					rc.bottom = MAX(rc.bottom, tbl.y + (tables[tblNo].colCount + 1) * lineHeight + 10);
+				}
+
+				// Add extra spaces for white borders
+				rc = {rc.left - 20, rc.top - 20, rc.right + 20, rc.bottom + 20};
+
+				if (wParam)
+						*(RECT*)wParam = rc;
+
+				return TRUE;
+			}
+			break;
+
+			case WM_CLOSE: {
+				TDiagramTable* tables = (TDiagramTable*)GetProp(hWnd, TEXT("TABLES"));
+				TCHAR** strings = (TCHAR**)GetProp(hWnd, TEXT("STRINGS"));
+				int tblCount = PtrToInt(GetProp(hWnd, TEXT("TABLECOUNT")));
+
+				prefs::setSyncMode(0);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "replace into diagrams (dbname, tblname, x, y) values (?1, ?2, ?3, ?4)", -1, &stmt, 0)) {
+					char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+					for (int tblNo = 1; tblNo <= tblCount; tblNo++) {
+						TCHAR* table16 = strings[tables[tblNo].offset];
+						char* table8 = utils::utf16to8(table16);
+						sqlite3_bind_text(stmt, 1, dbname8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, table8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_int(stmt, 3, tables[tblNo].x);
+						sqlite3_bind_int(stmt, 4, tables[tblNo].y);
+
+						sqlite3_step(stmt);
+						sqlite3_reset(stmt);
+
+						delete [] table8;
+					}
+					delete [] dbname8;
+				}
+				sqlite3_finalize(stmt);
+				prefs::setSyncMode(1);
+
+				delete [] tables;
+				RemoveProp(hWnd, TEXT("TABLES"));
+
+				TDiagramLink* links = (TDiagramLink*)GetProp(hWnd, TEXT("LINKS"));
+				free(links);
+				RemoveProp(hWnd, TEXT("LINKS"));
+
+				for (int i = 0; strings[i]; i++)
+					delete [] strings[i];
+				free(strings);
+				RemoveProp(hWnd, TEXT("STRINGS"));
+
+				RemoveProp(hWnd, TEXT("TABLECOUNT"));
+				RemoveProp(hWnd, TEXT("LINKCOUNT"));
+				RemoveProp(hWnd, TEXT("CURRENTTABLE"));
+				RemoveProp(hWnd, TEXT("ISOLATEDTABLE"));
+				RemoveProp(hWnd, TEXT("LINEHEIGHT"));
+				RemoveProp(hWnd, TEXT("ISDRAG"));
+
+				POINT* screenOffset = (POINT*)GetProp(hWnd, TEXT("SCREENOFFSET"));
+				delete screenOffset;
+				RemoveProp(hWnd, TEXT("SCREENOFFSET"));
+
+				POINT* clickOffset = (POINT*)GetProp(hWnd, TEXT("CLICKOFFSET"));
+				delete clickOffset;
+				RemoveProp(hWnd, TEXT("CLICKOFFSET"));
+
+				POINT* prevPosition = (POINT*)GetProp(hWnd, TEXT("PREVPOSITION"));
+				delete prevPosition;
+				RemoveProp(hWnd, TEXT("PREVPOSITION"));
+
+				TCHAR* input = (TCHAR*)GetProp(hWnd, TEXT("INPUT"));
+				delete [] input;
+				RemoveProp(hWnd, TEXT("INPUT"));
+
+				EndDialog(hWnd, DLG_CANCEL);
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
+			}
+			break;
+		}
+
+		return false;
+	}
+
 	BOOL CALLBACK cbDlgCompareDatabase (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				SetProp(hWnd, TEXT("IDD"), IntToPtr(IDD_TOOL_COMPARE_DATABASE));
 				HWND hDbWnd = GetDlgItem(hWnd, IDC_DLG_DATABASE);
 
 				sqlite3_stmt *stmt;
@@ -1527,7 +2502,7 @@ namespace tools {
 								TEXT("Current"),
 								TEXT("Compared"),
 							};
-							DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TEXT_COMPARISON), hWnd, (DLGPROC)cbDlgTextComparison, (LPARAM)&dp);
+							DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_TOOL_TEXT_COMPARISON), hWnd, (DLGPROC)cbDlgTextComparison, (LPARAM)&dp);
 
 							delete [] dp.s1;
 							delete [] dp.s2;
@@ -1567,10 +2542,14 @@ namespace tools {
 			}
 			break;
 
-			case WM_CLOSE:
+			case WM_CLOSE: {
 				sqlite3_exec(db, "detach database compared", NULL, NULL, NULL);
+
 				EndDialog(hWnd, DLG_CANCEL);
-				break;
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
+			}
+			break;
 		}
 
 		return false;
@@ -1579,6 +2558,8 @@ namespace tools {
 	BOOL CALLBACK cbDlgDatabaseSearch (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				SetProp(hWnd, TEXT("IDD"), IntToPtr(IDD_TOOL_DATABASE_SEARCH));
+
 				SetDlgItemText(hWnd, IDC_DLG_TABLENAMES, TEXT("All"));
 				HWND hPatternWnd = GetDlgItem(hWnd, IDC_DLG_PATTERN);
 				ComboBox_AddString(hPatternWnd, TEXT("Left and right wildcard"));
@@ -1801,6 +2782,8 @@ namespace tools {
 
 			case WM_CLOSE: {
 				EndDialog(hWnd, DLG_CANCEL);
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
 			}
 			break;
 		}
@@ -2381,6 +3364,8 @@ namespace tools {
 	BOOL CALLBACK cbDlgStatistics (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				SetProp(hWnd, TEXT("IDD"), IntToPtr(IDD_TOOL_STATISTICS));
+
 				sqlite3_exec(db, "drop table temp.row_statistics;", NULL, 0, NULL);
 				sqlite3_exec(db, "create table temp.row_statistics (name text, cnt integer);", NULL, 0, NULL);
 
@@ -2467,7 +3452,7 @@ namespace tools {
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -2494,14 +3479,10 @@ namespace tools {
 			}
 			break;
 
-			case WM_SYSKEYDOWN: {
-				if (wParam == VK_ESCAPE)
-					SendMessage(hWnd, WM_CLOSE, 0, 0);
-			}
-			break;
-
 			case WM_CLOSE: {
 				EndDialog(hWnd, DLG_CANCEL);
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
+				DestroyWindow(hWnd);
 			}
 			break;
 		}
@@ -2672,10 +3653,533 @@ namespace tools {
 		return false;
 	}
 
+	// lParam (optional) = fullname16
+	BOOL CALLBACK cbDlgTransformData (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				HWND hSrcSchemaWnd = GetDlgItem(hWnd, IDC_DLG_SRC_SCHEMA);
+				HWND hTrgSchemaWnd = GetDlgItem(hWnd, IDC_DLG_TRG_SCHEMA);
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(db,
+					"select name, iif(name = 'main' or name = 'temp2', 0, 1) from (select name from pragma_database_list) where name <> 'temp' order by 2, 1", -1, &stmt, 0)) {
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						TCHAR* schema16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						ComboBox_AddString(hSrcSchemaWnd, schema16);
+						ComboBox_AddString(hTrgSchemaWnd, schema16);
+						delete [] schema16;
+					}
+				}
+				sqlite3_finalize(stmt);
+				ComboBox_SetCurSel(hSrcSchemaWnd, 0);
+				ComboBox_SetCurSel(hTrgSchemaWnd, 0);
+
+				if (lParam) {
+					TCHAR* fullname16 = (TCHAR*)lParam;
+					for (int i = 0; i < 2; i++) {
+						TCHAR* name16 = utils::getTableName(fullname16, i == 0);
+						HWND hComboWnd = GetDlgItem(hWnd, i == 0 ? IDC_DLG_SRC_SCHEMA : IDC_DLG_SOURCE);
+						int pos = MAX(ComboBox_FindStringExact(hComboWnd, 0, name16), 0);
+						ComboBox_SetCurSel(hComboWnd, pos);
+						if (i == 0) {
+							SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_SRC_SCHEMA, CBN_SELCHANGE), (LPARAM)hSrcSchemaWnd);
+						} else {
+							int len = _tcslen(name16) + 2;
+							TCHAR* buf16 = new TCHAR[len + 1] ;
+							_sntprintf(buf16, len + 1, TEXT("%ls_t"), name16);
+							SetDlgItemText(hWnd, IDC_DLG_TARGET, buf16);
+							delete [] buf16;
+							SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_SOURCE, CBN_SELCHANGE), (LPARAM)hComboWnd);
+						}
+						delete [] name16;
+
+						EnableWindow(hComboWnd, FALSE);
+					}
+				} else {
+					SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_SRC_SCHEMA, CBN_SELCHANGE), (LPARAM)hSrcSchemaWnd);
+				}
+
+				Edit_SetCueBannerText(GetDlgItem(hWnd, IDC_DLG_TARGET), TEXT("Input a new table name..."));
+
+				HWND hTypeWnd = GetDlgItem(hWnd, IDC_DLG_TYPE);
+				ComboBox_AddString(hTypeWnd, TEXT("Transpose (switch rows and columns)"));
+				ComboBox_AddString(hTypeWnd, TEXT("Convert 3 columns to 2D-matrix"));
+				ComboBox_AddString(hTypeWnd, TEXT("Convert 2D-matrix to 3 columns"));
+				ComboBox_SetCurSel(hTypeWnd, 0);
+				SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_TYPE, CBN_SELCHANGE), (LPARAM)hTypeWnd);
+
+				HWND hDuplicatesWnd = GetDlgItem(hWnd, IDC_DLG_DUPLICATES);
+				ComboBox_AddString(hDuplicatesWnd, TEXT("Raise ERROR"));
+				ComboBox_AddString(hDuplicatesWnd, TEXT("Apply SUM"));
+				ComboBox_AddString(hDuplicatesWnd, TEXT("Apply MAX"));
+				ComboBox_AddString(hDuplicatesWnd, TEXT("Apply CONCAT"));
+				ComboBox_SetCurSel(hDuplicatesWnd, 0);
+
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISFIRSTCOLUMN), prefs::get("transpose-is-first-column") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_ISROWCOLNAMES), prefs::get("transpose-is-row-col-names") ? BST_CHECKED : BST_UNCHECKED);
+
+				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				SetFocus(hTypeWnd);
+				utils::alignDialog(hWnd, GetWindow(hWnd, GW_OWNER), true);
+			}
+			break;
+
+			case WM_COMMAND: {
+				if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_DLG_SRC_SCHEMA) {
+					HWND hSourceWnd = GetDlgItem(hWnd, IDC_DLG_SOURCE);
+					ComboBox_ResetContent(hSourceWnd);
+
+					char query8[1024];
+					TCHAR schema16[256];
+					GetDlgItemText(hWnd, IDC_DLG_SRC_SCHEMA, schema16, 255);
+					char* schema8 = utils::utf16to8(schema16);
+					snprintf(query8, 1023, "select distinct name from \"%s\".sqlite_master where lower(type) in ('table', 'view') order by type, name", schema8);
+					delete [] schema8;
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							ComboBox_AddString(hSourceWnd, name16);
+							delete [] name16;
+						}
+					}
+					sqlite3_finalize(stmt);
+					ComboBox_SetCurSel(hSourceWnd, 0);
+
+					ComboBox_SetCurSel(GetDlgItem(hWnd, IDC_DLG_SOURCE), 0);
+					SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_SOURCE, CBN_SELCHANGE), (LPARAM)GetDlgItem(hWnd, IDC_DLG_SOURCE));
+
+					EnableWindow(hSourceWnd, ComboBox_GetCount(hSourceWnd) > 0);
+				}
+
+				if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_DLG_SOURCE) {
+					SendMessage(hWnd, WMU_RESET_CACHE, 0, 0);
+
+					TCHAR schema16[256];
+					TCHAR table16[1024];
+					GetDlgItemText(hWnd, IDC_DLG_SRC_SCHEMA, schema16, 255);
+					GetDlgItemText(hWnd, IDC_DLG_SOURCE, table16, 1023);
+					TCHAR* src16 = utils::getFullTableName(schema16, table16);
+					char* srcSchema8 = utils::utf16to8(schema16);
+					char* srcTable8 = utils::utf16to8(table16);
+					char* src8 = utils::utf16to8(src16);
+					delete [] src16;
+
+					SetProp(hWnd, TEXT("SCHEMA8"), srcSchema8);
+					SetProp(hWnd, TEXT("TABLE8"), srcTable8);
+					SetProp(hWnd, TEXT("SOURCE8"), src8);
+				}
+
+				if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_DLG_TYPE) {
+					int idcs[3][10] = {
+						{IDC_DLG_ISFIRSTCOLUMN, IDC_DLG_ISROWCOLNAMES},
+						{IDC_DLG_AXIS_X, IDC_DLG_AXIS_X_LABEL, IDC_DLG_AXIS_Y, IDC_DLG_AXIS_Y_LABEL, IDC_DLG_VALUE, IDC_DLG_VALUE_LABEL, IDC_DLG_DUPLICATES_LABEL, IDC_DLG_DUPLICATES},
+						{}
+					};
+
+					int type = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_TYPE));
+					for (int i = 0; i < 3; i++) {
+						for (int idc : idcs[i]) {
+							if (idc)
+								ShowWindow(GetDlgItem(hWnd, idc), i == type ? SW_SHOW : SW_HIDE);
+						}
+					}
+
+					SetDlgItemText(hWnd, IDC_DLG_OK, type ? TEXT("Convert") : TEXT("Transpose"));
+				}
+
+				if (HIWORD(wParam) == CBN_SELCHANGE && (LOWORD(wParam) == IDC_DLG_TYPE || LOWORD(wParam) == IDC_DLG_SOURCE)) {
+					const char* srcSchema8 = (const char*)GetProp(hWnd, TEXT("SCHEMA8"));
+					const char* srcTable8 = (const char*)GetProp(hWnd, TEXT("TABLE8"));
+
+					HWND hComboWnds[3] = {GetDlgItem(hWnd, IDC_DLG_AXIS_X), GetDlgItem(hWnd, IDC_DLG_AXIS_Y), GetDlgItem(hWnd, IDC_DLG_VALUE)};
+
+					for (int i = 0; i < 3; i++)
+						ComboBox_ResetContent(hComboWnds[i]);
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?2) where schema = ?1 order by cid", -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* name16 = utils::utf8to16((char *)sqlite3_column_text(stmt, 0));
+							for (int i = 0; i < 3; i++)
+								ComboBox_AddString(hComboWnds[i], name16);
+							delete [] name16;
+						}
+					} else printf(sqlite3_errmsg(db));
+					sqlite3_finalize(stmt);
+
+					bool isOk = ComboBox_GetCount(hComboWnds[0]) > 2;
+					for (int i = 0; i < 3; i++) {
+						ComboBox_SetCurSel(hComboWnds[i], isOk ? i : 0);
+						EnableWindow(hComboWnds[i], isOk);
+					}
+				}
+
+				if (wParam == IDC_DLG_OK || wParam == IDOK) {
+					if (GetWindowTextLength(GetDlgItem(hWnd, IDC_DLG_TARGET)) == 0) {
+						SetFocus(GetDlgItem(hWnd, IDC_DLG_TARGET));
+						MessageBox(hWnd, TEXT("The output table name is missing"), NULL, MB_OK);
+						return false;
+					}
+
+					sqlite3_exec(db, "drop table temp.transformed", 0, 0, 0);
+
+					int type = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_TYPE));
+					UINT msgs[] = {WMU_TRANSFORM_TRANSPOSE, WMU_TRANSFORM_TO_MATRIX, WMU_TRANSFORM_TO_3COLUMNS};
+
+					bool rc = SendMessage(hWnd, msgs[type], 0, 0);
+
+					if (rc) {
+						TCHAR schema16[256];
+						TCHAR table16[1024];
+						GetDlgItemText(hWnd, IDC_DLG_TRG_SCHEMA, schema16, 255);
+						GetDlgItemText(hWnd, IDC_DLG_TARGET, table16, 1023);
+						TCHAR* trg16 = utils::getFullTableName(schema16, table16);
+
+						TCHAR query16[2048];
+						_sntprintf(query16, 2047, TEXT("create table %ls as select * from temp.transformed"), trg16);
+						char* query8 = utils::utf16to8(query16);
+						rc = SQLITE_OK == sqlite3_exec(db, query8, 0, 0, 0);
+						delete [] query8;
+						delete [] trg16;
+					}
+
+					if (rc) {
+						EndDialog(hWnd, DLG_OK);
+					} else {
+						TCHAR buf16[MAX_TEXT_LENGTH];
+						int idcs[] = {IDS_TRANSPOSE_ERROR, IDS_CONVERT_TO_MATRIX_ERROR, IDS_CONVERT_TO_3COLUMNS_ERROR};
+						LoadString(GetModuleHandle(NULL), idcs[type], buf16, MAX_TEXT_LENGTH);
+						MessageBox(hWnd, buf16, NULL, MB_OK);
+					}
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WMU_TRANSFORM_TRANSPOSE: {
+					const char* srcSchema8 = (const char*)GetProp(hWnd, TEXT("SCHEMA8"));
+					const char* srcTable8 = (const char*)GetProp(hWnd, TEXT("TABLE8"));
+					const char* src8 = (const char*)GetProp(hWnd, TEXT("SOURCE8"));
+
+					bool rc = true;
+					char col8[1024] = {'\'','\'', 0};
+					char query8[2048];
+
+					bool isFirstColumn = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISFIRSTCOLUMN)); // Source column names as the first target column
+					bool isRowColNames = Button_GetCheck(GetDlgItem(hWnd, IDC_DLG_ISROWCOLNAMES)); // The first source column as target column names
+
+					int srcColCount = 0;
+
+					if (rc) {
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select name, cid from pragma_table_info(?2) where schema = ?1 order by cid", -1, &stmt, 0);
+						if (rc) {
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+							while (SQLITE_ROW == sqlite3_step(stmt)) {
+								if (srcColCount == 0)
+									strncpy(col8, (const char*)sqlite3_column_text(stmt, 0), 1023);
+								srcColCount++;
+							}
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						char* qcol8 = utils::double_quote(col8);
+						snprintf(query8, 2047,
+							"select 'create table temp.transformed (%s' || group_concat(dq(colname), ', ') || ')' " \
+							"from (select iif(?3 = 1, %s, 'R' || row_number() over()) colname, * from %s)", isFirstColumn ? "name, " : "", qcol8, src8);
+						delete [] qcol8;
+
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+						if (rc) {
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_int(stmt, 3, isRowColNames);
+							sqlite3_bind_text(stmt, 4, col8, -1, SQLITE_TRANSIENT);
+
+							rc = SQLITE_ROW == sqlite3_step(stmt);
+							if (rc)
+								rc = SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), 0, 0, 0);
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						sqlite3_exec(db, "begin", 0, 0, 0);
+						for (int rowNo = 0; rc && rowNo < srcColCount - isRowColNames; rowNo++)
+							rc = SQLITE_OK == sqlite3_exec(db, "insert into temp.transformed default values", 0, 0, 0);
+						rc = rc && SQLITE_OK == sqlite3_exec(db, "commit", 0, 0, 0);
+					}
+
+					if (rc && isFirstColumn) {
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db,
+							"update temp.transformed set name = (select name from pragma_table_info(?2) where schema = ?1 and cid = temp.transformed.rowid - ?3)",
+							-1, &stmt, 0);
+						if (rc) {
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_int(stmt, 3, !isRowColNames);
+
+							rc = SQLITE_DONE == sqlite3_step(stmt);
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						char* columns8[1024]{0};
+
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select name, cid from pragma_table_info('transformed') where schema = 'temp' order by cid", -1, &stmt, 0);
+						if (rc) {
+							while (SQLITE_ROW == sqlite3_step(stmt)) {
+								int colNo = sqlite3_column_int(stmt, 1);
+								int len = sqlite3_column_bytes(stmt, 0);
+								columns8[colNo] = new char[len + 1] {0};
+								strncpy(columns8[colNo], (const char*)sqlite3_column_text(stmt, 0), len);
+							}
+						}
+						sqlite3_finalize(stmt);
+
+						sqlite3_exec(db, "begin", 0, 0, 0);
+						snprintf(query8, 2047, "select * from %s", src8);
+
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+						if (rc) {
+							int rowNo = 0;
+							while (SQLITE_ROW == sqlite3_step(stmt)) {
+								for (int colNo = 0; colNo < srcColCount; colNo++) {
+									char* qcolname8 = utils::double_quote(columns8[rowNo + isFirstColumn]);
+									snprintf(query8, 2047, "update temp.transformed set %s = ?1 where rowid = %i", qcolname8, colNo + 1 - isRowColNames);
+									delete[] qcolname8;
+									sqlite3_stmt* stmt2;
+									if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt2, 0)) {
+										int type = sqlite3_column_type(stmt, colNo);
+										if (type == SQLITE_NULL)
+											sqlite3_bind_null(stmt2, 1);
+
+										if (type == SQLITE_TEXT)
+											sqlite3_bind_text(stmt2, 1, (const char*)sqlite3_column_text(stmt, colNo), -1, SQLITE_TRANSIENT);
+
+										if (type == SQLITE_FLOAT)
+											sqlite3_bind_double(stmt2, 1, sqlite3_column_double(stmt, colNo));
+
+										if (type == SQLITE_INTEGER)
+											sqlite3_bind_int(stmt2, 1, sqlite3_column_int(stmt, colNo));
+
+										if (type == SQLITE_BLOB)
+											sqlite3_bind_blob(stmt2, 1, sqlite3_column_blob(stmt, colNo), sqlite3_column_bytes(stmt, colNo), SQLITE_TRANSIENT);
+
+										rc = SQLITE_DONE == sqlite3_step(stmt2);
+									}
+
+									sqlite3_finalize(stmt2);
+								}
+								rowNo++;
+							}
+						}
+						sqlite3_finalize(stmt);
+
+						for (int colNo = 0; colNo < 1024 && columns8[colNo]; colNo++)
+							delete [] columns8[colNo];
+
+						rc = rc && SQLITE_OK == sqlite3_exec(db, "commit", 0, 0, 0);
+					}
+
+					if (rc) {
+						prefs::set("transpose-is-first-column", isFirstColumn);
+						prefs::set("transpose-is-row-col-names", isRowColNames);
+					}
+
+					SetWindowLongPtr(hWnd, DWLP_MSGRESULT, rc);
+					return true;
+			}
+			break;
+
+			case WMU_TRANSFORM_TO_MATRIX: {
+					const char* srcSchema8 = (const char*)GetProp(hWnd, TEXT("SCHEMA8"));
+					const char* srcTable8 = (const char*)GetProp(hWnd, TEXT("TABLE8"));
+					const char* src8 = (const char*)GetProp(hWnd, TEXT("SOURCE8"));
+					int dupFunc = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DUPLICATES));
+
+					bool rc = true;
+					char query8[2048];
+
+					if (rc) {
+						snprintf(query8, 2047,
+							"with info as (select cid, name from pragma_table_info(?2) where schema = ?1), " \
+							"r as (select name from info where cid = ?4), " \
+							"c as (select name from info where cid = ?5), " \
+							"v as (select name from info where cid = ?6) " \
+							"select 'create table temp.transform_source as select " \
+							"' || dq(r.name) || ' R, ' || dq(c.name) || ' C, '|| ?7 || '(' || dq(v.name) || ') V from ' || ?3 || ' %s'" \
+							"from r, c, v", dupFunc == 0 ? "" : "group by 1, 2");
+
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
+						if (rc) {
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 3, src8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_int(stmt, 4, ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_AXIS_X)));
+							sqlite3_bind_int(stmt, 5, ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_AXIS_Y)));
+							sqlite3_bind_int(stmt, 6, ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_VALUE)));
+
+							const char dups[4][32] = {"", "sum", "max", "group_concat"};
+							sqlite3_bind_text(stmt, 7, dups[dupFunc], -1, SQLITE_TRANSIENT);
+
+							rc = SQLITE_ROW == sqlite3_step(stmt);
+							if (rc)
+								snprintf(query8, 2047, (const char*)sqlite3_column_text(stmt, 0));
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						sqlite3_exec(db, "drop table temp.transform_source", 0, 0, 0);
+						rc = SQLITE_OK == sqlite3_exec(db, query8, 0, 0, 0);
+					}
+
+					if (rc && dupFunc == 0) {
+						rc = SQLITE_OK == sqlite3_exec(db, "create unique index temp.idx_transform_source on transform_source(r, c)", 0, 0, 0);
+						if (!rc)
+							MessageBox(hWnd, TEXT("Source contains duplicates"), NULL, MB_OK);
+					}
+
+					if (rc) {
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select 'create table temp.transformed (name, ' || (select group_concat(distinct '\"' || C || '\"') "  \
+						"from temp.transform_source order by 1) || ')'", -1, &stmt, 0);
+						rc = rc && (SQLITE_ROW == sqlite3_step(stmt)) && (SQLITE_OK == sqlite3_exec(db, (const char*)sqlite3_column_text(stmt, 0), 0, 0, 0));
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc)
+						rc = SQLITE_OK == sqlite3_exec(db, "insert into temp.transformed (name) select distinct R from temp.transform_source order by 1", 0, 0, 0);
+
+					if (rc) {
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select R, V, 'update temp.transformed set ' || dq(C) || ' = ?1 where (name = ?2 or name = ?3)' from temp.transform_source", -1, &stmt, 0);
+						while (rc && (SQLITE_ROW == sqlite3_step(stmt))) {
+							sqlite3_stmt* stmt2;
+							rc = SQLITE_OK == sqlite3_prepare_v2(db, (const char*)sqlite3_column_text(stmt, 2), -1, &stmt2, 0);
+							if (rc) {
+								sqlite3_bind_text(stmt2, 1, (const char*)sqlite3_column_text(stmt, 1), -1, SQLITE_TRANSIENT);
+								sqlite3_bind_text(stmt2, 2, (const char*)sqlite3_column_text(stmt, 0), -1, SQLITE_TRANSIENT);
+								sqlite3_bind_int(stmt2, 3, sqlite3_column_int(stmt, 0));
+
+								rc = SQLITE_DONE == sqlite3_step(stmt2);
+							}
+							sqlite3_finalize(stmt2);
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						sqlite3_stmt* stmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from pragma_table_info(?2) where schema = ?1 and cid = ?3", -1, &stmt, 0)) {
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_int(stmt, 3, ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_AXIS_X)));
+							sqlite3_step(stmt);
+
+							char* qcolname8 = utils::double_quote((const char*)sqlite3_column_text(stmt, 0));
+							snprintf(query8, 2047, "alter table temp.transformed rename column \"name\" to %s", qcolname8);
+							delete [] qcolname8;
+							sqlite3_exec(db, query8, 0, 0, 0);
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					SetWindowLongPtr(hWnd, DWLP_MSGRESULT, rc);
+					return true;
+			}
+			break;
+
+			case WMU_TRANSFORM_TO_3COLUMNS: {
+					const char* srcSchema8 = (const char*)GetProp(hWnd, TEXT("SCHEMA8"));
+					const char* srcTable8 = (const char*)GetProp(hWnd, TEXT("TABLE8"));
+					const char* src8 = (const char*)GetProp(hWnd, TEXT("SOURCE8"));
+
+					bool rc = true;
+					char query8[2048];
+
+					if (rc)
+						rc = SQLITE_OK == sqlite3_exec(db, "create table temp.transformed (x, colname, value)", 0, 0, 0);
+
+					if (rc)
+						rc = SQLITE_OK == sqlite3_exec(db, "begin", 0, 0, 0);
+
+					if (rc)	{
+						sqlite3_stmt* stmt;
+						rc = SQLITE_OK == sqlite3_prepare_v2(db, "select name, quote(name), dq(name) from pragma_table_info(?2) where schema = ?1 order by cid", -1, &stmt, 0);
+						if (rc)	{
+							sqlite3_bind_text(stmt, 1, srcSchema8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, srcTable8, -1, SQLITE_TRANSIENT);
+
+							sqlite3_step(stmt);
+
+							char* qqcol0 = utils::double_quote((const char*)sqlite3_column_text(stmt, 0));
+							while (rc && SQLITE_ROW == sqlite3_step(stmt)) {
+								const char* qcol = (const char*)sqlite3_column_text(stmt, 1);
+								const char* qqcol = (const char*)sqlite3_column_text(stmt, 2);
+								snprintf(query8, 2047, "insert into temp.transformed (x, colname, value) select %s, %s, %s from %s", qqcol0, qcol, qqcol, src8);
+								rc = SQLITE_OK == sqlite3_exec(db, query8, 0, 0, 0);
+							}
+
+							snprintf(query8, 2047, "alter table temp.transformed rename column \"x\" to %s", qqcol0);
+							sqlite3_exec(db, query8, 0, 0, 0);
+
+							delete [] qqcol0;
+						}
+						sqlite3_finalize(stmt);
+					}
+
+					if (rc) {
+						rc = SQLITE_OK == sqlite3_exec(db, "commit;", 0, 0, 0);
+					} else {
+						sqlite3_exec(db, "rollback;", 0, 0, 0);
+					}
+
+					SetWindowLongPtr(hWnd, DWLP_MSGRESULT, rc);
+					return true;
+			}
+			break;
+
+			case WMU_RESET_CACHE: {
+				const TCHAR* props[3] = {TEXT("SCHEMA8"), TEXT("TABLE8"), TEXT("SOURCE8")};
+				for (int i = 0; i < 3; i++) {
+					char* prop = (char*)GetProp(hWnd, props[i]);
+					if (prop)
+						delete [] prop;
+					RemoveProp(hWnd, props[i]);
+				}
+			}
+			break;
+
+			case WM_DESTROY: {
+				SendMessage(hWnd, WMU_RESET_CACHE, 0, 0);
+			}
+			break;
+		}
+
+		return false;
+	}
+
 	// lParam = TDlgParam
 	BOOL CALLBACK cbDlgTextComparison (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				SetProp(hWnd, TEXT("IDD"), IntToPtr(IDD_TOOL_TEXT_COMPARISON));
+
 				TDlgParam* dp = (TDlgParam*)lParam;
 
 				setEditorFont(GetDlgItem(hWnd, IDC_DLG_ORIGINAL));
@@ -2700,13 +4204,13 @@ namespace tools {
 				int H = rc.bottom;
 
 				GetClientRect(hWnd, &rc);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_LABEL), 0, 5 * s.x, 12 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_LABEL), 0, W - (108 + 5) * s.x, 12 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_COUNT), 0, W / 2 - (27 + 27 + 5) * s.x, 5 * s.y, 27 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_COUNT), 0, W / 2 + (27 + 5) * s.x, 5. * s.y, 27. * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARE), 0, W / 2 - 27 * s.x, 5 * s.y, 54 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL), 0, 5 * s.x, 25 * s.y, W/2 - 7.5 * s.x, H - 29 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
-				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED), 0, W /2 + 2.5 * s.x, 25 * s.y, W/2 - 7.5 * s.x, H - 29 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_LABEL), 0, 5 * s.x, 4 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_LABEL), 0, W - (108 + 5) * s.x, 4 * s.y, 108 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL_COUNT), 0, W / 2 - (27 + 27 + 5) * s.x, s.y, 27 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED_COUNT), 0, W / 2 + (27 + 5) * s.x, s.y, 27. * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARE), 0, W / 2 - 27 * s.x, s.y, 54 * s.x, 14 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_ORIGINAL), 0, 5 * s.x, 16 * s.y, W/2 - 7.5 * s.x, H - 20 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COMPARED), 0, W /2 + 2.5 * s.x, 16 * s.y, W/2 - 7.5 * s.x, H - 20 * s.y, SWP_NOZORDER | SWP_NOACTIVATE);
 
 				InvalidateRect(hWnd, NULL, TRUE);
 			}
@@ -2717,7 +4221,7 @@ namespace tools {
 					SendMessage(hWnd, WMU_COMPARE, 0, 0);
 
 				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
-					EndDialog(hWnd, DLG_CANCEL);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -2805,7 +4309,9 @@ namespace tools {
 			break;
 
 			case WM_CLOSE: {
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				EndDialog(hWnd, DLG_CANCEL);
+				DestroyWindow(hWnd);
 			}
 			break;
 		}

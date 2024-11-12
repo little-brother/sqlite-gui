@@ -284,8 +284,8 @@ BEGIN
 	COMBOBOX IDC_DLG_CIPHER, 40, 5 + 15, 305 - 130, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
 
 	AUTOCHECKBOX "Legacy mode (not recommended)", IDC_DLG_CIPHER_LEGACY, 5, 7 + 30, 120, 12, BS_NOTIFY | WS_TABSTOP
-	LTEXT "Page size", IDC_DLG_CIPHER_PAGESIZE_LABEL, 145, 11 + 30, 35, 12, SS_LEFT
-	EDITTEXT IDC_DLG_CIPHER_PAGESIZE, 180, 9 + 30, 35, 13, ES_CENTER | WS_VISIBLE | ES_NUMBER | WS_TABSTOP
+	LTEXT "Page size", IDC_DLG_CIPHER_PAGESIZE_LABEL, 145, 11 + 28, 35, 12, SS_LEFT
+	COMBOBOX IDC_DLG_CIPHER_PAGESIZE, 180, 9 + 27, 35, 13, CBS_DROPDOWNLIST
 
 	LTEXT "Use predefined profile", IDC_DLG_CIPHER_PROFILE_LABEL, 5, 11 + 30 + 15 * 1, 160, 12, SS_LEFT
 	COMBOBOX IDC_DLG_CIPHER_PROFILE, 165, 9 + 30 + 15 * 1, 50, 100, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
@@ -370,7 +370,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_SHORTCUTS DIALOGEX 100, 50, 400, 300
+IDD_SHORTCUTS DIALOGEX 100, 50, 600, 380
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
 	CAPTION "Query shortcuts"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -391,7 +391,7 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_CUSTOM_FUNCTIONS DIALOGEX 100, 50, 400, 300
+IDD_CUSTOM_FUNCTIONS DIALOGEX 100, 50, 600, 380
 	STYLE WS_OVERLAPPEDWINDOW | DS_MODALFRAME
 	CAPTION "Custom functions"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -404,22 +404,25 @@ BEGIN
 	CONTROL "", IDC_DLG_CODE, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL | WS_TABSTOP, 160, 15 + 35, 235, 170, WS_EX_STATICEDGE
 	LTEXT "Help (optional)", IDC_DLG_HELP_LABEL, 160, 15 + 210, 230, 12, SS_LEFT
 	CONTROL "", IDC_DLG_HELP, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL | WS_TABSTOP, 160, 15 + 220, 235, 60, WS_EX_STATICEDGE
-
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
-IDD_TEXT_COMPARISON DIALOGEX 100, 50, 400, 300
-	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
-	CAPTION "Text comparison"
+IDD_REFERENCES DIALOGEX 100, 50, 600, 380
+	STYLE WS_OVERLAPPEDWINDOW | DS_MODALFRAME
+	CAPTION "References"
 	FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-	LTEXT "Text #1", IDC_DLG_ORIGINAL_LABEL, 5, 12, 108, 14, SS_LEFT | SS_CENTERIMAGE
-	LTEXT "Text #2", IDC_DLG_COMPARED_LABEL, 395 - 108, 12, 108, 14, SS_RIGHT | SS_CENTERIMAGE
-	LTEXT "0", IDC_DLG_ORIGINAL_COUNT, 200 - 27 - 27 - 5, 5, 27, 14, SS_CENTER | WS_BORDER | SS_CENTERIMAGE
-	LTEXT "0", IDC_DLG_COMPARED_COUNT, 200 + 27 + 5, 5, 27, 14, SS_CENTER | WS_BORDER | SS_CENTERIMAGE
-	PUSHBUTTON "Compare", IDC_DLG_COMPARE, 200 - 27, 5, 54, 14, WS_TABSTOP
-	CONTROL "", IDC_DLG_ORIGINAL, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 5, 25, 200 - 5 - 5/2, 300 - 29, WS_EX_STATICEDGE
-	CONTROL "", IDC_DLG_COMPARED, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 200 + 5/2, 25, 200 - 5 - 5/2, 300 - 29, WS_EX_STATICEDGE
+	CONTROL "", IDC_DLG_REFERENCES, WC_LISTBOX, LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOTIFY | WS_TABSTOP, 0, 0, 0, 0, WS_EX_STATICEDGE
+
+	LTEXT "Table", IDC_DLG_TABLENAME_LABEL, 0, 0, 0, 0, SS_LEFT
+	COMBOBOX IDC_DLG_TABLENAME, 0, 0, 0, 0, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT "Column", IDC_DLG_COLNAME_LABEL, 0, 0, 0, 0, SS_LEFT
+	COMBOBOX IDC_DLG_COLNAME, 0, 0, 0, 0, WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Title", IDC_DLG_TITLE_LABEL, 0, 0, 0, 0, SS_LEFT
+	EDITTEXT IDC_DLG_TITLE, 0, 0, 0, 0, WS_BORDER | WS_TABSTOP
+	LTEXT "Query", IDC_DLG_QUERY_LABEL, 0, 0, 0, 0, SS_LEFT
+	CONTROL "", IDC_DLG_QUERY, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL  | ES_NOHIDESEL | WS_TABSTOP, 160, 15 + 35, 235, 170, WS_EX_STATICEDGE
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -473,6 +476,14 @@ IDD_INFO DIALOGEX 0, 0, 300, 200
 BEGIN
 	CONTROL "", IDC_DLG_INFO, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_READONLY | WS_TABSTOP, 0, 0, 300, 175, 0
 	PUSHBUTTON "OK", IDC_DLG_OK, 300 - 54 - 5, 200 - 14 - 5, 54, 14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_TOOL_DATABASE_DIAGRAM DIALOGEX 50, 50, 550, 400
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME | WS_CLIPCHILDREN
+	CAPTION "Database diagram"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -685,6 +696,56 @@ BEGIN
 END
 
 LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_TOOL_TRANSFORM_DATA DIALOGEX 50, 50, 256, 98 + 30
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME
+	CAPTION "Transform data"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Action", IDC_DLG_LABEL, 5, 7, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_TYPE, 35, 5, 215, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Source", IDC_DLG_LABEL, 5, 26, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_SRC_SCHEMA, 35, 24, 65, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	COMBOBOX IDC_DLG_SOURCE, 102, 24, 148, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	LTEXT "Output", IDC_DLG_LABEL, 5, 41, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_TRG_SCHEMA, 35, 39, 65, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+	EDITTEXT IDC_DLG_TARGET, 102, 39, 150, 13, WS_BORDER
+
+	AUTOCHECKBOX "Source column names as the first output column", IDC_DLG_ISFIRSTCOLUMN, 5, 60, 230, 12
+	AUTOCHECKBOX "The first source column as output column names", IDC_DLG_ISROWCOLNAMES, 5, 73, 230, 12
+
+	LTEXT "Rows", IDC_DLG_AXIS_X_LABEL, 5, 62, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_AXIS_X, 35, 60, 65, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Columns", IDC_DLG_AXIS_Y_LABEL, 5, 77, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_AXIS_Y, 35, 75, 65, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "Values", IDC_DLG_VALUE_LABEL, 5, 92, 30, 14, SS_LEFT
+	COMBOBOX IDC_DLG_VALUE, 35, 90, 65, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	LTEXT "On duplicates", IDC_DLG_DUPLICATES_LABEL, 103, 92, 70, 14, SS_RIGHT
+	COMBOBOX IDC_DLG_DUPLICATES, 175, 90, 75, 200, WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS
+
+	PUSHBUTTON "Transpose", IDC_DLG_OK, 145, 110, 50, 14, WS_TABSTOP
+	PUSHBUTTON "Cancel", IDC_DLG_CANCEL, 200, 110, 50, 14, WS_TABSTOP
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_TOOL_TEXT_COMPARISON DIALOGEX 100, 50, 400, 300
+	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
+	CAPTION "Text comparison"
+	FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+	LTEXT "Text #1", IDC_DLG_ORIGINAL_LABEL, 5, 12, 108, 14, SS_LEFT | SS_CENTERIMAGE
+	LTEXT "Text #2", IDC_DLG_COMPARED_LABEL, 395 - 108, 12, 108, 14, SS_RIGHT | SS_CENTERIMAGE
+	LTEXT "0", IDC_DLG_ORIGINAL_COUNT, 200 - 27 - 27 - 5, 5, 27, 14, SS_CENTER | WS_BORDER | SS_CENTERIMAGE
+	LTEXT "0", IDC_DLG_COMPARED_COUNT, 200 + 27 + 5, 5, 27, 14, SS_CENTER | WS_BORDER | SS_CENTERIMAGE
+	PUSHBUTTON "Compare", IDC_DLG_COMPARE, 200 - 27, 5, 54, 14, WS_TABSTOP
+	CONTROL "", IDC_DLG_ORIGINAL, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 5, 25, 200 - 5 - 5/2, 300 - 29, WS_EX_STATICEDGE
+	CONTROL "", IDC_DLG_COMPARED, "RICHEDIT50W", ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 200 + 5/2, 25, 200 - 5 - 5/2, 300 - 29, WS_EX_STATICEDGE
+END
+
+LANGUAGE 0, SUBLANG_NEUTRAL
 IDD_TOOL_STATISTICS DIALOGEX 100, 50, 450, 300
 	STYLE WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX | DS_MODALFRAME
 	CAPTION "Database statistics"
@@ -777,6 +838,7 @@ BEGIN
 		END
 		MENUITEM SEPARATOR
 		MENUITEM "Custom functions", IDM_CUSTOM_FUNCTIONS
+		MENUITEM "Adjust references", IDM_REFERENCES
 		MENUITEM "Set encryption", IDM_ENCRYPTION, GRAYED
 		MENUITEM "Settings", IDM_SETTINGS
 		MENUITEM SEPARATOR
@@ -798,6 +860,7 @@ BEGIN
 
 	POPUP "Tools"
 	BEGIN
+		MENUITEM "Database diagram", IDM_DATABASE_DIAGRAM, GRAYED
 		MENUITEM "Database comparison", IDM_COMPARE_DATABASE, GRAYED
 		MENUITEM "Database search", IDM_DATABASE_SEARCH, GRAYED
 		MENUITEM SEPARATOR
@@ -824,6 +887,7 @@ BEGIN
 		MENUITEM "Vacuum database", IDM_VACUUM, GRAYED
 		MENUITEM "Reindex database", IDM_REINDEX, GRAYED
 		MENUITEM SEPARATOR
+		MENUITEM "Transform data", IDM_TRANSFORM_DATA, GRAYED
 		MENUITEM "Text comparison", IDM_COMPARE_TEXTS, GRAYED
 		MENUITEM SEPARATOR
 		MENUITEM "Add desktop shortcut", IDM_DESKTOP_SHORTCUT, GRAYED
@@ -846,7 +910,7 @@ BEGIN
 		MENUITEM "Tips", IDM_TIPS
 		MENUITEM "Wiki", IDM_WIKI
 		MENUITEM SEPARATOR
-		POPUP "Example database"
+		POPUP "Get DB example"
 		BEGIN
 			MENUITEM "Bookstore (small)", IDM_DEMODB_BOOKSTORE
 			MENUITEM "World (small)", IDM_DEMODB_WORLD
@@ -894,9 +958,17 @@ BEGIN
 		MENUITEM SEPARATOR
 		MENUITEM "Edit", IDM_EDIT
 		MENUITEM "Rename", IDM_RENAME
-		MENUITEM "Duplicate", IDM_DUPLICATE
 		MENUITEM "Delete", IDM_DELETE
-		MENUITEM "Clear", IDM_ERASE_DATA
+		POPUP "More ..."
+		BEGIN
+			MENUITEM "Show on diagram", IDM_DIAGRAM
+			MENUITEM SEPARATOR
+			MENUITEM "Clear", IDM_ERASE_DATA
+			MENUITEM "Duplicate", IDM_DUPLICATE
+			MENUITEM SEPARATOR
+			MENUITEM "Generate data", IDM_GENERATE
+			MENUITEM "Transform data", IDM_TRANSFORM
+		END
 		MENUITEM SEPARATOR
 		MENUITEM "Add column", IDM_ADD_COLUMN
 		MENUITEM "Add index", IDM_ADD_INDEX
@@ -925,6 +997,12 @@ BEGIN
 		MENUITEM "Rename", IDM_RENAME
 		MENUITEM "Edit", IDM_EDIT
 		MENUITEM "Delete", IDM_DELETE
+		POPUP "More ..."
+		BEGIN
+			MENUITEM "Show on diagram", IDM_DIAGRAM
+			MENUITEM "Transform data", IDM_TRANSFORM
+		END
+
 	END
 END
 
@@ -1080,6 +1158,32 @@ BEGIN
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_DIAGRAM MENU
+BEGIN
+	POPUP "Diagram"
+	BEGIN
+		MENUITEM "Copy to clipboard", IDM_EXPORT_CLIPBOARD
+		MENUITEM "Save as .png", IDM_EXPORT_PNG
+		MENUITEM SEPARATOR
+		MENUITEM "Show foreign key links", IDM_SHOW_FKLINKS
+		MENUITEM "Show column types", IDM_SHOW_COLTYPES
+		MENUITEM "Show isolation reasons", IDM_SHOW_REASONS
+	END
+END
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDC_MENU_DIAGRAM_TABLE MENU
+BEGIN
+	POPUP "Diagram table"
+	BEGIN
+		MENUITEM "View data", IDM_EDIT_DATA
+		MENUITEM "View DDL", IDM_DDL
+		MENUITEM SEPARATOR
+		MENUITEM "Isolate", IDM_ISOLATE
+	END
+END
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDC_MENU_QUERYLIST MENU
 BEGIN
 	POPUP "Query"
@@ -1142,7 +1246,6 @@ BEGIN
 	VK_RETURN, IDM_PLAN, ALT, VIRTKEY
 	VK_F8, IDM_PLAN, VIRTKEY
 	VK_F8, IDM_PLAN_SELECTION, ALT, VIRTKEY
-	VK_F9, IDM_EXECUTE_SELECTION, ALT, VIRTKEY
 	"S", IDM_SAVE, CONTROL, VIRTKEY
 	"H", IDM_HISTORY, CONTROL, VIRTKEY
 	"G", IDM_GISTS, CONTROL, VIRTKEY
@@ -1186,7 +1289,6 @@ BEGIN
 		"F8/Alt + Enter - Show query plan\n" \
 		"Alt + F8 - Show plan for selection\n" \
 		"F9/Ctrl + Enter - Execute query\n" \
-		"Alt + F9 - Execute only selection\n" \
 		"F11/Ctrl + Alt + Enter - Execute as batch (synchronous is off, joint output)\n" \
 		"F12 - Execute current line\n" \
 		"F3 - Find the next text occurance\n"
@@ -1249,7 +1351,11 @@ BEGIN
 		"* Do you need a newer version of SQLite? Check Wiki to get more details.\n\n" \
 		"* To edit a single table/view run: sqlite-gui <db path> <table name>\n\n" \
 		"* To import Excel data, copy it to clipboard and paste to an editor\n\n" \
-		"* A beep when a database is opened indicates that REST API is available"
+		"* A beep when a database is opened indicates that REST API is available\n\n" \
+		"* Type a table name or paste by Ctrl+V to jump to a table on a database\n   diagram.\n\n" \
+		"* Database diagram isn't accurate with references in views and triggers\n\n" \
+		"* Columns with references have a dot in their resultset headers.\n\n"
+
 
 	IDS_ODBC_HELP "Connection string should match to one of two patterns:\n" \
 		"DSN=<Local DSN>\n"
@@ -1292,6 +1398,18 @@ BEGIN
 		"very slow. Only scalar functions are supported.\n\n" \
 		"Single argument function can be used as a column modifier.\n"
 
+	IDS_REFERENCES_HELP "In a result you may see ids referencing to another tables. " \
+		"To get referenced data you could hold Alt and click by id to view popup block " \
+		"but before you need to make some preparations. \n\n" \
+		"Let suppose you have two tables customers and orders. Orders has a column customer_id " \
+		"referencing to customers.id. And you are going to do a select over orders-table. "\
+		"In that case you need to create a reference with table = 'orders' and column = 'customer_id'. " \
+		"Query can be set as 'select fullname, birthdate from customers where id = ?1'. "\
+		"The title is any string that will be added on top.\n\n" \
+		"Columns with references have a dot in their resultset headers.\n\n" \
+		"The app automatically creates references by foreign keys on a database connection.\n\n" \
+		"Check Wiki if you have any questions about references."
+
 	IDS_TEMP_EXPLAIN "Each tab uses an own independed connection to the database and hence " \
 		"has own TEMP-schema (SQLite limitation). The navigation tree shows TEMP-schema of a current tab. " \
 		"You can create/update/delete data in TEMP-schema by sql commands as usual."
@@ -1311,6 +1429,22 @@ BEGIN
 	IDS_TOOLTIP_ROW_ADD "Add row"
 	IDS_TOOLTIP_ROW_DELETE "Delete row"
 	IDS_TOOLTIP_FILTER_TYPE "Switch Filter/Where mode.\nFilter supports the same prefixs as a column filter."
+
+	IDS_DIAGRAM_LINKS_ERROR "References in views and triggers weren't loaded.\n\n" \
+		"Possible reasons: \n" \
+		"1. SQLite regexp-extension is not installed/loaded.\n" \
+		"2. The database has broken tables e.g. a virtual table without its extension."
+
+	IDS_TRANSPOSE_ERROR "Can't transpose the table. There are 3 possible reasons\n\n" \
+		"1. Source has more than 2000 rows and so the output table\n" \
+		"     will exceed max column count.\n" \
+		"2. The output schema is unwritable.\n" \
+		"3. If ""The first source column...""-checked and the source\n" \
+		"     has duplicate/unacceptable values."
+
+	IDS_CONVERT_TO_3COLUMNS_ERROR "Can't convert the matrix to 3 columns"
+
+	IDS_CONVERT_TO_MATRIX_ERROR "Can't convert 3 columns to a matrix"
 END
 
 IDI_LOGO ICON "resources/logo.ico"

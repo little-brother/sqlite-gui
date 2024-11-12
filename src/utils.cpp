@@ -107,6 +107,45 @@ namespace utils {
 		return res;
 	}
 
+	char* double_quote(const char *str) {
+		if (!str || strlen(str) == 0)
+			return new char[3] {'"', '"', 0};
+
+		int len = strlen(str) * 2 + 3;
+		char* res = new char[len] {0};
+		char q = '"';
+		int j = 0;
+		res[0] = q;
+		j++;
+
+		for (int i = 0; i < (int)strlen(str); i++) {
+			res[j] = str[i];
+			j++;
+
+			if (str[i] == q) {
+				res[j] = str[i];
+				j++;
+			}
+		}
+
+		res[j] = q;
+
+		return res;
+	}
+
+	TCHAR* double_quote(const TCHAR *str) {
+		if (!str || _tcslen(str) == 0)
+			return new TCHAR[3] {'"', '"', 0};
+
+		char* str8 = utf16to8(str);
+		char* res8 = double_quote(str8);
+		TCHAR* res16 = utf8to16(res8);
+		delete [] str8;
+		delete [] res8;
+
+		return res16;
+	}
+
 	TCHAR* getTableName(const TCHAR* in, bool isSchema) {
 		TCHAR* res = new TCHAR[_tcslen(in) + 5]{0}; // `in` can be 1 char, but schema requires 4 ("main")
 		if (!_tcslen(in))
@@ -119,8 +158,23 @@ namespace utils {
 		TCHAR* q = p ? _tcschr(TEXT("'`\"["), p[0]) : 0;
 		if (q && q[0]) {
 			TCHAR* q2 = _tcschr(p + 1, q[0] == TEXT('[') ? TEXT(']') : q[0]);
-			if (q2 && ((isSchema && q2[1] == TEXT('.')) || (!isSchema && q2[1] != TEXT('.'))))
-				_tcsncpy(res, p + 1, _tcslen(p) - _tcslen(q2) - 1);
+			while (q2[0] == TEXT('"') && q2[1] == TEXT('"'))
+				q2 = _tcschr(q2 + 2, TEXT('"'));
+
+			if (q2 && ((isSchema && q2[1] == TEXT('.')) || (!isSchema && q2[1] != TEXT('.')))) {
+				if (q[0] == TEXT('"')) {
+					int j = 0;
+					for (size_t i = 0; i < _tcslen(p) - _tcslen(q2) - 1; i++) {
+						res[j] = (p + 1 + i)[0];
+						j++;
+
+						if ((p + 1 + i)[0] == TEXT('"') && (p + 1 + i + 1)[0] == TEXT('"'))
+							i++;
+					}
+				} else {
+					_tcsncpy(res, p + 1, _tcslen(p) - _tcslen(q2) - 1);
+				}
+			}
 
 			if (q2 && !isSchema && q2[1] == TEXT('.') && q2[2] != 0) {
 				delete [] res;
@@ -144,7 +198,7 @@ namespace utils {
 	}
 
 	TCHAR* getFullTableName(const TCHAR* schema, const TCHAR* tablename, bool isOmitMain) {
-		int len = _tcslen(schema) + _tcslen(tablename) + 10;
+		int len = 2 * (_tcslen(schema) + _tcslen(tablename)) + 3;
 		TCHAR* res = new TCHAR[len + 1]{0};
 
 		bool isSQ = !_istalpha(schema[0]);
@@ -155,13 +209,15 @@ namespace utils {
 		for (int i = 0; !isTQ && (i < (int)_tcslen(tablename)); i++)
 			isTQ = isTQ || !(_istalnum(tablename[i]) || tablename[i] == TEXT('_'));
 
+		TCHAR* qSchema = double_quote(schema);
+		TCHAR* qTablename = double_quote(tablename);
 		if (isOmitMain && _tcscmp(schema, TEXT("main")) == 0) {
-			_sntprintf(res, len, TEXT("%ls%ls%ls"), isTQ ? TEXT("\"") : TEXT(""), tablename, isTQ ? TEXT("\"") : TEXT(""));
+			_sntprintf(res, len, isTQ ? qTablename : tablename);
 		} else {
-			_sntprintf(res, len, TEXT("%ls%ls%ls.%ls%ls%ls"),
-				isSQ ? TEXT("\"") : TEXT(""), schema, isSQ ? TEXT("\"") : TEXT(""),
-				isTQ ? TEXT("\"") : TEXT(""), tablename, isTQ ? TEXT("\"") : TEXT(""));
+			_sntprintf(res, len, TEXT("%ls.%ls"), isSQ ? qSchema : schema, isTQ ? qTablename : tablename);
 		}
+		delete [] qSchema;
+		delete [] qTablename;
 
 		return res;
 	}

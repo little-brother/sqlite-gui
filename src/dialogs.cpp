@@ -45,7 +45,7 @@ namespace dialogs {
 	HMENU hViewDataMenu = GetSubMenu(LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDC_MENU_VIEW_DATA)), 0);
 
 	// lParam = (TEXT)[action, type][table16:etc]
-	// action: 0 - add, 1 - view, 2 - edit
+	// action: 0 - add, 1 - view, 2 - edit, 3 - view+
 	BOOL CALLBACK cbDlgAddViewEdit (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -61,7 +61,7 @@ namespace dialogs {
 				_tcsupr(ufullname16);
 				_sntprintf(buf, len,
 					action == 0 ? TEXT("Add %ls") :
-					action == 1 ? TEXT("View %ls %ls") :
+					action == 1 || action == 3 ? TEXT("View %ls %ls") :
 					TEXT("Edit %ls %ls"), TYPES16[type], ufullname16);
 				free(ufullname16);
 				SetWindowText(hWnd, buf);
@@ -75,7 +75,7 @@ namespace dialogs {
 				TCHAR* tablename16 = utils::getTableName(fullname16);
 
 				if (action != 0) {
-					TCHAR* ddl = getDDL(schema16, tablename16, type, action == 2);
+					TCHAR* ddl = getDDL(schema16, tablename16, type, action == 2 ? 1 : action == 3 ? 2 : 0);
 					if (ddl) {
 						SetWindowText(hEditorWnd, ddl);
 						delete [] ddl;
@@ -84,9 +84,8 @@ namespace dialogs {
 					}
 				}
 
-				if (action == 1) {
+				if (action == 1 || action == 3)
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_OK), SW_HIDE);
-				}
 
 				if (action)
 					ShowWindow(GetDlgItem(hWnd, IDC_DLG_EXAMPLE), SW_HIDE);
@@ -97,7 +96,7 @@ namespace dialogs {
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
 
-
+				utils::alignDialog(hWnd, GetAncestor(hWnd, GA_ROOT));
 				SetFocus(hEditorWnd);
 			}
 			break;
@@ -949,7 +948,11 @@ namespace dialogs {
 
 				bool hasRowid = false;
 				if (isTable) {
-					sprintf(query8, "select rowid from \"%s\".\"%s\" limit 1", schema8, tablename8);
+					char* qschema8 = utils::double_quote(schema8);
+					char* qtablename8 = utils::double_quote(tablename8);
+					sprintf(query8, "select rowid from %s.%s limit 1", qschema8, qtablename8);
+					delete [] qschema8;
+					delete [] qtablename8;
 					hasRowid = SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0);
 					sqlite3_finalize(stmt);
 				}
@@ -957,8 +960,8 @@ namespace dialogs {
 
 				if (!hasRowid) {
 					sprintf(query8,
-						"select '\"' || group_concat(name, '\",\"') || '\"', " \
-						"'md5(coalesce(\"' || group_concat(name, '\", \"~~~\") || ''***'' || coalesce(\"') || '\", \"~~~\"))', " \
+						"select group_concat(dq(name), ','), " \
+						"'md5(coalesce(' || group_concat(dq(name), ', \"~~~\") || ''***'' || coalesce(') || ', \"~~~\"))', " \
 						"count(1) "
 						"from pragma_table_info(?2) where %s and schema = ?1 order by pk ", isTable ? "pk > 0" : "1=1");
 					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
@@ -1230,27 +1233,33 @@ namespace dialogs {
 					if (GetWindowTextLength(hEdit) > 0) {
 						TCHAR colname16[256]{0};
 						Header_GetItemText(hHeader, colNo, colname16, 255);
-						_tcscat(where16, TEXT(" and \""));
-						_tcscat(where16, colname16);
+						_tcscat(where16, TEXT(" and "));
+						TCHAR* qcolname16 = utils::double_quote(colname16);
+						_tcscat(where16, qcolname16);
+						delete [] qcolname16;
 
 						TCHAR buf16[2]{0};
 						GetWindowText(hEdit, buf16, 2);
 						_tcscat(where16,
-							buf16[0] == TEXT('=') ? TEXT("\" = ? ") :
-							buf16[0] == TEXT('/') ? TEXT("\" regexp ? ") :
-							buf16[0] == TEXT('!') ? TEXT("\" not like '%' || ? || '%' ") :
-							buf16[0] == TEXT('>') ? TEXT("\" > ? ") :
-							buf16[0] == TEXT('<') ? TEXT("\" < ? ") :
-							TEXT("\" like '%' || ? || '%' ")
+							buf16[0] == TEXT('=') ? TEXT(" = ? ") :
+							buf16[0] == TEXT('/') ? TEXT(" regexp ? ") :
+							buf16[0] == TEXT('!') ? TEXT(" not like '%' || ? || '%' ") :
+							buf16[0] == TEXT('>') ? TEXT(" > ? ") :
+							buf16[0] == TEXT('<') ? TEXT(" < ? ") :
+							TEXT(" like '%' || ? || '%' ")
 						);
 					}
 				}
 				char* where8 = utils::utf16to8(where16);
 
 				char query8[MAX_TEXT_LENGTH]{0};
-				sprintf(query8, "select *, %s rowid from \"%s\".\"%s\" t %s", hasRowid ? "rowid" : md5keys, schema8, tablename8, where8 && strlen(where8) ? where8 : "");
+				char* qschema8 = utils::double_quote(schema8);
+				char* qtablename8 = utils::double_quote(tablename8);
+				sprintf(query8, "select *, %s rowid from %s.%s t %s", hasRowid ? "rowid" : md5keys, qschema8, qtablename8, where8 && strlen(where8) ? where8 : "");
+				delete [] qschema8;
+				delete [] qtablename8;
 
-				sqlite3_stmt *stmt;
+				sqlite3_stmt* stmt;
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 
 					int bindNo = 0;
@@ -1288,9 +1297,9 @@ namespace dialogs {
 					TCHAR buf[len + 1];
 					TCHAR* schema16 = utils::utf8to16(schema8);
 					TCHAR* tablename16 = utils::utf8to16(tablename8);
-					TCHAR* name16 = utils::getFullTableName(schema16, tablename16, true);
+					TCHAR* name16 = utils::getFullTableName(schema16, tablename16);
 					_tcsupr(name16);
-					_sntprintf(buf, len, TEXT("%ls %ls [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), name16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+					_sntprintf(buf, len, TEXT("%ls %ls [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), _tcscmp(schema16, TEXT("main")) == 0 ? tablename16 : name16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
 					delete [] schema16;
 					delete [] tablename16;
 					delete [] name16;
@@ -1318,6 +1327,8 @@ namespace dialogs {
 				bool isTable = GetProp(hWnd, TEXT("ISTABLE"));
 				char* tablename8 = (char*)GetProp(hWnd, TEXT("TABLENAME8"));
 				char* schema8 = (char*)GetProp(hWnd, TEXT("SCHEMA8"));
+				char* qschema8 = utils::double_quote(schema8);
+				char* qtablename8 = utils::double_quote(tablename8);
 
 				for (int menuNo = 0; menuNo < 2; menuNo++) {
 					HMENU hMenu = (HMENU)GetProp(hWnd, menuNo == 0 ? TEXT("TRIGGERMENU") : TEXT("INDEXMENU"));
@@ -1326,9 +1337,10 @@ namespace dialogs {
 
 					sqlite3_stmt *stmt;
 					char query8[2048];
-					snprintf(query8, 2047, "select name from \"%s\".sqlite_master where type = '%s' and tbl_name = \'%s\' and sql is not null order by 1", schema8, menuNo == 0 ? "trigger" : "index", tablename8);
+					snprintf(query8, 2047, "select name from %s.sqlite_master where type = '%s' and tbl_name = ?1 and sql is not null order by 1", qschema8, menuNo == 0 ? "trigger" : "index");
 					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 						int itemNo = 0;
+						sqlite3_bind_text(stmt, 1, tablename8, -1, SQLITE_TRANSIENT);
 						while (SQLITE_ROW == sqlite3_step(stmt)) {
 							TCHAR* name16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
 							AppendMenu(hMenu, MF_STRING, (menuNo == 0 ? IDM_MENU_TRIGGER : IDM_MENU_INDEX) + itemNo, name16);
@@ -1345,7 +1357,7 @@ namespace dialogs {
 
 				sqlite3_stmt *stmt;
 				char query8[2048];
-				snprintf(query8, 2047, "select count(1) from \"%s\".\"%s\"", schema8, tablename8);
+				snprintf(query8, 2047, "select count(1) from %s.%s", qschema8, qtablename8);
 
 				if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 					sqlite3_step(stmt);
@@ -1358,8 +1370,11 @@ namespace dialogs {
 				if (isTable) {
 					sqlite3_stmt *stmt;
 					char query8[2048];
-					snprintf(query8, 2047, "select ' SIZE: ' || tosize(SUM(pgsize)) total from dbstat where schema = '%s' and name = '%s'", schema8, tablename8);
+					snprintf(query8, 2047, "select ' SIZE: ' || tosize(SUM(pgsize)) total from dbstat where schema = ?1 and name = ?2");
 					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						sqlite3_bind_text(stmt, 1, schema8, -1, SQLITE_TRANSIENT);
+						sqlite3_bind_text(stmt, 2, tablename8, -1, SQLITE_TRANSIENT);
+
 						sqlite3_step(stmt);
 
 						TCHAR* size16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
@@ -1370,6 +1385,9 @@ namespace dialogs {
 				} else {
 					SendMessage(hStatusWnd, SB_SETTEXT, SB_EDITADATA_SIZE, 0);
 				}
+
+				delete [] qschema8;
+				delete [] qtablename8;
 			}
 			break;
 
@@ -2176,7 +2194,7 @@ namespace dialogs {
 					TCHAR buf16[len + 1];
 					_sntprintf(buf16, len, TEXT(" %ls"), fullname16);
 					buf16[0] = MAKEWORD(1, isTrigger ? TRIGGER : INDEX); // view
-					openDialog(IDD_ADDVIEWEDIT, (DLGPROC)cbDlgAddViewEdit, (LPARAM)buf16);
+					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDVIEWEDIT), hWnd, (DLGPROC)cbDlgAddViewEdit, (LPARAM)buf16);
 					delete [] fullname16;
 				}
 			}
@@ -2264,8 +2282,8 @@ namespace dialogs {
 					RemoveProp(hWnd, TEXT("MD5KEYS8"));
 				}
 
-				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				EndDialog(hWnd, DLG_CANCEL);
+				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				DestroyWindow(hWnd);
 			}
 			break;
@@ -2472,7 +2490,6 @@ namespace dialogs {
 
 			case WM_COMMAND: {
 				if (wParam == IDC_DLG_OK || wParam == IDOK) {
-					//int len = GetDlgItemTextLength(hWnd, IDC_DLG_EDITOR);
 					GetDlgItemText(hWnd, IDC_DLG_EDITOR, (TCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA), MAX_TEXT_LENGTH);
 					EndDialog(hWnd, DLG_OK);
 				}
@@ -3403,15 +3420,27 @@ namespace dialogs {
 				TCHAR* schema16 = utils::getTableName(fullname16, true);
 				TCHAR* tablename16 = utils::getTableName(fullname16);
 
-				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
 				SetProp(hWnd, TEXT("SCHEMA16"), (HANDLE)schema16);
+				SetProp(hWnd, TEXT("TABLENAME16"), (HANDLE)tablename16);
+
+				int len = _tcslen(fullname16) + 10;
+				TCHAR idxName16[len + 1];
+				_sntprintf(idxName16, len, TEXT("idx_%ls_"), tablename16);
+				SetDlgItemText(hWnd, IDC_DLG_IDXNAME, idxName16);
 
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_COLUMNS);
-				TCHAR query16[256];
-				_sntprintf(query16, 255, TEXT("select name 'Column name', 'asc' 'Order' from pragma_table_info('%ls') where schema = \"%ls\""), tablename16, schema16);
-				char* sql8 = utils::utf16to8(query16);
+
 				sqlite3_stmt* stmt;
-				if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
+				if (SQLITE_OK == sqlite3_prepare_v2(db, "select name 'Column name', 'asc' 'Order' from pragma_table_info(?2) where schema = ?1", -1, &stmt, 0)) {
+					char* schema8 = utils::utf16to8(schema16);
+					char* tablename8 = utils::utf16to8(tablename16);
+
+					sqlite3_bind_text(stmt, 1, schema8, -1, SQLITE_TRANSIENT);
+					sqlite3_bind_text(stmt, 2, tablename8, -1, SQLITE_TRANSIENT);
+
+					delete [] schema8;
+					delete [] tablename8;
+
 					while (SQLITE_ROW == sqlite3_step(stmt)) {
 						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
 						ListBox_AddString(hListWnd, name16);
@@ -3419,12 +3448,6 @@ namespace dialogs {
 					}
 				}
 				sqlite3_finalize(stmt);
-				delete [] sql8;
-
-				int len = _tcslen(fullname16) + 10;
-				TCHAR idxName16[len + 1];
-				_sntprintf(idxName16, len, TEXT("idx_%s_"), tablename16);
-				SetDlgItemText(hWnd, IDC_DLG_IDXNAME, idxName16);
 
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
 			}
@@ -3434,8 +3457,8 @@ namespace dialogs {
 				if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == IDC_DLG_INDEXED_COLUMNS && HIWORD(GetKeyState(VK_CONTROL))) {
 					HWND hListWnd = (HWND)lParam;
 					int rowNo = ListBox_GetCurSel(hListWnd);
-					int size = ListBox_GetTextLen(hListWnd, rowNo);
-					TCHAR name16[size + 10]{0};
+					int len = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[len + 10]{0};
 					ListBox_GetText(hListWnd, rowNo, name16);
 					int isDesc = ListBox_GetItemData(hListWnd, rowNo);
 					if (isDesc)
@@ -3452,11 +3475,10 @@ namespace dialogs {
 					HWND hListWnd = (HWND)lParam;
 					int rowNo = ListBox_GetCurSel(hListWnd);
 
-					int size = ListBox_GetTextLen(hListWnd, rowNo);
-					TCHAR name16[size + 1]{0};
+					int len = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[len + 1]{0};
 					ListBox_GetText(hListWnd, rowNo, name16);
 					ListBox_DeleteString(hListWnd, rowNo);
-					_tcstok(name16, TEXT(" "));
 
 					hListWnd = GetDlgItem(hWnd, LOWORD(wParam) == IDC_DLG_COLUMNS ? IDC_DLG_INDEXED_COLUMNS : IDC_DLG_COLUMNS);
 					ListBox_AddString(hListWnd, name16);
@@ -3488,18 +3510,26 @@ namespace dialogs {
 
 					int len = colCount * 255 + wsize + _tcslen(tablename16) + 200;
 					TCHAR query16[len + 1]{0};
-					_sntprintf(query16, len, TEXT("create%ls index \"%ls\".\"%ls\" on \"%ls\" ("), isUnique ? TEXT(" unique") : TEXT(""), schema16, idxName16, tablename16);
+					TCHAR* qschema16 = utils::double_quote(schema16);
+					TCHAR* qtablename16 = utils::double_quote(tablename16);
+					TCHAR* qidxname16 = utils::double_quote(idxName16);
+					_sntprintf(query16, len, TEXT("create%ls index %ls.%ls on %ls ("), isUnique ? TEXT(" unique") : TEXT(""), qschema16, qidxname16, qtablename16);
+					delete [] qschema16;
+					delete [] qtablename16;
+					delete [] qidxname16;
 
 					for (int colNo = 0; colNo < colCount; colNo++) {
-						int size = ListBox_GetTextLen(hListWnd, colNo);
-						TCHAR name16[size + 1]{0};
+						int len = ListBox_GetTextLen(hListWnd, colNo);
+						TCHAR name16[len + 1]{0};
 						ListBox_GetText(hListWnd, colNo, name16);
 						int isDesc = ListBox_GetItemData(hListWnd, colNo);
 						if (isDesc)
 							name16[_tcslen(name16) - 5] = 0;
 
-						TCHAR buf16[size + 11];
-						_sntprintf(buf16, size + 10, TEXT("\"%ls\"%ls%ls"), name16, isDesc ? TEXT(" desc") : TEXT(""), colNo != colCount - 1 ? TEXT(", ") : TEXT(")"));
+						TCHAR buf16[len + 11];
+						TCHAR* qname16 = utils::double_quote(name16);
+						_sntprintf(buf16, len + 10, TEXT("%ls%ls%ls"), qname16, isDesc ? TEXT(" desc") : TEXT(""), colNo != colCount - 1 ? TEXT(", ") : TEXT(")"));
+						delete [] qname16;
 						_tcscat(query16, buf16);
 					}
 
@@ -4849,6 +4879,438 @@ namespace dialogs {
 		return false;
 	}
 
+	BOOL CALLBACK cbDlgReferences (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		switch (msg) {
+			case WM_INITDIALOG: {
+				TBBUTTON tbButtons [] = {
+					{0, IDM_ADD, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Add")},
+					{1, IDM_DELETE, 0, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Delete")},
+					{2, IDM_SAVE, 0, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Save")},
+					{3, IDM_TEST, 0, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Test")},
+					{-1, IDM_LAST_SEPARATOR, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0},
+					{4, IDM_HELP, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Help")},
+				};
+
+				HWND hToolbarWnd = CreateToolbarEx (hWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST, IDC_DLG_TOOLBAR, 0, NULL, 0,
+					tbButtons, sizeof(tbButtons)/sizeof(tbButtons[0]), 0, 0, 0, 0, sizeof (TBBUTTON));
+
+				int idc = GetSystemMetrics(SM_CXSMICON) <= 16 ? IDB_TOOLBAR_FUNCTIONS16 : IDB_TOOLBAR_FUNCTIONS24;
+				SendMessage(hToolbarWnd, TB_SETIMAGELIST, 0, (LPARAM)ImageList_LoadBitmap(GetModuleHandle(0), MAKEINTRESOURCE(idc), 0, 0, RGB(255,255,255)));
+
+				char* dbname8 = utils::getFileName(sqlite3_db_filename(db, 0));
+				SetProp(hWnd, TEXT("DBNAME8"), dbname8);
+
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_REFERENCES);
+				HWND hTableWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_COLNAME);
+				HWND hTitleWnd = GetDlgItem(hWnd, IDC_DLG_TITLE);
+				HWND hQueryWnd = GetDlgItem(hWnd, IDC_DLG_QUERY);
+
+				SendMessage(hListWnd, WM_SETFONT, (LPARAM)hFont, true);
+				SetWindowLongPtr(hListWnd, GWLP_USERDATA, -1);
+				SendMessage(hWnd, WMU_UPDATE_REFERENCES, 0, 0);
+
+				setEditorFont(hQueryWnd);
+				SetProp(hQueryWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hQueryWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewEditor));
+				setEditorFont(hQueryWnd);
+				SendMessage(hQueryWnd, EM_SETEVENTMASK, 0, ENM_CHANGE | ENM_SELCHANGE | ENM_KEYEVENTS);
+
+				EnableWindow(hTableWnd, FALSE);
+				EnableWindow(hColumnWnd, FALSE);
+				EnableWindow(hTitleWnd, FALSE);
+				EnableWindow(hQueryWnd, FALSE);
+				utils::alignDialog(hWnd, hMainWnd, true);
+			}
+			break;
+
+			case WM_SIZE: {
+				HWND hToolbarWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
+				SendMessage(hToolbarWnd, WM_SIZE, 0, 0);
+
+				POINTFLOAT s = utils::getDlgScale(hWnd);
+				int editH = utils::getEditHeight(hWnd);
+
+				RECT rc, trc;
+				GetClientRect(hWnd, &rc);
+				GetWindowRect(hToolbarWnd, &trc);
+				int th = trc.bottom - trc.top;
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_REFERENCES), 0, 5 * s.x, th + 5 * s.y, 150 * s.x, rc.bottom - th - 2 * 5 * s.x, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_TABLENAME_LABEL), 0, 160 * s.x, th + 7 * s.y, 25 * s.x, editH, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_TABLENAME), 0, 185 * s.x, th + 5 * s.y, 100 * s.x, editH, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COLNAME_LABEL), 0, 300 * s.x, th + 7 * s.y, 25 * s.x, editH, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_COLNAME), 0, 330 * s.x, th + 5 * s.y, 100 * s.x, editH, SWP_NOZORDER);
+
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_TITLE_LABEL), 0, 160 * s.x, th + 24 * s.y, 25 * s.x, editH, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_TITLE), 0, 185 * s.x, th + 22 * s.y, rc.right - 190 * s.x, editH, SWP_NOZORDER);
+
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_QUERY_LABEL), 0, 160 * s.x, th + 45 * s.y, 25 * s.x, editH, SWP_NOZORDER);
+				SetWindowPos(GetDlgItem(hWnd, IDC_DLG_QUERY), 0, 160 * s.x, th + 57 * s.y, rc.right - 165 * s.x, rc.bottom - th - 61 * s.y, SWP_NOZORDER);
+			}
+			break;
+
+			case WM_CLOSE: {
+				HWND hToolbarWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_REFERENCES);
+
+				if (SendMessage(hToolbarWnd, TB_GETSTATE, IDM_SAVE, 0) & TBSTATE_ENABLED &&
+					IDYES == MessageBox(hWnd, TEXT("Save changes?"), TEXT("Confirmation"), MB_YESNO)) {
+					SendMessage(hWnd, WMU_FUNCTION_SAVE, ListBox_GetCurSel(hListWnd), 0);
+				}
+
+				char* dbname8 = (char*)GetProp(hWnd, TEXT("DBNAME8"));
+				delete [] dbname8;
+				RemoveProp(hWnd, TEXT("DBNAME8"));
+			}
+			break;
+
+			case WM_CONTEXTMENU: {
+				POINT p = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+				bool isContextKey = p.x == -1 && p.y == -1;
+				if ((HWND)wParam == GetDlgItem(hWnd, IDC_DLG_CODE) && !isContextKey)
+					TrackPopupMenu(hEditorMenu, TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
+			}
+			break;
+
+			case WM_COMMAND: {
+				HWND hToolbarWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_REFERENCES);
+				HWND hTableWnd = GetDlgItem(hWnd, IDC_DLG_TABLENAME);
+				HWND hColumnWnd = GetDlgItem(hWnd, IDC_DLG_COLNAME);
+				HWND hTitleWnd = GetDlgItem(hWnd, IDC_DLG_TITLE);
+				HWND hQueryWnd = GetDlgItem(hWnd, IDC_DLG_QUERY);
+
+				if (LOWORD(wParam) == IDC_DLG_REFERENCES && HIWORD(wParam) == LBN_SELCHANGE) {
+					int rowNo = ListBox_GetCurSel(hListWnd);
+					int prevRowNo = GetWindowLongPtr(hListWnd, GWLP_USERDATA);
+					if (prevRowNo != -1 && prevRowNo != rowNo &&
+						SendMessage(hToolbarWnd, TB_GETSTATE, IDM_SAVE, 0) & TBSTATE_ENABLED &&
+						IDYES == MessageBox(hWnd, TEXT("Save changes?"), TEXT("Confirmation"), MB_YESNO)) {
+						if (!SendMessage(hWnd, WMU_SAVE_REFERENCE, prevRowNo, 0))
+							return false;
+					}
+
+					int len = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[len + 1]{0};
+					ListBox_GetText(hListWnd, rowNo, name16);
+					int pos = ListBox_GetItemData(hListWnd, rowNo);
+					name16[pos] = 0;
+
+					ComboBox_ResetContent(hTableWnd);
+					ComboBox_AddString(hTableWnd, name16);
+					ComboBox_SetCurSel(hTableWnd, 0);
+
+					ComboBox_ResetContent(hColumnWnd);
+					ComboBox_AddString(hColumnWnd, name16 + pos + 1);
+					ComboBox_SetCurSel(hColumnWnd, 0);
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select query, refname from refs where tblname = ?1 and colname = ?2 and dbname = ?3", -1, &stmt, 0)) {
+						char* tblname8 = utils::utf16to8(name16);
+						sqlite3_bind_text(stmt, 1, tblname8, -1, SQLITE_TRANSIENT);
+						delete [] tblname8;
+
+						char* colname8 = utils::utf16to8(name16 + pos + 1);
+						sqlite3_bind_text(stmt, 2, colname8, -1, SQLITE_TRANSIENT);
+						delete [] colname8;
+
+						sqlite3_bind_text(stmt, 3, (char*)GetProp(hWnd, TEXT("DBNAME8")), -1, SQLITE_TRANSIENT);
+
+						sqlite3_step(stmt);
+
+						TCHAR* query16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						TCHAR* title16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+						SetDlgItemText(hWnd, IDC_DLG_QUERY, query16);
+						SetDlgItemText(hWnd, IDC_DLG_TITLE, title16);
+						delete [] query16;
+						delete [] title16;
+					}
+					sqlite3_finalize(stmt);
+
+					Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, 0);
+					Toolbar_SetButtonState(hToolbarWnd, IDM_DELETE, TBSTATE_ENABLED);
+					Toolbar_SetButtonState(hToolbarWnd, IDM_TEST, TBSTATE_ENABLED);
+
+					EnableWindow(hTableWnd, FALSE);
+					EnableWindow(hColumnWnd, FALSE);
+					EnableWindow(hTitleWnd, TRUE);
+					EnableWindow(hQueryWnd, TRUE);
+					EnableScrollBar(hQueryWnd, SB_BOTH, ESB_ENABLE_BOTH);
+
+					SetWindowLongPtr(hListWnd, GWLP_USERDATA, rowNo);
+				}
+
+				if (wParam == IDM_ADD) {
+					int prevRowNo = ListBox_GetCurSel(hListWnd);
+					if (prevRowNo != -1 && (SendMessage(hToolbarWnd, TB_GETSTATE, IDM_SAVE, 0) & TBSTATE_ENABLED)) {
+						if (IDYES == MessageBox(hWnd, TEXT("Save changes?"), TEXT("Confirmation"), MB_YESNO)) {
+							SendMessage(hWnd, WMU_SAVE_REFERENCE, prevRowNo, 0);
+							if (SendMessage(hToolbarWnd, TB_GETSTATE, IDM_SAVE, 0) & TBSTATE_ENABLED)
+								return false;
+						}
+					}
+
+					ListBox_SetCurSel(hListWnd, -1);
+					SetWindowLongPtr(hListWnd, GWLP_USERDATA, -1);
+
+					int idcs [] = {IDC_DLG_TABLENAME, IDC_DLG_COLNAME, IDC_DLG_TITLE, IDC_DLG_QUERY};
+					for (int idc : idcs) {
+						EnableWindow(GetDlgItem(hWnd, idc), TRUE);
+						SetDlgItemText(hWnd, idc, NULL);
+					}
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name from sqlite_master where type in ('table', 'view') order by type, name", -1, &stmt, 0)) {
+						ComboBox_ResetContent(hTableWnd);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* tblname16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							ComboBox_AddString(hTableWnd, tblname16);
+							delete [] tblname16;
+						}
+					}
+					sqlite3_finalize(stmt);
+					ComboBox_SetCurSel(hTableWnd, 0);
+					SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_TABLENAME, CBN_SELCHANGE), (LPARAM)hTableWnd);
+
+					Toolbar_SetButtonState(hToolbarWnd, IDM_DELETE, 0);
+					Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, 0);
+					SetFocus(GetDlgItem(hWnd, IDC_DLG_TITLE));
+				}
+
+				if (wParam == IDM_DELETE) {
+					int rowNo = ListBox_GetCurSel(hListWnd);
+					if (rowNo == -1)
+						return false;
+
+					if (IDYES != MessageBox(hWnd, TEXT("Are you sure you want to delete?"), TEXT("Confirmation"), MB_YESNO))
+						return false;
+
+					int len = ListBox_GetTextLen(hListWnd, rowNo);
+					TCHAR name16[len + 1]{0};
+					ListBox_GetText(hListWnd, rowNo, name16);
+					int pos = ListBox_GetItemData(hListWnd, rowNo);
+					name16[pos] = 0;
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "delete from refs where tblname = ?1 and colname = ?2 and dbname = ?3", -1, &stmt, 0)) {
+						char* tblname8 = utils::utf16to8(name16);
+						sqlite3_bind_text(stmt, 1, tblname8, -1, SQLITE_TRANSIENT);
+						delete [] tblname8;
+
+						char* colname8 = utils::utf16to8(name16 + pos + 1);
+						sqlite3_bind_text(stmt, 2, colname8, -1, SQLITE_TRANSIENT);
+						delete [] colname8;
+
+						sqlite3_bind_text(stmt, 3, (char*)GetProp(hWnd, TEXT("DBNAME8")), -1, SQLITE_TRANSIENT);
+
+						if (SQLITE_DONE == sqlite3_step(stmt) && sqlite3_changes(prefs::db) == 1) {
+							ListBox_DeleteString(hListWnd, rowNo);
+							int idcs [] = {IDC_DLG_TABLENAME, IDC_DLG_COLNAME, IDC_DLG_TITLE, IDC_DLG_QUERY};
+							for (int idc : idcs) {
+								EnableWindow(GetDlgItem(hWnd, idc), FALSE);
+								SetDlgItemText(hWnd, idc, NULL);
+							}
+
+							SetWindowLongPtr(hListWnd, GWLP_USERDATA, -1);
+							ListBox_SetCurSel(hListWnd, -1);
+
+							Toolbar_SetButtonState(hToolbarWnd, IDM_DELETE, 0);
+							Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, 0);
+							Toolbar_SetButtonState(hToolbarWnd, IDM_TEST, 0);
+						} else {
+							MessageBox(hWnd, TEXT("Can't remove the reference"), NULL, MB_YESNO);
+						}
+					}
+					sqlite3_finalize(stmt);
+				}
+
+				if (wParam == IDM_SAVE) {
+					int rowNo = ListBox_GetCurSel(hListWnd);
+					SendMessage(hWnd, WMU_SAVE_REFERENCE, rowNo, 0);
+				}
+
+				if (wParam == IDM_TEST) {
+					int len = GetWindowTextLength(hQueryWnd) + 1;
+					TCHAR* query16 = new TCHAR[len + 1] {0};
+					GetWindowText(hQueryWnd, query16, len + 1);
+
+					char* query8 = utils::utf16to8(query16);
+					sqlite3_stmt *stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+						MessageBox(hWnd, sqlite3_bind_parameter_count(stmt) != 1 ? TEXT("Error: Query have to use one parameter") : TEXT("OK"), TEXT("Result"), MB_OK);
+					} else {
+						showDbError(hWnd);
+					}
+					sqlite3_finalize(stmt);
+
+					delete [] query8;
+					delete [] query16;
+				}
+
+				if (wParam == IDM_HELP) {
+					TCHAR buf[MAX_TEXT_LENGTH];
+					LoadString(GetModuleHandle(NULL), IDS_REFERENCES_HELP, buf, MAX_TEXT_LENGTH);
+					MessageBox(hWnd, buf, TEXT("References"), MB_OK);
+				}
+
+				if ((LOWORD(wParam) == IDC_DLG_TITLE || LOWORD(wParam) == IDC_DLG_QUERY) && HIWORD(wParam) == EN_CHANGE) {
+					Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, TBSTATE_ENABLED);
+					Toolbar_SetButtonState(hToolbarWnd, IDM_TEST, TBSTATE_ENABLED);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_TABLENAME && HIWORD(wParam) == CBN_SELCHANGE) {
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, "select name, ?1 || '.' || name from pragma_table_xinfo(?1) order by cid", -1, &stmt, 0)) {
+						int len = GetWindowTextLength(hTableWnd);
+						TCHAR tblname16[len + 1]{0};
+						GetWindowText(hTableWnd, tblname16, len + 1);
+						char* tblname8 = utils::utf16to8(tblname16);
+						sqlite3_bind_text(stmt, 1, tblname8, -1, SQLITE_TRANSIENT);
+						delete [] tblname8;
+
+						ComboBox_ResetContent(hColumnWnd);
+						while (SQLITE_ROW == sqlite3_step(stmt)) {
+							TCHAR* ref16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+							if (ListBox_FindStringExact(hListWnd, -1, ref16) == LB_ERR) {
+								TCHAR* colname16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+								ComboBox_AddString(hColumnWnd, colname16);
+								delete [] colname16;
+							}
+							delete [] ref16;
+						}
+					}
+					sqlite3_finalize(stmt);
+					ComboBox_SetCurSel(hColumnWnd, 0);
+				}
+
+				if (LOWORD(wParam) == IDC_DLG_QUERY && HIWORD(wParam) == EN_CHANGE)
+					SendMessage((HWND)lParam, WMU_TEXT_CHANGED, 0, 0);
+
+				if (wParam == IDM_EDITOR_COMMENT)
+					toggleComment(hQueryWnd);
+
+				if (wParam == IDM_EDITOR_CUT)
+					SendMessage(hQueryWnd, WM_CUT, 0, 0);
+
+				if (wParam == IDM_EDITOR_COPY)
+					SendMessage(hQueryWnd, WM_COPY, 0, 0);
+
+				if (wParam == IDM_EDITOR_PASTE)
+					pasteText(hQueryWnd);
+
+				if (wParam == IDM_EDITOR_DELETE)
+					SendMessage(hQueryWnd, EM_REPLACESEL, TRUE, 0);
+
+				if (wParam == IDM_EDITOR_FIND) {
+					DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_FIND), hWnd, (DLGPROC)cbDlgFind, (LPARAM)hQueryWnd);
+					SetForegroundWindow(hWnd);
+					SetFocus(hQueryWnd);
+				}
+
+				if (wParam == IDC_DLG_CANCEL || wParam == IDCANCEL)
+					EndDialog(hWnd, DLG_CANCEL);
+			}
+			break;
+
+			case WM_NOTIFY: {
+				NMHDR* pHdr = (LPNMHDR)lParam;
+				if (wParam == IDC_DLG_QUERY && pHdr->code == EN_SELCHANGE)
+					return SendMessage(pHdr->hwndFrom, WMU_SELECTION_CHANGED, wParam, lParam);
+
+				if (wParam == IDC_DLG_QUERY && pHdr->code == EN_MSGFILTER)
+					return processEditorEvents((MSGFILTER*)lParam);
+			}
+			break;
+
+			// wParam = rowNo
+			case WMU_SAVE_REFERENCE: {
+				bool rc = false;
+
+				if (GetWindowTextLength(GetDlgItem(hWnd, IDC_DLG_TABLENAME)) == 0 ||
+					GetWindowTextLength(GetDlgItem(hWnd, IDC_DLG_COLNAME)) == 0) {
+					MessageBox(hWnd, TEXT("Table and column are mandatory"), NULL, MB_OK);
+					return rc;
+				}
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+					"replace into refs (dbname, schema, tblname, colname, refname, query) values (?5, 'main', ?1, ?2, ?3, ?4) " \
+					"returning tblname || '.' || colname", -1, &stmt, 0)) {
+					int idcs [] = {IDC_DLG_TABLENAME, IDC_DLG_COLNAME, IDC_DLG_TITLE, IDC_DLG_QUERY};
+					for (int i = 0; i < 4; i++) {
+						HWND hPropWnd = GetDlgItem(hWnd, idcs[i]);
+						int len = GetWindowTextLength(hPropWnd);
+						TCHAR* value16 = new TCHAR[len + 1]{0};
+						GetWindowText(hPropWnd, value16, len + 1);
+						char* value8 = utils::utf16to8(value16);
+						sqlite3_bind_text(stmt, i + 1, value8, -1, SQLITE_TRANSIENT);
+						delete [] value8;
+						delete [] value16;
+					}
+					sqlite3_bind_text(stmt, 5, (char*)GetProp(hWnd, TEXT("DBNAME8")), -1, SQLITE_TRANSIENT);
+
+					if (SQLITE_ROW == sqlite3_step(stmt)) {
+						rc = true;
+
+						HWND hToolbarWnd = GetDlgItem(hWnd, IDC_DLG_TOOLBAR);
+						Toolbar_SetButtonState(hToolbarWnd, IDM_DELETE, TBSTATE_ENABLED);
+						Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, 0);
+
+						int rowNo = wParam;
+						if (rowNo == -1) {
+							SendMessage(hWnd, WMU_UPDATE_REFERENCES, 0, 0);
+
+							HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_REFERENCES);
+							TCHAR* ref16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+							rowNo = ListBox_FindStringExact(hListWnd, -1, ref16);
+							ListBox_SetCurSel(hListWnd, rowNo);
+							SetWindowLongPtr(hListWnd, GWLP_USERDATA, rowNo);
+							delete [] ref16;
+
+							SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_REFERENCES, LBN_SELCHANGE), (LPARAM)hListWnd);
+						}
+					} else {
+						TCHAR* err16 = utils::utf8to16(sqlite3_errmsg(prefs::db));
+						MessageBox(hWnd, err16, NULL, 0);
+						delete [] err16;
+					}
+				}
+				sqlite3_finalize(stmt);
+
+				return rc;
+			}
+			break;
+
+			case WMU_UPDATE_REFERENCES: {
+				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_REFERENCES);
+				char* dbname8 = (char*)GetProp(hWnd, TEXT("DBNAME8"));
+
+				ListBox_ResetContent(hListWnd);
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select tblname || '.' || colname, length(tblname), length(tblname) + length(colname), tblname, colname from refs where schema = 'main' and dbname = ?1 order by tblname, colname", -1, &stmt, 0)) {
+					sqlite3_bind_text(stmt, 1, dbname8, -1, SQLITE_TRANSIENT);
+
+					while (SQLITE_ROW == sqlite3_step(stmt)) {
+						int len = sqlite3_column_int(stmt, 2) + 64;
+						char query8[len];
+						snprintf(query8, len, "select \"%s\" from \"%s\"", sqlite3_column_text(stmt, 4), sqlite3_column_text(stmt, 3));
+						if (SQLITE_OK != sqlite3_exec(db, query8, 0, 0, 0))
+							continue;
+
+						TCHAR* name16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+						int rowNo = ListBox_AddString(hListWnd, name16);
+						ListBox_SetItemData(hListWnd, rowNo, sqlite3_column_int(stmt, 1));
+						delete [] name16;
+					}
+				}
+				sqlite3_finalize(stmt);
+			}
+			break;
+		}
+
+		return false;
+	}
+
 	// lParam, USERDATA = hListWnd
 	BOOL CALLBACK cbDlgResultFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -5052,7 +5514,10 @@ namespace dialogs {
 
 		HWND hListWnd = (HWND)GetWindowLongPtr(hWnd, GWLP_USERDATA);
 		HWND hHeader = ListView_GetHeader(hListWnd);
+
 		SelectFont(hdc, hFont);
+		RECT rc = {0, 0, w, h};
+		FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
 
 		int dataColCount = 0;
 		int groupColCount = 0;
@@ -6404,6 +6869,7 @@ namespace dialogs {
 	#define CIPHER_SQLEET             3
 	#define CIPHER_SQLCIPHER          4
 	#define CIPHER_SYSTEM_DATA        5
+	#define CIPHER_ASCON128           6
 
 	#define ENCRYPT_MODE_OPEN         0
 	#define ENCRYPT_MODE_REKEY        1
@@ -6448,13 +6914,6 @@ namespace dialogs {
 		return rc;
 	}
 
-	// USERDATA = lParam
-	/*
-		There are 3 dialog modes:
-			open database - db can't execute query, lParam = sqlite3 db handle
-			encrypt database - db can execute query, lParam is not set, lParam = 0
-			attach database - db can execute query, lParam is set as "attach database as ...", lParam = dbpath8
-	*/
 	LRESULT CALLBACK cbNewKeyIcon(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP) {
 			HWND hKeyWnd = GetDlgItem(GetParent(hWnd), IDC_DLG_CIPHER_KEY);
@@ -6467,7 +6926,14 @@ namespace dialogs {
 		return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
 	}
 
-	const TCHAR* ciphers[6] = {TEXT(""), TEXT("aes128cbc"), TEXT("aes256cbc"), TEXT("chacha20"), TEXT("sqlcipher"), TEXT("rc4")};
+	// USERDATA = lParam
+	/*
+		There are 3 dialog modes:
+			open database - db can't execute query, lParam = sqlite3 db handle
+			encrypt database - db can execute query, lParam is not set, lParam = 0
+			attach database - db can execute query, lParam is set as "attach database as ...", lParam = dbpath8
+	*/
+	const TCHAR* ciphers[7] = {TEXT(""), TEXT("aes128cbc"), TEXT("aes256cbc"), TEXT("chacha20"), TEXT("sqlcipher"), TEXT("rc4"), TEXT("ascon128")};
 	BOOL CALLBACK cbDlgEncryption (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -6480,6 +6946,19 @@ namespace dialogs {
 				ComboBox_AddString(hCombo, TEXT("sqleet: ChaCha20"));
 				ComboBox_AddString(hCombo, TEXT("SQLCipher: AES 256 Bit CBC"));
 				ComboBox_AddString(hCombo, TEXT("System.Data.SQLite: RC4"));
+				ComboBox_AddString(hCombo, TEXT("Ascon: Ascon-128 v1.2"));
+				ComboBox_SetCurSel(hCombo, 0);
+
+				hCombo = GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE);
+				ComboBox_AddString(hCombo, TEXT("0"));
+				ComboBox_AddString(hCombo, TEXT("512"));
+				ComboBox_AddString(hCombo, TEXT("1024"));
+				ComboBox_AddString(hCombo, TEXT("2048"));
+				ComboBox_AddString(hCombo, TEXT("4096"));
+				ComboBox_AddString(hCombo, TEXT("8192"));
+				ComboBox_AddString(hCombo, TEXT("16384"));
+				ComboBox_AddString(hCombo, TEXT("32768"));
+				ComboBox_AddString(hCombo, TEXT("65536"));
 				ComboBox_SetCurSel(hCombo, 0);
 
 				hCombo = GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ALGORITHM);
@@ -6507,8 +6986,7 @@ namespace dialogs {
 				ComboBox_AddString(hCombo, TEXT("v2"));
 				ComboBox_AddString(hCombo, TEXT("v3"));
 				ComboBox_AddString(hCombo, TEXT("v4"));
-
-				SendMessage(hWnd, WMU_CIPHER_CHANGED, 0, 0);
+				ComboBox_SetCurSel(hCombo, 0);
 
 				bool isOpen = SQLITE_OK == sqlite3_exec(db, "select * from sqlite_master limit 1", 0, 0, 0);
 				int mode = !isOpen ? ENCRYPT_MODE_OPEN : isOpen && !lParam ? ENCRYPT_MODE_REKEY : ENCRYPT_MODE_ATTACH;
@@ -6535,19 +7013,23 @@ namespace dialogs {
 							Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CIPHER_STORE_KEY), sqlite3_column_int(stmt, 2) == 1 ? BST_CHECKED : BST_UNCHECKED);
 						} else if (idc == IDC_DLG_CIPHER) {
 							TCHAR* cipher16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
-							for (int i = CIPHER_WXSQLITE128; i <= CIPHER_SYSTEM_DATA; i++)
-								if (_tcscmp(cipher16, ciphers[i]) == 0) {
+							for (int i = CIPHER_WXSQLITE128; i <= CIPHER_ASCON128; i++) {
+								if (_tcscmp(cipher16, ciphers[i]) == 0)
 									SendMessage(hWnd, WMU_SET_VALUE, idc, i);
-									SendMessage(hWnd, WMU_CIPHER_CHANGED, 0, 0);
-								}
+							}
 
 							delete [] cipher16;
 						} else {
 							SendMessage(hWnd, WMU_SET_VALUE, idc, sqlite3_column_int(stmt, 1));
 						}
+						SetProp(GetDlgItem(hWnd, idc), TEXT("PROTECTED"), IntToPtr(1));
 					}
 				}
 				sqlite3_finalize(stmt);
+
+				SendMessage(hWnd, WMU_CIPHER_CHANGED, 0, 0);
+				for (int idc = IDC_DLG_CIPHER_KEY; idc <= IDC_DLG_CIPHER_HEADER_SIZE; idc++)
+					RemoveProp(GetDlgItem(hWnd, idc), TEXT("PROTECTED"));
 
 				HICON hIcon = ImageList_GetIcon(hIconsImageList, 1, 0);
 				HWND hKeyIconWnd = GetDlgItem(hWnd, IDC_DLG_CIPHER_SHOW_KEY);
@@ -6567,25 +7049,39 @@ namespace dialogs {
 					for (int id = IDC_DLG_CIPHER_KDF_ITER; id <= IDC_DLG_CIPHER_HEADER_SIZE; id += 2)
 						EnableWindow(GetDlgItem(hWnd, id), iProfile == 0);
 
-					if (iProfile == 0)
-						return true;
+					const int profiles[5][9] = {
+						{0, 256000, 2, 1, 1, 0x3a, 2, 2, 0},    // default
+						{1024, 4000, 2, -1, -1, 0, 0, 0, -1},   // v1
+						{1024, 4000, 2, 1, 1, 0x3a, 0, 0, -1},  // v2
+						{1024, 64000,2, 1, 1, 0x3a, 0, 0, -1},  // v3
+						{4096, 256000, 2, 1, 1, 0x3a, 2, 2, 0}  // v4
+					};
 
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_PAGESIZE, iProfile == 4 ? 4096 : 1024);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_KDF_ITER, iProfile == 4 ? 256000 : iProfile == 3 ? 64000 : 4000);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_KDF_ALGORITHM, iProfile == 4 ? 2 : 1);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_HMAC_USE, iProfile != 1);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_HMAC_ALGORITHM, iProfile == 4 ? 2 : 0);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_HMAC_PGNO, 1);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_HMAC_SALT, 58);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_FAST_KDF_ITER, 2);
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_HEADER_SIZE, 0);
+					int idcs [] = {
+						IDC_DLG_CIPHER_PAGESIZE, IDC_DLG_CIPHER_KDF_ITER, IDC_DLG_CIPHER_FAST_KDF_ITER,
+						IDC_DLG_CIPHER_HMAC_USE, IDC_DLG_CIPHER_HMAC_PGNO, IDC_DLG_CIPHER_HMAC_SALT,
+						IDC_DLG_CIPHER_KDF_ALGORITHM, IDC_DLG_CIPHER_HMAC_ALGORITHM, IDC_DLG_CIPHER_HEADER_SIZE
+					};
+					for (int i = 0; i < 9; i++)
+						SendMessage(hWnd, WMU_SET_VALUE, idcs[i], profiles[iProfile][i]);
+
+					EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), iProfile == 0);
 				}
 
 				if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) == IDC_DLG_CIPHER_LEGACY) {
-					bool isChecked = Button_GetCheck((HWND)lParam);
-					prefs::set("cipher-legacy", isChecked);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), isChecked ? SW_SHOW : SW_HIDE);
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE_LABEL), isChecked ? SW_SHOW : SW_HIDE);
+					bool isLegacy = Button_GetCheck((HWND)lParam) == BST_CHECKED;
+					prefs::set("cipher-legacy", isLegacy);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), isLegacy ? SW_SHOW : SW_HIDE);
+					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE_LABEL), isLegacy ? SW_SHOW : SW_HIDE);
+
+					int iCipher = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_CIPHER));
+					if (iCipher == CIPHER_SQLCIPHER) {
+						HWND hCtrl = GetDlgItem(hWnd, IDC_DLG_CIPHER_PROFILE);
+						EnableWindow(hCtrl, isLegacy);
+						SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_PROFILE, isLegacy ? 4 : 0);
+
+						SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CIPHER_PROFILE, CBN_SELCHANGE), (LPARAM)hCtrl);
+					}
 				}
 
 				if (wParam == IDC_DLG_HELP)
@@ -6596,7 +7092,40 @@ namespace dialogs {
 
 				if (wParam == IDC_DLG_OK || wParam == IDOK) {
 					sqlite3* prefsDb = prefs::db;
-					int mode = (int)(LONG_PTR)GetProp(hWnd, TEXT("MODE"));
+					int mode = PtrToInt(GetProp(hWnd, TEXT("MODE")));
+					const char* dbpath8 = (const char*)GetProp(hWnd, TEXT("DBPATH8"));
+					int iCipher = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_CIPHER));
+
+					bool isLegacy = Button_GetState(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY)) == BST_CHECKED;
+
+					// Fix issue #165
+					// pragma page_size = N throws error: Rekeying failed. Pagesize cannot be changed for an encrypted database.
+					// Page size has to be changed independently
+					int pageSizeFrom = 0, pageSizeTo = 0;
+					if (iCipher > 0 && isLegacy && mode == ENCRYPT_MODE_REKEY) {
+						sqlite3_stmt* stmt;
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "pragma page_size", -1, &stmt, 0) && SQLITE_ROW == sqlite3_step(stmt))
+							pageSizeFrom = sqlite3_column_int(stmt, 0);
+						sqlite3_finalize(stmt);
+
+						TCHAR buf16[64];
+						GetDlgItemText(hWnd, IDC_DLG_CIPHER_PAGESIZE, buf16, 64);
+						pageSizeTo = _ttoi(buf16);
+
+						if (GetProp(hMainWnd, TEXT("ISENCRYPT")) && pageSizeTo != 0 && pageSizeFrom != pageSizeTo) {
+							MessageBox(hWnd, TEXT("New parameters require to change a page size. It doesn't supported for an encrypted database. Disable the current cipher and apply new parameters over the unencrypted database."), 0, MB_OK);
+							return false;
+						}
+
+						if (pageSizeTo != 0) {
+							char query8[256];
+							snprintf(query8, 256, "pragma page_size = %i; vacuum;", pageSizeTo);
+							if (SQLITE_OK != sqlite3_exec(db, query8, 0, 0, 0)) {
+								MessageBox(hWnd, TEXT("Error: Can't change page size before rekey"), 0, MB_OK);
+								return false;
+							}
+						}
+					}
 
 					auto setParam = [prefsDb, hWnd, mode](const char* dbpath, const char* param, int idc, int no) {
 						TCHAR buf16[64];
@@ -6659,24 +7188,21 @@ namespace dialogs {
 						sqlite3_finalize(stmt);
 					};
 
-					const char* dbpath8 = (const char*)GetProp(hWnd, TEXT("DBPATH8"));
-					int iCipher = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_CIPHER));
-
 					sqlite3_exec(prefs::db, "begin transaction;", 0, 0, 0);
 					resetParams(dbpath8);
 
 					if (iCipher > 0) {
 						setParam(dbpath8, "cipher", IDC_DLG_CIPHER, 1);
 						setParam(dbpath8, "legacy", IDC_DLG_CIPHER_LEGACY, 2);
-						setParam(dbpath8, "legacy_page_size", IDC_DLG_CIPHER_PAGESIZE, 3);
 
-						if (iCipher == CIPHER_WXSQLITE256 || iCipher == CIPHER_SQLEET)
+						if (iCipher == CIPHER_WXSQLITE256 || iCipher == CIPHER_SQLEET || iCipher == CIPHER_ASCON128)
 							setParam(dbpath8, "kdf_iter", IDC_DLG_CIPHER_KDF_ITER, 4);
 
 						if (iCipher == CIPHER_SQLCIPHER) {
 							int profile = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_CIPHER_PROFILE));
 							if (profile > 0) {
-								setParam(dbpath8, "legacy", IDC_DLG_CIPHER_PROFILE, 2);
+								setParam(dbpath8, "legacy", IDC_DLG_CIPHER_LEGACY, 2);
+								setParam(dbpath8, "profile", IDC_DLG_CIPHER_PROFILE, 3);
 							} else  {
 								setParam(dbpath8, "kdf_iter", IDC_DLG_CIPHER_KDF_ITER, 4);
 								setParam(dbpath8, "fast_kdf_iter", IDC_DLG_CIPHER_FAST_KDF_ITER, 5);
@@ -6731,10 +7257,10 @@ namespace dialogs {
 							if (rc == SQLITE_OK) {
 								if (strlen(key8) > 0 && iCipher > 0) {
 									setParam(dbpath8, "key", IDC_DLG_CIPHER_KEY, 12);
-									SendMessage(hMainWnd, WMU_SET_ICON, 0, 1);
+									SendMessage(hMainWnd, WMU_SET_ECRYPT_FLAG, 0, 1);
 								} else {
 									resetParams(dbpath8);
-									SendMessage(hMainWnd, WMU_SET_ICON, 0, 0);
+									SendMessage(hMainWnd, WMU_SET_ECRYPT_FLAG, 0, 0);
 								}
 							}
 						}
@@ -6753,6 +7279,12 @@ namespace dialogs {
 						EndDialog(hWnd, DLG_OK);
 					} else {
 						sqlite3_exec(prefs::db, "rollback;", 0, 0, 0);
+
+						if (pageSizeTo != 0) {
+							char query8[256];
+							snprintf(query8, 256, "pragma page_size = %i; vacuum;", pageSizeFrom);
+							sqlite3_exec(db, query8, 0, 0, 0);
+						}
 						MessageBeep(0);
 					}
 				}
@@ -6763,14 +7295,21 @@ namespace dialogs {
 			case WMU_SET_VALUE: {
 				TCHAR buf[64];
 				HWND hCtrl = GetDlgItem(hWnd, wParam);
+				if (GetProp(hCtrl, TEXT("PROTECTED")))
+					return false;
+
 				GetClassName((HWND)hCtrl, buf, 64);
-				if (_tcscmp(buf, WC_COMBOBOX) == 0) {
+				if (wParam == IDC_DLG_CIPHER_PAGESIZE) {
+					_sntprintf(buf, 63, TEXT("%i"), lParam);
+					int pos = ComboBox_FindStringExact(hCtrl, 0, buf);
+					ComboBox_SetCurSel(hCtrl, MAX(0, pos));
+				} else if (_tcscmp(buf, WC_COMBOBOX) == 0) {
 					ComboBox_SetCurSel(hCtrl, lParam);
 				} else if ((_tcscmp(buf, WC_BUTTON) == 0) && (GetWindowLongPtr(hCtrl, GWL_STYLE) & BS_CHECKBOX) == BS_CHECKBOX) {
 					Button_SetCheck(hCtrl, lParam > 0 ? BST_CHECKED : BST_UNCHECKED);
 				} else {
 					_sntprintf(buf, 63, TEXT("%i"), lParam);
-					SetWindowText(hCtrl, buf);
+					SetWindowText(hCtrl, lParam == -1 ? TEXT("") : buf);
 				}
 			}
 			break;
@@ -6779,57 +7318,65 @@ namespace dialogs {
 				int iCipher = ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_CIPHER));
 				EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_KEY), iCipher > 0);
 				EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_STORE_KEY), iCipher > 0);
+				EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), TRUE);
 
 				for (int id = IDC_DLG_CIPHER_LEGACY; id <= IDC_DLG_CIPHER_HEADER_SIZE; id++)
 					ShowWindow(GetDlgItem(hWnd, id), SW_HIDE);
 
-				if (iCipher != CIPHER_NONE) {
-					ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), SW_SHOW);
-					bool isLegacy = prefs::get("cipher-legacy");
-					Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), isLegacy ? BST_CHECKED : BST_UNCHECKED);
-					int page_size = iCipher == CIPHER_SQLEET || iCipher  == CIPHER_SQLCIPHER ? 4096 : 0;
-					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_PAGESIZE, page_size);
-					if (isLegacy) {
-						ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE_LABEL), SW_SHOW);
-						ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), SW_SHOW);
-					}
+				if (iCipher == CIPHER_NONE)
+					return true;
 
-					if (iCipher == CIPHER_WXSQLITE256 || iCipher == CIPHER_SQLEET) {
-						HWND hLabel = GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER_LABEL);
-						HWND hCtrl = GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER);
+				HWND hLegacyBox = GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY);
+				bool isInit = GetProp(hLegacyBox, TEXT("PROTECTED"));
+				bool isLegacy = isInit ? Button_GetCheck(hLegacyBox) == BST_CHECKED : prefs::get("cipher-legacy") || iCipher == CIPHER_SYSTEM_DATA;
 
-						ShowWindow(hLabel, SW_SHOW);
-						ShowWindow(hCtrl, SW_SHOW);
-						EnableWindow(hLabel, true);
-						EnableWindow(hCtrl, true);
-						int kdf_iter = iCipher == CIPHER_WXSQLITE256 ? 4001 :
-							iCipher == CIPHER_SQLEET ? 64007 :
-							iCipher == CIPHER_SQLCIPHER ? 4000 : 0;
-						SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_KDF_ITER, kdf_iter);
+				ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), SW_SHOW);
+				SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_PAGESIZE, iCipher == CIPHER_SQLEET ? 4096 : 0);
+				ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE_LABEL), isLegacy ? SW_SHOW : SW_HIDE);
+				ShowWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_PAGESIZE), isLegacy ? SW_SHOW : SW_HIDE);
+				EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), TRUE);
 
-						RECT rc{5, 41 + 15 * 1, 165, 41 + 15 * 2};
-						MapDialogRect(hWnd, &rc);
-						SetWindowPos(hLabel, 0, rc.left, rc.top, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
-						SetWindowPos(hCtrl, 0, rc.right, rc.top - 2, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
-					}
+				if (iCipher == CIPHER_WXSQLITE256 || iCipher == CIPHER_SQLEET || iCipher == CIPHER_ASCON128) {
+					HWND hLabel = GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER_LABEL);
+					HWND hCtrl = GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER);
 
-					if (iCipher == CIPHER_SQLCIPHER) {
-						RECT rc{5, 41 + 15 * 1, 165, 41 + 15 * 2};
-						MapDialogRect(hWnd, &rc);
-						SetWindowPos(GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER_LABEL), 0, rc.left, rc.bottom, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
-						SetWindowPos(GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER), 0, rc.right, rc.bottom - 2, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+					ShowWindow(hLabel, SW_SHOW);
+					ShowWindow(hCtrl, SW_SHOW);
+					EnableWindow(hLabel, TRUE);
+					EnableWindow(hCtrl, TRUE);
+					int kdf_iter = iCipher == CIPHER_WXSQLITE256 ? 4001 :
+						iCipher == CIPHER_SQLEET ? 64007 :
+						iCipher == CIPHER_ASCON128 ? 64007 : 0;
+					SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_KDF_ITER, kdf_iter);
 
-						for (int id = IDC_DLG_CIPHER_PROFILE_LABEL; id <= IDC_DLG_CIPHER_HEADER_SIZE; id++)
-							ShowWindow(GetDlgItem(hWnd, id), SW_SHOW);
-						for (int id = IDC_DLG_CIPHER_KDF_ITER; id <= IDC_DLG_CIPHER_HEADER_SIZE; id += 2)
-							EnableWindow(GetDlgItem(hWnd, id), false);
-						SendMessage(hWnd, WMU_SET_VALUE, IDC_DLG_CIPHER_PROFILE, 4);
-						SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CIPHER_PROFILE, CBN_SELCHANGE), (LPARAM)GetDlgItem(hWnd, IDC_DLG_CIPHER_PROFILE));
-					}
+					RECT rc{5, 41 + 15 * 1, 165, 41 + 15 * 2};
+					MapDialogRect(hWnd, &rc);
+					SetWindowPos(hLabel, 0, rc.left, rc.top, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+					SetWindowPos(hCtrl, 0, rc.right, rc.top - 2, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+				}
+
+				if (iCipher == CIPHER_SQLCIPHER) {
+					RECT rc{5, 41 + 15 * 1, 165, 41 + 15 * 2};
+					MapDialogRect(hWnd, &rc);
+					SetWindowPos(GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER_LABEL), 0, rc.left, rc.bottom, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+					SetWindowPos(GetDlgItem(hWnd, IDC_DLG_CIPHER_KDF_ITER), 0, rc.right, rc.bottom - 2, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+
+					for (int id = IDC_DLG_CIPHER_PROFILE_LABEL; id <= IDC_DLG_CIPHER_HEADER_SIZE; id++)
+						ShowWindow(GetDlgItem(hWnd, id), SW_SHOW);
+
+					for (int id = IDC_DLG_CIPHER_KDF_ITER; id <= IDC_DLG_CIPHER_HEADER_SIZE; id += 2)
+						EnableWindow(GetDlgItem(hWnd, id), FALSE);
+
+					SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_DLG_CIPHER_LEGACY, BN_CLICKED), (LPARAM)GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY));
+				}
+
+				if (iCipher == CIPHER_SYSTEM_DATA) {
+					// CIPHER_SYSTEM_DATA supports only legacy mode
+					EnableWindow(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), TRUE);
+					Button_SetCheck(GetDlgItem(hWnd, IDC_DLG_CIPHER_LEGACY), BST_CHECKED);
 				}
 			}
 			break;
-
 
 			case WM_CLOSE: {
 				RemoveProp(hWnd, TEXT("MODE"));
@@ -7264,7 +7811,6 @@ namespace dialogs {
 			break;
 
 			case WM_PAINT : {
-				InvalidateRect(hWnd, NULL, TRUE);
 				RECT rc{0};
 				GetClientRect(hWnd, &rc);
 				int w = rc.right;
@@ -7279,7 +7825,6 @@ namespace dialogs {
 				HBITMAP hBmp = CreateCompatibleBitmap(hdc, w, h);
 				HBITMAP hOldBmp = (HBITMAP)SelectObject(memDC, hBmp);
 
-				FillRect(memDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
 				drawChart(hWnd, memDC, w, h, (int)(LONG_PTR)GetProp(hWnd, TEXT("SCROLLY")));
 				BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
 
@@ -7315,7 +7860,7 @@ namespace dialogs {
 					HDC hCompatDC = CreateCompatibleDC(hDC);
 					HBITMAP hBitmap = CreateCompatibleBitmap(hDC, rc.right, rc.bottom);
 					SelectObject(hCompatDC, hBitmap);
-					FillRect(hCompatDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
 					drawChart(hWnd, hCompatDC, rc.right, rc.bottom, -1);
 
 					TCHAR path[MAX_PATH + 1];

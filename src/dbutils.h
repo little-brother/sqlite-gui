@@ -14,5 +14,6 @@ namespace dbutils {
 	void rownum(sqlite3_context *ctx, int argc, sqlite3_value **argv);
 	void md5 (sqlite3_context *ctx, int argc, sqlite3_value **argv);
 	void tosize (sqlite3_context *ctx, int argc, sqlite3_value **argv);
+	void double_quote (sqlite3_context *ctx, int argc, sqlite3_value **argv);
 }
 #endif

@@ -12,6 +12,8 @@ namespace utils {
 	TCHAR* replace(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 	TCHAR* replaceAll(const TCHAR* in, const TCHAR* oldStr, const TCHAR* newStr, int start = 0, bool ignoreCase = false);
 	bool hasString(const TCHAR* str, const TCHAR* sub);
+	char* double_quote(const char *str);
+	TCHAR* double_quote(const TCHAR *str);
 
 	TCHAR* getTableName(const TCHAR* in, bool isSchema = false);
 	TCHAR* getFullTableName(const TCHAR* schema, const TCHAR* tablename, bool isOmitMain = false);
@@ -34,6 +36,7 @@ namespace utils {
 	bool detectFileExtension(const char* data, int len, TCHAR* out);
 
 	TCHAR* toBlobSize(INT64 bSize);
+	int getBlobSize (const unsigned char* data);
 	unsigned char* toBlob(INT64 dataSize, const unsigned char* data);
 
 	bool isNumber(const TCHAR* str, double *out);
@@ -67,7 +70,5 @@ namespace utils {
 	int getEditHeight(HWND hWnd);
 	int getEditHeightByFont(HWND hWnd);
 	void alignDialog(HWND hDlgWnd, HWND hParentWnd, bool doLess = false, bool doMore = false);
-
-	int getBlobSize (const unsigned char* data);
 }
 #endif

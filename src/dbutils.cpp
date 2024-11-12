@@ -190,4 +190,13 @@ namespace dbutils {
 		sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
 	}
 
+	void double_quote (sqlite3_context* ctx, int argc, sqlite3_value **argv) {
+		if (sqlite3_value_type(argv[0]) == SQLITE_NULL)
+			return sqlite3_result_null(ctx);
+
+		const char* arg = (const char*)sqlite3_value_text(argv[0]);
+		char* res = utils::double_quote(arg);
+		sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
+		delete [] res;
+	}
 }

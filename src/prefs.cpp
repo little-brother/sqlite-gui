@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 89;
+	const int ICOUNT = 91;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -28,8 +28,9 @@ namespace prefs {
 		"color-null", "color-blob", "color-text", "color-integer", "color-real", "color-current-cell",
 		"color-keyword", "color-function", "color-quoted", "color-comment", "color-parenthesis", "color-pragma",
 		"data-generator-row-count", "data-generator-truncate",
-		"link-fk", "link-view", "link-trigger",
+		"show-fk-links", "show-column-types", "show-isolation-reasons",
 		"format-keyword-case", "format-function-case",
+		"transpose-is-first-column", "transpose-is-row-col-names",
 		"use-logger"
 	};
 
@@ -56,8 +57,9 @@ namespace prefs {
 		0xFFF0F0, 0xFFF0FF, 0xF9F9F9, 0xF0F9FF, 0xF0FFF0, 0xA66046,
 		0xC80000, 0xFF5C00, 0x00C800, 0x0000FF, 0xFFFF7F, 0x404080,
 		100, 0,
-		1, 0, 0,
+		1, 1, 1,
 		1, 1,
+		0, 0,
 		0
 	};
 

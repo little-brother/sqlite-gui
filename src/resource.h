@@ -1,5 +1,5 @@
-#define GUI_VERSION                "1.9.2"
-#define GUI_VERSION2               1, 9, 2, 0
+#define GUI_VERSION                "1.9.3"
+#define GUI_VERSION2               1, 9, 3, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
@@ -32,7 +32,6 @@
 #define IDD_ADD_INDEX              29
 #define IDD_CUSTOM_FUNCTIONS       30
 #define IDD_RESULT_FIND            31
-#define IDD_TEXT_COMPARISON        32
 #define IDD_FK_SELECTOR            33
 #define IDD_COLOR_PICKER           34
 #define IDD_URI_DB_PATH            35
@@ -41,6 +40,7 @@
 #define IDD_ATTACH_ODBC            38
 #define IDD_VALUE_VIEWER           39
 #define IDD_VALUE_EDITOR           40
+#define IDD_REFERENCES             41
 
 #define IDD_TOOL_IMPORT_CSV        55
 #define IDD_TOOL_IMPORT_JSON       56
@@ -49,14 +49,16 @@
 #define IDD_TOOL_EXPORT_JSON       61
 #define IDD_TOOL_EXPORT_SQL        62
 #define IDD_TOOL_EXPORT_IMPORT_ODBC 63
+#define IDD_TOOL_TEXT_COMPARISON   70
 #define IDD_TOOL_GENERATE_DATA     71
 #define IDD_TOOL_GENERATE_DATA_SET 72
-#define IDD_TOOL_COMPARE_DATABASE  73
-#define IDD_TOOL_DATABASE_SEARCH   74
-#define IDD_TOOL_STATISTICS        75
-#define IDD_TOOL_FOREIGN_KEY_CHECK 76
-#define IDD_TOOL_DESKTOP_SHORTCUT  77
-
+#define IDD_TOOL_DATABASE_DIAGRAM  73
+#define IDD_TOOL_COMPARE_DATABASE  74
+#define IDD_TOOL_DATABASE_SEARCH   75
+#define IDD_TOOL_STATISTICS        76
+#define IDD_TOOL_FOREIGN_KEY_CHECK 77
+#define IDD_TOOL_DESKTOP_SHORTCUT  78
+#define IDD_TOOL_TRANSFORM_DATA    79
 
 #define IDC_MENU_MAIN              100
 #define IDC_MENU_EDITOR            101
@@ -64,6 +66,8 @@
 #define IDC_MENU_TAB_RESULT        103
 #define IDC_MENU_EDIT_DATA         104
 #define IDC_MENU_VIEW_DATA         105
+#define IDC_MENU_DIAGRAM           106
+#define IDC_MENU_DIAGRAM_TABLE     107
 #define IDC_MENU_QUERYLIST         108
 #define IDC_MENU_CHART             109
 #define IDC_MENU_CLI               110
@@ -270,6 +274,27 @@
 #define IDC_DLG_VIEWER_REPOSITORY_LABEL     489
 #define IDC_DLG_MODIFIER_REPOSITORY         490
 #define IDC_DLG_MODIFIER_REPOSITORY_LABEL   491
+#define IDC_DLG_REFERENCES         492
+#define IDC_DLG_TITLE              493
+#define IDC_DLG_QUERY              494
+#define IDC_DLG_TABLENAME_LABEL    495
+#define IDC_DLG_COLNAME_LABEL      496
+#define IDC_DLG_TITLE_LABEL        497
+#define IDC_DLG_QUERY_LABEL        498
+#define IDC_DLG_SRC_SCHEMA         499
+#define IDC_DLG_TRG_SCHEMA         500
+#define IDC_DLG_SOURCE             501
+#define IDC_DLG_TARGET             502
+#define IDC_DLG_ISFIRSTCOLUMN      503
+#define IDC_DLG_ISROWCOLNAMES      504
+#define IDC_DLG_AXIS_X             510
+#define IDC_DLG_AXIS_X_LABEL       511
+#define IDC_DLG_AXIS_Y             512
+#define IDC_DLG_AXIS_Y_LABEL       513
+#define IDC_DLG_VALUE              514
+#define IDC_DLG_VALUE_LABEL        515
+#define IDC_DLG_DUPLICATES_LABEL   516
+#define IDC_DLG_DUPLICATES         517
 
 #define IDC_DLG_CIPHER_KEY                  601
 #define IDC_DLG_CIPHER_SHOW_KEY             602
@@ -330,8 +355,9 @@
 #define IDM_MODIFIER_PLUGINS       1008
 #define IDM_EXTENSIONS             1009
 #define IDM_CUSTOM_FUNCTIONS       1020
-#define IDM_SETTINGS               1021
-#define IDM_EXIT                   1022
+#define IDM_REFERENCES             1021
+#define IDM_SETTINGS               1022
+#define IDM_EXIT                   1023
 
 #define IDM_RECENT                 1100 // iterable
 #define IDM_RECENT_ATTACHED        1150 // iterable
@@ -370,6 +396,8 @@
 #define IDM_GENERATE_DATA          1542
 #define IDM_COMPARE_DATABASE       1544
 #define IDM_DATABASE_SEARCH        1545
+#define IDM_DATABASE_DIAGRAM       1546
+#define IDM_TRANSFORM_DATA         1547
 
 #define IDM_HELP                   1550
 #define IDM_ABOUT                  1551
@@ -440,46 +468,54 @@
 #define IDM_EDIT                   1703
 #define IDM_DELETE                 1704
 #define IDM_RENAME                 1705
-#define IDM_DUPLICATE              1706
-#define IDM_ADD_COLUMN             1707
-#define IDM_ADD_INDEX              1708
-#define IDM_ERASE_DATA             1709
-#define IDM_DDL                    1710
-#define IDM_ENABLE                 1711
-#define IDM_DISABLE                1712
-#define IDM_VIEW                   1713
-#define IDM_TEMP_EXPLAIN           1714
-#define IDM_PIN_ON_TOP             1715
+#define IDM_DIAGRAM                1706
+#define IDM_DUPLICATE              1707
+#define IDM_GENERATE               1708
+#define IDM_TRANSFORM              1709
+#define IDM_ADD_COLUMN             1710
+#define IDM_ADD_INDEX              1711
+#define IDM_ERASE_DATA             1712
+#define IDM_DDL                    1713
+#define IDM_ENABLE                 1714
+#define IDM_DISABLE                1715
+#define IDM_VIEW                   1716
+#define IDM_TEMP_EXPLAIN           1717
+#define IDM_PIN_ON_TOP             1718
 
-#define IDM_ADD                    1716
-#define IDM_REFRESH                1717
-#define IDM_ENABLE_ALL             1718
-#define IDM_DISABLE_ALL            1719
+#define IDM_ADD                    1720
+#define IDM_REFRESH                1721
+#define IDM_ENABLE_ALL             1722
+#define IDM_DISABLE_ALL            1723
 
-#define IDM_VALUE_VIEW             1720
-#define IDM_VALUE_EDIT             1721
-#define IDM_VALUE_NULL             1722
-#define IDM_ROW_ADD                1723
-#define IDM_ROW_EDIT               1724
-#define IDM_ROW_DELETE             1725
-#define IDM_ROW_REFRESH            1726
-#define IDM_ROW_DUPLICATE          1727
-#define IDM_LAST_SEPARATOR         1728
-#define IDM_EXPORT_PNG             1729
-#define IDM_EXPORT_CLIPBOARD       1730
-#define IDM_EXPORT_FILE            1731
-#define IDM_FILTER_TYPE            1732
-#define IDM_COMPARE_TEXTS          1733
-#define IDM_CHART_RESET            1734
+#define IDM_VALUE_VIEW             1730
+#define IDM_VALUE_EDIT             1731
+#define IDM_VALUE_NULL             1732
+#define IDM_ROW_ADD                1733
+#define IDM_ROW_EDIT               1734
+#define IDM_ROW_DELETE             1735
+#define IDM_ROW_REFRESH            1736
+#define IDM_ROW_DUPLICATE          1737
+#define IDM_LAST_SEPARATOR         1738
+#define IDM_EXPORT_PNG             1739
+#define IDM_EXPORT_CLIPBOARD       1740
+#define IDM_EXPORT_FILE            1741
+#define IDM_FILTER_TYPE            1742
+#define IDM_COMPARE_TEXTS          1743
+#define IDM_CHART_RESET            1744
+#define IDM_ISOLATE                1745
 
-#define IDM_CLI_COPY               1740
-#define IDM_CLI_CUT                1741
-#define IDM_CLI_CLEAR_ALL          1742
+#define IDM_CLI_COPY               1750
+#define IDM_CLI_CUT                1751
+#define IDM_CLI_CLEAR_ALL          1752
 
-#define IDM_PREV_DIALOG            1750
-#define IDM_NEXT_DIALOG            1751
+#define IDM_SHOW_FKLINKS           1765
+#define IDM_SHOW_COLTYPES          1766
+#define IDM_SHOW_REASONS           1767
 
-#define IDM_TEST                   1760
+#define IDM_PREV_DIALOG            1770
+#define IDM_NEXT_DIALOG            1771
+
+#define IDM_TEST                   1780
 
 #define IDM_RESULT_COMPARE         1800 // iterable, 100
 #define IDM_RESULT_MODIFIER        1900 // iterable, MAX_PLUGIN_COUNT
@@ -514,6 +550,7 @@
 #define IDT_HIGHLIGHT              7001
 #define IDT_REFERENCE              7002
 #define IDT_EDITOR                 7003
+#define IDT_DIAGRAM_INPUT          7004
 
 #define IDR_INIT                   9000
 #define IDR_HELP                   9001
@@ -533,7 +570,8 @@
 #define IDS_ATTACH_ODBC_HELP       10017
 #define IDS_CLI_HELP               10018
 #define IDS_FUNCTIONS_HELP         10019
-#define IDS_TEMP_EXPLAIN           10020
+#define IDS_REFERENCES_HELP        10020
+#define IDS_TEMP_EXPLAIN           10021
 #define IDS_TOOLTIP_OPEN           IDM_OPEN
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
@@ -544,6 +582,10 @@
 #define IDS_TOOLTIP_ROW_ADD        IDM_ROW_ADD
 #define IDS_TOOLTIP_ROW_DELETE     IDM_ROW_DELETE
 #define IDS_TOOLTIP_FILTER_TYPE    IDM_FILTER_TYPE
+#define IDS_DIAGRAM_LINKS_ERROR    10025
+#define IDS_TRANSPOSE_ERROR           10030
+#define IDS_CONVERT_TO_MATRIX_ERROR   10031
+#define IDS_CONVERT_TO_3COLUMNS_ERROR 10032
 
 #define WMU_SET_DLG_ROW_DATA       WM_USER + 1
 #define WMU_UPDATE_DATA            WM_USER + 2
@@ -568,7 +610,7 @@
 #define WMU_CIPHER_CHANGED         WM_USER + 21
 #define WMU_SET_VALUE              WM_USER + 22
 #define WMU_GET_VALUE              WM_USER + 23
-#define WMU_SET_ICON               WM_USER + 24
+#define WMU_SET_ECRYPT_FLAG        WM_USER + 24
 #define WMU_OPEN_NEW_TAB           WM_USER + 25
 #define WMU_UPDATE_CARET_INFO      WM_USER + 26
 #define WMU_UPDATE_CHART           WM_USER + 27
@@ -582,7 +624,9 @@
 #define WMU_UPDATE_PREVIEW         WM_USER + 35
 #define WMU_RESET_PREVIEW          WM_USER + 36
 #define WMU_RESET_CACHE            WM_USER + 37
-#define WMU_FUNCTION_SAVE          WM_USER + 40
+#define WMU_FUNCTION_SAVE          WM_USER + 39
+#define WMU_SAVE_REFERENCE         WM_USER + 40
+#define WMU_UPDATE_REFERENCES      WM_USER + 41
 #define WMU_UPDATE_RESULTSET       WM_USER + 43
 #define WMU_UPDATE_FILTER_SIZE     WM_USER + 44
 #define WMU_SET_HEADER_FILTERS     WM_USER + 45
@@ -600,6 +644,13 @@
 #define WMU_ADD_EMPTY_ROW          WM_USER + 61
 #define WMU_TEST                   WM_USER + 62
 #define WMU_RESET_MODIFIER         WM_USER + 63
+#define WMU_GET_TABLE              WM_USER + 64
+#define WMU_RECALC_WIDTH           WM_USER + 65
+#define WMU_GET_DIAGRAM_RECT       WM_USER + 66
+#define WMU_TRANSFORM_TRANSPOSE    WM_USER + 67
+#define WMU_TRANSFORM_TO_MATRIX    WM_USER + 68
+#define WMU_TRANSFORM_TO_3COLUMNS  WM_USER + 69
+
 
 // ricedit.h has own WM_USER + N message, but N less 210
 #define WMU_HIGHLIGHT              WM_USER + 260

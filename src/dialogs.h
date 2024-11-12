@@ -28,6 +28,7 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgAttachODBC (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgAddonManager (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgCustomFunctions (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	BOOL CALLBACK cbDlgReferences (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgResultFind (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgUriDbPath (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	BOOL CALLBACK cbDlgInfo (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
