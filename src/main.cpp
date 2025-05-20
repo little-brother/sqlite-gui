@@ -12,6 +12,7 @@
 #include "tom.h"
 #include <richole.h>
 #include <unknwn.h>
+#include "dmp.h"
 
 #define DEFINE_GUIDXXX(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) EXTERN_C const GUID name = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
 DEFINE_GUIDXXX(IID_ITextDocument, 0x8CC497C0, 0xA1DF, 0x11CE, 0x80, 0x98, 0x00, 0xAA, 0x00, 0x47, 0xBE, 0x5D);
@@ -23,7 +24,17 @@ DEFINE_GUIDXXX(IID_ITextDocument, 0x8CC497C0, 0xA1DF, 0x11CE, 0x80, 0x98, 0x00, 
 #define SB_ELAPSED_TIME   4
 #define SB_SELECTED_ROW   5
 #define SB_RESULTSET      6
-#define SB_EXTENSIONS     7
+#define SB_AI_SETTINGS    7
+#define SB_EXTENSIONS     8
+
+#define EQ_PLAN     1   /* 0001 */
+#define EQ_BATCH    2   /* 0010 */
+#define EQ_CURRENT  4   /* 0100 */
+#define EQ_EXPLAIN  8   /* 1000 */
+
+#define SPLITTER_X  1
+#define SPLITTER_Y  2
+#define SPLITTER_C  3
 
 const char *TYPES8[6] = {"current", "table", "view", "index", "trigger", "column"};
 const TCHAR *TYPES16[6] = {TEXT("current"), TEXT("table"), TEXT("view"), TEXT("index"), TEXT("trigger"), TEXT("column")};
@@ -41,11 +52,10 @@ TCHAR* FUNCTIONS[MAX_ENTITY_COUNT] = {0};
 TCHAR* MODULES[MAX_ENTITY_COUNT] = {0};
 TCHAR* TABLES[MAX_ENTITY_COUNT] = {0};
 
-
-sqlite3 *db;
+sqlite3* db;
 HWND hMainWnd = 0, hToolbarWnd, hEditorSearchWnd, hStatusWnd, hTreeWnd, hTreeSearchWnd, hSchemaWnd, hEditorWnd, hTabWnd, hMainTabWnd, hLoggerWnd = 0,
-hTooltipWnd = 0, hAutoComplete, hAutoCompleteHelp, hDragWnd = 0, hDialog, hSortingResultWnd;
-HMENU hMainMenu, hSchemaMenu, hDbMenu, hEditorMenu, hResultMenu, hModifierMenu, hTabResultMenu, hCliMenu, hPreviewMenu;
+hTooltipWnd = 0, hAutoComplete, hAutoCompleteHelp, hDragWnd = 0, hDialog, hSortingResultWnd, hAiChatWnd;
+HMENU hMainMenu, hSchemaMenu, hDbMenu, hEditorMenu, hResultMenu, hModifierMenu, hTabResultMenu, hCliMenu, hPreviewMenu, hAiMenu, hAiChatMenu;
 HWND hDialogs[MAX_DIALOG_COUNT]{0};
 HWND hEditors[MAX_DIALOG_COUNT + MAX_TAB_COUNT]{0};
 
@@ -72,6 +82,7 @@ HIMAGELIST hIconsImageList = ImageList_LoadBitmap(GetModuleHandle(0), MAKEINTRES
 struct TEditorTab {
 	int id; // unique tab identificator
 	HWND hEditorWnd;
+	HWND hAIWnd;
 	HWND hTabWnd; // Use WMU_GET_CURRENT_RESULTSET to get a current ListView for the tab. ListView.USERDATA = resultNo
 	HWND hQueryListWnd;
 	TCHAR* tabTooltips[MAX_RESULT_COUNT];
@@ -81,7 +92,11 @@ struct TEditorTab {
 	sqlite3* db;
 	HANDLE thread;
 	bool isPlan;
+	bool isExplain;
 	bool isBatch;
+
+	int aiSid;
+	bool aiNeedStop;
 };
 TEditorTab tabs[MAX_TAB_COUNT] = {0};
 
@@ -109,7 +124,7 @@ TCHAR APP_PATH[MAX_PATH]{0};
 TCHAR TMP_PATH[MAX_PATH]{0};
 
 int executeCLIQuery(bool isPlan = false);
-int executeEditorQuery(bool isPlan = false, bool isBatch = false, bool isOnlyCurrent = false, int vkKey = 0);
+int executeEditorQuery(char flags = 0, int vkKey = 0);
 void suggestCLIQuery(int key);
 void loadCLIResults(int cnt);
 
@@ -122,6 +137,7 @@ bool isDbBusy();
 void enableMainMenu();
 void disableMainMenu();
 void reloadPlugins(int type = 0);
+void updatePlugins(int type = 0);
 void updateExecuteMenu(bool isEnable);
 void updateRecentList();
 void updateTables(const TCHAR* schema16);
@@ -165,6 +181,7 @@ LRESULT CALLBACK cbNewResultTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 LRESULT CALLBACK cbNewResultTabFilterEdit(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewAutoCompleteHelp(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK cbNewAiChat(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbNewListView(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK cbMainWindow (HWND, UINT, WPARAM, LPARAM);
 
@@ -265,6 +282,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hPreviewMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_PREVIEW));
 	hPreviewMenu = GetSubMenu(hPreviewMenu, 0);
 
+	hAiMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_AI));
+	hAiMenu = GetSubMenu(hAiMenu, 0);
+
+	hAiChatMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDC_MENU_AI_CHAT));
+	hAiChatMenu = GetSubMenu(hAiChatMenu, 0);
+
 	hFont = loadFont();
 
 	/*
@@ -357,11 +380,15 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	TBBUTTON tbButtons [ ] = {
 		{0, IDM_OPEN, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Open")},
 		{1, IDM_CLOSE, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Close")},
-		{-1, 0, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0},
+		{-1, IDM_SPAN, TBSTATE_ENABLED, TBSTYLE_SEP, {0}, 0L, 0},
 		{2, IDM_SAVE, TBSTATE_ENABLED, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Save")},
 		{3, IDM_PLAN, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Plan")},
+		{6, IDM_AI_EXPLAIN, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Explain")},
 		{4, IDM_EXECUTE, TBSTATE_INDETERMINATE, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Execute")},
-		{5, IDM_INTERRUPT, TBSTATE_HIDDEN, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Interrupt")}
+		{5, IDM_INTERRUPT, TBSTATE_HIDDEN, TBSTYLE_BUTTON | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("Interrupt")},
+		{-1, IDM_SPAN2, TBSTATE_ENABLED, TBSTYLE_BUTTON, {0}, 0L, 0},
+		{6, IDM_AI_CHAT, TBSTATE_ENABLED, TBSTYLE_CHECK | TBSTYLE_AUTOSIZE, {0}, 0L, (INT_PTR)TEXT("AI Chat")}
+
 	};
 
 	hToolbarWnd = CreateToolbarEx (hMainWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | TBSTYLE_TOOLTIPS | TBSTYLE_FLAT | TBSTYLE_LIST | TBSTYLE_CUSTOMERASE, IDC_TOOLBAR, 0, NULL, 0,
@@ -374,8 +401,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	float z = utils::getWndScale(hMainWnd).x;
 	hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | SBARS_TOOLTIPS, NULL, hMainWnd, IDC_STATUSBAR);
-	int sizes[8] = {(int)(z * 80), (int)(z * 150), (int)(z * 215), (int)(z * 251), (int)(z * 365), (int)(z * 412), (int)(z * 482), -1};
-	SendMessage(hStatusWnd, SB_SETPARTS, 8, (LPARAM)&sizes);
+	int sizes[9] = {(int)(z * 80), (int)(z * 150), (int)(z * 215), (int)(z * 251), (int)(z * 365), (int)(z * 412), (int)(z * 482), (int)(z * 527), -1};
+	SendMessage(hStatusWnd, SB_SETPARTS, 9, (LPARAM)&sizes);
 	SetProp(hStatusWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hStatusWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewStatusBar));
 
 	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_SQLITE_VERSION, (LPARAM)TEXT("SQLite library version"));
@@ -385,6 +412,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_ELAPSED_TIME, (LPARAM)TEXT("Time spent on query execution"));
 	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_SELECTED_ROW , (LPARAM)TEXT("Row number in resultset"));
 	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_RESULTSET, (LPARAM)TEXT("Filtered/Total row numbers of resultset"));
+	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_AI_SETTINGS, (LPARAM)TEXT("AI Settings"));
 	SendMessage(hStatusWnd, SB_SETTIPTEXT, SB_EXTENSIONS, (LPARAM)TEXT("Loaded SQLite extensions"));
 
 	char version8[32];
@@ -562,6 +590,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, prefs::get("editor-tab-current"), 0);
 	}
 
+	hAiChatWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | SS_NOTIFY, 0, 0, 0, 0, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
+	CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN | WS_TABSTOP | WS_VSCROLL | WS_HSCROLL, 0, 0, 0, 0, hAiChatWnd, (HMENU)IDC_AI_CHAT_MESSAGES, GetModuleHandle(0), NULL);
+	CreateWindowEx(0, TEXT("RICHEDIT50W"), NULL, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | ES_NOHIDESEL | WS_VSCROLL, 0, 0, 0, 0, hAiChatWnd, (HMENU)IDC_AI_CHAT_INPUT, GetModuleHandle(0), NULL);
+	SetProp(hAiChatWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hAiChatWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewAiChat));
+	PostMessage(hAiChatWnd, WMU_INIT_AI_CHAT, 0, 0);
+
 	hAutoComplete = CreateWindowEx(WS_EX_TOPMOST, WC_LISTBOX, NULL, WS_POPUP | WS_BORDER | WS_VSCROLL, 0, 0, 170, 200, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
 	SetProp(hAutoComplete, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hAutoComplete, GWLP_WNDPROC, (LONG_PTR)&cbNewAutoComplete));
 
@@ -581,6 +615,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	}
 
 	reloadPlugins();
+	PostMessage(hMainWnd, WMU_UPDATE_AI_UI, 0, 0);
 
 	// https://docs.microsoft.com/en-us/windows/win32/dlgbox/using-dialog-boxes
 	while (GetMessage(&msg, NULL, 0, 0)) {
@@ -629,7 +664,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				int len = GetWindowTextLength(cli.hEditorWnd);
 				TCHAR* text16 = new TCHAR[len + 1]{0};
 				GetWindowText(cli.hEditorWnd, text16, len + 1);
-				char *text8 = utils::utf16to8(text16);
+				char* text8 = utils::utf16to8(text16);
 				prefs::set("editor-cli-text", text8);
 				delete [] text8;
 				delete [] text16;
@@ -656,7 +691,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					GetWindowText(hEditorWnd, text16, len + 1);
 					char key[80] = {0};
 					sprintf(key, "editor-text-%i", tabNo);
-					char *text8 = utils::utf16to8(text16);
+					char* text8 = utils::utf16to8(text16);
 					prefs::set(key, text8);
 					delete [] text8;
 					delete [] text16;
@@ -664,7 +699,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					TCHAR name16[80] = {0};
 					SendMessage(hMainTabWnd, WMU_TAB_GET_TEXT, tabNo, (LPARAM)name16);
 					sprintf(key, "editor-name-%i", tabNo);
-					char *name8 = utils::utf16to8(name16);
+					char* name8 = utils::utf16to8(name16);
 					prefs::set(key, name8);
 					delete [] name8;
 
@@ -712,12 +747,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 
-			if (prefs::get("maximized")) {
-				RECT rc;
-				GetWindowRect(hMainWnd, &rc);
-				prefs::set("splitter-position-y", prefs::get("splitter-position-y") * (prefs::get("height") - 12)/(rc.bottom - rc.top));
-			}
-
 			if (prefs::save()) {
 				prefs::setSyncMode(1);
 				sqlite3_close(prefs::db);
@@ -761,17 +790,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			SendMessage(hToolbarWnd, WM_SIZE, 0, 0);
 			SendMessage(hStatusWnd, WM_SIZE, 0, 0);
 
-			int h = HIWORD(lParam);
-			if (hTabWnd && IsWindowVisible(hTabWnd) && h) {
-				RECT rc;
-				GetClientRect(hTabWnd, &rc);
-
-				if (rc.bottom && rc.right) {
-					int oldH = prefs::get("splitter-position-y") + rc.bottom + 52 /* ~ Top menu + toolbar + statusbar */;
-					prefs::set("splitter-position-y", prefs::get("splitter-position-y") * h / oldH);
-				}
-			}
-
 			SendMessage(hWnd, WMU_UPDATE_SIZES, 0, 0);
 		}
 		break;
@@ -783,12 +801,19 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			int sx = prefs::get("splitter-position-x");
 			int sy = prefs::get("splitter-position-y");
 			int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
+			int cw = prefs::get("ai-chat-width");
 
-			bool isMoveX = (abs(x - sx) < 10);
-			bool isMoveY = (x > sx + 10) && (abs(y - top - sy) < 10);
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+			int w = rc.right;
+
+			int splitter = (abs(x - sx) < 10) ? SPLITTER_X :
+				(x > sx + 10) && (abs(y - top - sy) < 10) ? SPLITTER_Y :
+				(abs(w - cw - x) < 10) ? SPLITTER_C :
+				0;
 
 			// Drag by tab nc-area
-			if (!isMoveY && (x > sx + 10)) {
+			if (!splitter && (x > sx + 10)) {
 				POINT p{x, y};
 				ClientToScreen(hMainWnd, &p);
 				ScreenToClient(hTabWnd, &p);
@@ -797,17 +822,15 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				int tabCount = TabCtrl_GetItemCount(hTabWnd);
 				if (tabCount != 0)
 					TabCtrl_GetItemRect(hTabWnd, tabCount - 1, &rc);
-				isMoveY = (p.x > rc.right + 10) && (p.y <= rc.bottom) && (p.y >= rc.top);
+				splitter = (p.x > rc.right + 10) && (p.y <= rc.bottom) && (p.y >= rc.top) ? SPLITTER_Y : 0;
 			}
 
-			SetProp(hWnd, TEXT("ISXSPLITTERMOVE"), (HANDLE)isMoveX);
-			SetProp(hWnd, TEXT("ISYSPLITTERMOVE"), (HANDLE)isMoveY);
+			SetProp(hWnd, TEXT("SPLITTERMOVE"), IntToPtr(splitter));
 
-			if (isMoveX || isMoveY) {
+			if (splitter)
 				SetCapture(hMainWnd);
-			}
 
-			if (x > sx + 10 && y > top + sy + 10) {
+			if (x > sx + 10 && x < w - cw - 10 && y > top + sy + 10) {
 				POINT p {x, y};
 				ClientToScreen(hWnd, &p);
 				ScreenToClient(hTabWnd, &p);
@@ -817,7 +840,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		break;
 
 		case WM_LBUTTONUP: {
-			if (GetProp(hWnd, TEXT("ISXSPLITTERMOVE")) || GetProp(hWnd, TEXT("ISYSPLITTERMOVE"))) {
+			if (GetProp(hWnd, TEXT("SPLITTERMOVE"))) {
 				SendMessage(hWnd, WMU_UPDATE_SIZES, 0, 0);
 				ReleaseCapture();
 			}
@@ -854,8 +877,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				hDragWnd = 0;
 			}
 
-			RemoveProp(hWnd, TEXT("ISXSPLITTERMOVE"));
-			RemoveProp(hWnd, TEXT("ISYSPLITTERMOVE"));
+			RemoveProp(hWnd, TEXT("SPLITTERMOVE"));
 		}
 		break;
 
@@ -877,17 +899,27 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				return true;
 			}
 
-			bool isMoveX = GetProp(hWnd, TEXT("ISXSPLITTERMOVE")) && (wParam == MK_LBUTTON);
-			bool isMoveY = GetProp(hWnd, TEXT("ISYSPLITTERMOVE")) && (wParam == MK_LBUTTON);
+			int splitter = wParam == MK_LBUTTON ? PtrToInt(GetProp(hWnd, TEXT("SPLITTERMOVE"))) : 0;
 
-			if (isMoveX && prefs::get("splitter-position-x") != x - 3) {
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+			int cw = prefs::get("ai-chat-width");
+			int w = rc.right;
+			bool isChatMaximized = prefs::get("ai-chat-maximized");
+
+			if (splitter == SPLITTER_X && prefs::get("splitter-position-x") != x - 3) {
 				prefs::set("splitter-position-x", x - 3);
 				SendMessage(hWnd, WMU_UPDATE_SIZES, 0, 0);
 			}
 
-			int top = isMoveY ? (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP")) : 0;
-			if (isMoveY && prefs::get("splitter-position-y") != y - 3 - top) {
+			int top = splitter == SPLITTER_Y ? (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP")) : 0;
+			if (splitter == SPLITTER_Y && prefs::get("splitter-position-y") != y - 3 - top) {
 				prefs::set("splitter-position-y", y - 3 - top);
+				SendMessage(hWnd, WMU_UPDATE_SIZES, 0, 0);
+			}
+
+			if (splitter == SPLITTER_C && !isChatMaximized && (w - prefs::get("ai-chat-width") != x - 3)  && (w - x - 3 > 50)) {
+				prefs::set("ai-chat-width", w - x - 3);
 				SendMessage(hWnd, WMU_UPDATE_SIZES, 0, 0);
 			}
 
@@ -896,7 +928,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				int spY = prefs::get("splitter-position-y");
 				int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
 
-				if (((spX <= x) && (x < spX + 8)) || ((spY + top <= y) && (y < spY + 8 + top)))  {
+				if (((spX <= x) && (x < spX + 8)) || ((w - cw - 8 <= x) && (x < w - cw)) || ((spY + top <= y) && (y < spY + 8 + top)))  {
 					TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hWnd, 0};
 					TrackMouseEvent(&tme);
 					SetProp(hWnd, TEXT("ISMOUSEHOVER"), (HANDLE)1);
@@ -909,7 +941,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			if (LOWORD(wParam) == MK_CONTROL) {
 				HWND hFocusWnd = GetFocus();
 				prefs::set("font-size", prefs::get("font-size") + (GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1: -1));
-				SendMessage(hMainWnd, WMU_SET_THEME, 0, 0);
+				SendMessage(hWnd, WMU_SET_THEME, 0, 0);
 				SetFocus(hFocusWnd);
 				return 1;
 			}
@@ -917,21 +949,29 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 		break;
 
 		case WM_SETCURSOR: {
-			if (GetProp(hWnd, TEXT("ISMOUSEHOVER"))) {
-				POINT p = {0};
-				GetCursorPos(&p);
-				ScreenToClient(hWnd, &p);
-
-				int spX = prefs::get("splitter-position-x");
-				int spY = prefs::get("splitter-position-y");
-				int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
-
-				HCURSOR hCursor = LoadCursor(0, (spX <= p.x) && (p.x < spX + 8) ? IDC_SIZEWE : (spY + top <= p.y) && (p.y < spY + 8 + top) ? IDC_SIZENS : IDC_ARROW);
-				SetCursor(hCursor);
-				return TRUE;
-			} else {
+			if (!GetProp(hWnd, TEXT("ISMOUSEHOVER")))
 				return DefWindowProc(hWnd, msg, wParam, lParam);
-			}
+
+			POINT p = {0};
+			GetCursorPos(&p);
+			ScreenToClient(hWnd, &p);
+
+			int spX = prefs::get("splitter-position-x");
+			int spY = prefs::get("splitter-position-y");
+			int top = (int)(LONG_PTR)GetProp(hWnd, TEXT("NCTOP"));
+
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+			int chatW = prefs::get("ai-chat-width");
+			int w = rc.right;
+
+			TCHAR* idc = (spX <= p.x) && (p.x < spX + 8) ? IDC_SIZEWE :
+				(w - chatW - 8 <= p.x) && (p.x < w - chatW) ? IDC_SIZEWE :
+				(spY + top <= p.y) && (p.y < spY + 8 + top) ? IDC_SIZENS :
+				IDC_ARROW;
+
+			SetCursor(LoadCursor(0, idc));
+			return TRUE;
 		}
 		break;
 
@@ -987,6 +1027,13 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			rc = (RECT){spX, spY, w, spY + 10};
 			FillRect((HDC)wParam, &rc, hBrush);
+
+			bool isShowChat = prefs::get("ai-enable") && prefs::get("ai-show-chat");
+			if (isShowChat) {
+				int cw = prefs::get("ai-chat-width");
+				rc = (RECT){w - cw - 10, 0, w - cw, h};
+				FillRect((HDC)wParam, &rc, hBrush);
+			}
 
 			if (IsWindowVisible(hTreeSearchWnd)) {
 				RECT rcSearch;
@@ -1062,6 +1109,17 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				Menu_SetItemStateByPosition(hDbMenu, pos, state);
 			}
 			sqlite3_finalize(stmt);
+		}
+		break;
+
+		case WMU_UPDATE_AI_UI: {
+			bool isEnable = prefs::get("ai-enable");
+			Menu_SetItemState(hEditorMenu, IDM_EDITOR_FIX_ERROR, isEnable ? MF_ENABLED : MF_DISABLED | MF_GRAYED);
+			SendMessage(hStatusWnd, SB_SETTEXT, SB_AI_SETTINGS, (LPARAM)(isEnable ? TEXT("  <AI> ") : 0));
+
+			bool isShowChat = isEnable && prefs::get("ai-show-chat");
+			ShowWindow(hAiChatWnd, isShowChat ? SW_SHOW : SW_HIDE);
+			SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 		}
 		break;
 
@@ -1243,22 +1301,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_ADDON_MANAGER), hMainWnd, (DLGPROC)dialogs::cbDlgAddonManager, ADDON_SQLITE_EXTENSION) && db) {
 					TCHAR* dbpath16 = utils::utf8to16(sqlite3_db_filename(db, 0));
 					bool isReadOnly = PtrToInt(GetProp(hMainWnd, TEXT("READONLYDB")));
+
 					closeDb(true);
-
-					TCHAR tmpPath16[MAX_PATH + 1] = {0};
-					GetTempPath(MAX_PATH, tmpPath16);
-					_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
-
-					TCHAR extPath16[MAX_PATH + 1] = {0};
-					_sntprintf(extPath16, MAX_PATH, TEXT("%ls" EXTENSION_DIRECTORY), APP_PATH);
-
-					SHFILEOPSTRUCT fo = {0};
-					fo.wFunc = FO_MOVE;
-					fo.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_FILESONLY;
-					fo.pFrom = tmpPath16;
-					fo.pTo = extPath16;
-					SHFileOperation(&fo);
-
+					updatePlugins(ADDON_SQLITE_EXTENSION);
 					openDb(dbpath16, isReadOnly, true);
 				}
 			}
@@ -1286,20 +1331,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 						}
 					}
 
-					TCHAR tmpPath16[MAX_PATH + 1] = {0};
-					GetTempPath(MAX_PATH, tmpPath16);
-					_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
-
-					TCHAR pluginPath16[MAX_PATH + 1] = {0};
-					_sntprintf(pluginPath16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_EXTS16[ADDON_VALUE_VIEWER]);
-
-					SHFILEOPSTRUCT fo = {0};
-					fo.wFunc = FO_MOVE;
-					fo.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_FILESONLY;
-					fo.pFrom = tmpPath16;
-					fo.pTo = pluginPath16;
-					SHFileOperation(&fo);
-
+					updatePlugins(ADDON_VALUE_VIEWER);
 					reloadPlugins(ADDON_VALUE_VIEWER);
 				}
 			}
@@ -1310,20 +1342,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					// Reset all plugins
 					EnumChildWindows(hMainWnd, (WNDENUMPROC)cbEnumChildren, (LPARAM)ACTION_RESET_MODIFIERS);
 
-					TCHAR tmpPath16[MAX_PATH + 1] = {0};
-					GetTempPath(MAX_PATH, tmpPath16);
-					_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
-
-					TCHAR pluginPath16[MAX_PATH + 1] = {0};
-					_sntprintf(pluginPath16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_EXTS16[ADDON_COLUMN_MODIFIER]);
-
-					SHFILEOPSTRUCT fo = {0};
-					fo.wFunc = FO_MOVE;
-					fo.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_FILESONLY;
-					fo.pFrom = tmpPath16;
-					fo.pTo = pluginPath16;
-					SHFileOperation(&fo);
-
+					updatePlugins(ADDON_COLUMN_MODIFIER);
 					reloadPlugins(ADDON_COLUMN_MODIFIER);
 				}
 			}
@@ -1431,6 +1450,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 					}
 				}
 
+				SendMessage(hMainWnd, WMU_UPDATE_AI_UI, 0, 0);
+
 				stopHttpServer();
 				startHttpServer();
 
@@ -1442,27 +1463,37 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				GRIDCOLORS[SQLITE_FLOAT] = prefs::get("color-real");
 
 				applyDbPrefs();
+				SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
+
 				SetFocus(hMainWnd);
 			}
 
-			if (cmd == IDM_EXECUTE || cmd == IDM_PLAN || cmd == IDM_EXECUTE_BATCH) {
-				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
-				return currTabNo == -1 ? executeCLIQuery(cmd == IDM_PLAN) : executeEditorQuery(cmd == IDM_PLAN, cmd == IDM_EXECUTE_BATCH);
-			}
+			if (cmd == IDM_EXECUTE || cmd == IDM_PLAN || cmd == IDM_EXECUTE_BATCH || cmd == IDM_AI_EXPLAIN || cmd == IDM_EXECUTE_CURRENT_LINE) {
+				bool isShowChat = prefs::get("ai-enable") && prefs::get("ai-show-chat");
+				if (isShowChat && cmd == IDM_EXECUTE_CURRENT_LINE && ((GetFocus() == GetDlgItem(hAiChatWnd, IDC_AI_CHAT_MESSAGES) || GetFocus() == hAiChatWnd) || prefs::get("ai-chat-maximized"))) {
+					SendMessage(hAiChatWnd, WM_COMMAND, IDM_AI_CHAT_EXECUTE, 0);
+					return 0;
+				}
 
-			if (cmd == IDM_EXECUTE_CURRENT_LINE) {
 				int currTabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+
 				if (currTabNo != -1) {
-					HWND hEditorWnd = tabs[currTabNo].hEditorWnd;
+					if (cmd == IDM_EXECUTE_CURRENT_LINE) {
+						HWND hEditorWnd = tabs[currTabNo].hEditorWnd;
 
-					int start, end;
-					SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (WPARAM)&end);
-					int lineNo = SendMessage(hEditorWnd, EM_LINEFROMCHAR, start, 0);
-					int lineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, lineNo, 0);
-					int lineSize = SendMessage(hEditorWnd, EM_LINELENGTH, lineIdx, 0);
-					SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)lineIdx, (LPARAM)lineIdx + lineSize);
-					executeEditorQuery(false, false, true);
-					SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)start, (LPARAM)end);
+						int start, end;
+						SendMessage(hEditorWnd, EM_GETSEL, (WPARAM)&start, (WPARAM)&end);
+						int lineNo = SendMessage(hEditorWnd, EM_LINEFROMCHAR, start, 0);
+						int lineIdx = SendMessage(hEditorWnd, EM_LINEINDEX, lineNo, 0);
+						int lineSize = SendMessage(hEditorWnd, EM_LINELENGTH, lineIdx, 0);
+						SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)lineIdx, (LPARAM)lineIdx + lineSize);
+						executeEditorQuery(EQ_CURRENT);
+						SendMessage(hEditorWnd, EM_SETSEL, (WPARAM)start, (LPARAM)end);
+					} else {
+						executeEditorQuery((cmd == IDM_PLAN ? EQ_PLAN : 0) | (cmd == IDM_EXECUTE_BATCH ? EQ_BATCH : 0)  | (cmd == IDM_AI_EXPLAIN ? EQ_EXPLAIN : 0));
+					}
+				} else {
+					executeCLIQuery(cmd == IDM_PLAN);
 				}
 			}
 
@@ -1473,8 +1504,25 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (cmd == IDM_INTERRUPT) {
 				int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+				tabs[tabNo].aiNeedStop = true;
 				sqlite3_interrupt(tabNo >= 0 ? tabs[tabNo].db : cli.db);
 			}
+
+			if (cmd == IDM_AI_CHAT) {
+				prefs::set("ai-show-chat", !prefs::get("ai-show-chat"));
+				SendMessage(hMainWnd, WMU_UPDATE_AI_UI, 0, 0);
+				SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
+
+				if (prefs::get("ai-enable") && prefs::get("ai-show-chat")) {
+					SetFocus(GetDlgItem(hAiChatWnd, IDC_AI_CHAT_INPUT));
+					SendMessage(hAiChatWnd, WMU_SET_THEME, 0, 0);
+				} else {
+					SetFocus(hEditorWnd);
+				}
+			}
+
+			if (cmd == IDM_AI_CHAT_COPY || cmd == IDM_AI_CHAT_EXECUTE)
+				SendMessage(hAiChatWnd, WM_COMMAND, cmd, 0);
 
 			// By accelerator
 			if (cmd == IDM_OPEN_EDITOR)
@@ -2235,6 +2283,21 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				switchSchemaTo(schema16);
 			}
 
+			if (cmd == IDM_AI_HELP)
+				ShellExecute(0, 0, TEXT("https://github.com/little-brother/sqlite-gui/wiki#ai-assistance"), 0, 0, SW_SHOW);
+
+			if (cmd == IDM_AI_DB_ACCESS)
+				prefs::set("ai-has-db-access", !prefs::get("ai-has-db-access"));
+
+			if (cmd == IDM_AI_EXPLAIN_ERRORS)
+				prefs::set("ai-explain-query-error", !prefs::get("ai-explain-query-error"));
+
+			if (cmd == IDM_AI_DO_FORMAT)
+				prefs::set("ai-do-format", !prefs::get("ai-do-format"));
+
+			if (cmd == IDM_AI_PROCESS_NOSQL)
+				prefs::set("ai-process-nosql", !prefs::get("ai-process-nosql"));
+
 			if (cmd == IDM_EDITOR_COMMENT)
 				toggleComment(hEditorWnd);
 
@@ -2249,7 +2312,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				CHARRANGE range;
 				SendMessage(hEditorWnd, EM_EXGETSEL, 0, (LPARAM)&range);
 				bool isSelection = range.cpMin != range.cpMax;
-				int len =  isSelection ? range.cpMax - range.cpMin + 1 : GetWindowTextLength(hEditorWnd);
+				int len = isSelection ? range.cpMax - range.cpMin + 1 : GetWindowTextLength(hEditorWnd);
 				dp.s1 = new TCHAR[len + 1]{0};
 				SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, len + 1, (LPARAM)dp.s1);
 
@@ -2260,6 +2323,148 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				SetFocus(hEditorWnd);
 				return true;
+			}
+
+			if (cmd == IDM_EDITOR_FIX_ERROR) {
+				if (!prefs::get("ai-enable"))
+					return 0;
+
+				TCHAR* query16 = getEditorText(hEditorWnd);
+				TCHAR* err16 = dbutils::getQueryError(db, query16);
+
+				if (!err16) {
+					delete [] query16;
+					showPopup(TEXT("No errors"), hEditorWnd);
+					return 0;
+				}
+
+				int sid = aiGetSid();
+				TCHAR* fixed16 = aiRequest(TEXT("fix-error-prompt"), query16, err16, sid);
+				delete [] err16;
+
+				for (int attemptNo = 0; attemptNo < prefs::get("ai-fix-attempt-count") && err16; attemptNo++) {
+					err16 = dbutils::getQueryError(db, fixed16);
+					if (err16 == 0)
+						break;
+
+					fixed16 = aiRequest(TEXT("fix-error-next-prompt"), fixed16, err16, sid);
+				}
+
+				if (fixed16) {
+					char* query8 = utils::utf16to8(query16);
+					char* fixed8 = utils::utf16to8(fixed16);
+					char* cmp8 = new char[MAX_TEXT_LENGTH] {0};
+
+					struct TDiffData {
+						char* query8;
+						char* fixed8;
+						char* cmp8;
+					};
+
+					auto cbDiff = [](void* ref, dmp_operation_t op, const void* data8, uint32_t len8) {
+						if (op == DMP_DIFF_EQUAL)
+							return 0;
+
+						TDiffData* dd = (TDiffData*)ref;
+						char* query8 = (char*)dd->query8;
+						char* fixed8 = (char*)dd->fixed8;
+						char* cmp8 = (char*)dd->cmp8;
+						char* txt8 = (char*)data8;
+
+						if (strlen(cmp8) > MAX_TEXT_LENGTH + 100)
+							return 0;
+
+						bool isSkip = true;
+						for (int i = 0; i < (int)len8; i++)
+							isSkip = isSkip && strchr(" \r\n", txt8[i]);
+						if (isSkip)
+							return 0;
+
+						if (cmp8[0])
+							strcat(cmp8, "\n");
+
+						int len = len8 + 64;
+						char* buf8 = new char[len + 1] {0};
+						char* src8 = op == DMP_DIFF_DELETE ? query8 : fixed8;
+
+						int pos = 0;
+						int clen = 16;
+
+						buf8[pos] = '>';
+						pos++;
+
+						buf8[pos] = '>';
+						pos++;
+
+						buf8[pos] = ' ';
+						pos++;
+
+						int shift = txt8 - src8 > clen ? txt8 - src8 - clen : 0;
+						for (int i = 0; i < MIN(txt8 - src8, clen) ; i++) {
+							buf8[pos] = strchr(" \r\n", src8[i + shift]) ? ' ' : src8[i + shift];
+							pos++;
+						}
+
+						buf8[pos] = '(';
+						pos++;
+
+						buf8[pos] = op == DMP_DIFF_DELETE ? '-' : '+';
+						pos++;
+
+						for (int i = 0; i < (int)len8; i++) {
+							buf8[pos] = txt8[i];
+							pos++;
+						}
+
+						buf8[pos] = ')';
+						pos++;
+
+						for (int i = (int)len8; i < (clen + (int)len8) && txt8[i]; i++) {
+							buf8[pos] = strchr(" \r\n", txt8[i]) ? ' ' : txt8[i];
+							pos++;
+						}
+
+						strcat(cmp8, buf8);
+						delete [] buf8;
+
+						return 0;
+					};
+
+					dmp_diff* diff;
+					dmp_diff_from_strs(&diff, NULL, query8, fixed8);
+					TDiffData dd {query8, fixed8, cmp8};
+					dmp_diff_foreach(diff, cbDiff, &dd);
+					dmp_diff_free(diff);
+
+					TCHAR* cmp16 = utils::utf8to16(cmp8);
+					int len = _tcslen(cmp16) + 256;
+					TCHAR* msg16 = new TCHAR[len + 1] {0};
+					_sntprintf(msg16, len, TEXT("Changes\n\n%ls\n\nCtrl + Z to revert changes"), cmp16);
+					showPopup(msg16, hEditorWnd);
+
+					delete [] msg16;
+					delete [] cmp16;
+
+					delete [] cmp8;
+					delete [] query8;
+					delete [] fixed8;
+
+					SendMessage(hEditorWnd, WM_SETREDRAW, FALSE, 0);
+					int sx = GetScrollPos(hEditorWnd, SB_HORZ);
+					int sy = GetScrollPos(hEditorWnd, SB_VERT);
+					setEditorText(hEditorWnd, fixed16);
+					SetScrollPos(hEditorWnd, SB_HORZ, sx, FALSE);
+					SetScrollPos(hEditorWnd, SB_VERT, sy, FALSE);
+					SendMessage(hEditorWnd, WM_SETREDRAW, TRUE, 0);
+					InvalidateRect(hEditorWnd, NULL, FALSE);
+
+					delete [] fixed16;
+				}
+
+				if (err16)
+					delete [] err16;
+
+				delete [] query16;
 			}
 
 			if (cmd == IDM_EDITOR_CUT)
@@ -2281,8 +2486,16 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 
 			if (cmd == IDM_EDITOR_FORMAT) {
-				formatQuery(hEditorWnd);
-				SendMessage(hEditorWnd, WMU_TEXT_CHANGED, 0, 0);
+				TCHAR* text16 = getEditorText(hEditorWnd);
+				TCHAR* formatted16 = prefs::get("ai-enable") && prefs::get("ai-do-format") ? aiRequest(TEXT("format-prompt"), text16) : formatQuery(text16);
+				if (formatted16) {
+					setEditorText(hEditorWnd, formatted16);
+					processHighlight(hEditorWnd, true, true, true);
+					delete [] formatted16;
+				} else {
+					MessageBox(hWnd, TEXT(AI_ERROR_MESSAGE), 0, MB_OK);
+				}
+				delete [] text16;
 			}
 
 			if (cmd == IDM_CLI_COPY)
@@ -2320,7 +2533,6 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 					FreeLibrary(hNTdllDll);
 				}
-
 
 				if (pRtlGetVersion == NULL)
 					GetVersionEx(&vi);
@@ -2712,7 +2924,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				(pF->msg == WM_SYSKEYDOWN && pF->wParam == VK_F1 && HIWORD(GetKeyState(VK_MENU)))
 				)) {
 				if (-1 != SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0))
-					executeEditorQuery(false, false, false, pF->wParam);
+					executeEditorQuery(0, pF->wParam);
 				return true;
 			}
 
@@ -2973,6 +3185,15 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				return CDRF_DODEFAULT;
 			}
 
+			if (pHdr->hwndFrom == hToolbarWnd && pHdr->code == (UINT)NM_CUSTOMDRAW) {
+				LPNMTBCUSTOMDRAW pCustomDraw = (LPNMTBCUSTOMDRAW)lParam;
+				if (pCustomDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
+					return CDRF_NOTIFYITEMDRAW;
+
+				if (pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT && pCustomDraw->nmcd.dwItemSpec == IDM_SPAN2)
+						return CDRF_SKIPDEFAULT;
+			}
+
 			if (pHdr->code == TTN_GETDISPINFO) {
 				LPTOOLTIPTEXT pTtt = (LPTOOLTIPTEXT) lParam;
 				bool isToolTip = pTtt->hdr.hwndFrom == (HWND)SendMessage(hToolbarWnd, TB_GETTOOLTIPS, 0, 0);
@@ -3113,6 +3334,9 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				SendMessage(hEditorWnd, EM_EXLIMITTEXT, 0, 32767 * 10);
 				if (prefs::get("word-wrap"))
 					toggleWordWrap(hEditorWnd);
+
+				//HWND hAIWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_AI, GetModuleHandle(0), NULL);
+
 				hTabWnd = CreateWindow(WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | TCS_TOOLTIPS, 100, 100, 100, 100, hMainWnd, (HMENU)IDC_TAB, GetModuleHandle(0), NULL);
 				SetProp(hTabWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hTabWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewResultTab));
 				TabCtrl_SetImageList(hTabWnd, hIconsImageList);
@@ -3152,7 +3376,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				bool isRunning = tabNo >=0 ? tabs[tabNo].thread : cli.thread;
 				updateExecuteMenu(!isRunning && db != NULL);
-				Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, isRunning ? TBSTATE_ENABLED : TBSTATE_HIDDEN);
+				SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 				updateTransactionState();
 
 				TCHAR schema16[256];
@@ -3182,6 +3406,26 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (isRunning)
 					MessageBox(hMainWnd, TEXT("The tab is busy"), TEXT("Info"), MB_OK);
 				return isRunning;
+			}
+
+			if (pHdr->idFrom == IDC_STATUSBAR && (pHdr->code == NM_CLICK || pHdr->code == NM_RCLICK)) {
+				bool isEnable = prefs::get("ai-enable");
+				NMMOUSE* pm = (NMMOUSE*)lParam;
+				int id = pm->dwItemSpec;
+				if (id != SB_AI_SETTINGS || !isEnable)
+					return 0;
+
+				RECT rc, rc2;
+				GetWindowRect(pHdr->hwndFrom, &rc);
+				SendMessage(pHdr->hwndFrom, SB_GETRECT, id, (LPARAM)&rc2);
+
+				Menu_SetItemState(hAiMenu, IDM_AI_DB_ACCESS, (prefs::get("ai-has-db-access") ? MF_CHECKED : 0) | MF_ENABLED);
+				Menu_SetItemState(hAiMenu, IDM_AI_EXPLAIN_ERRORS, (prefs::get("ai-explain-query-error") ? MF_CHECKED : 0) | MF_ENABLED);
+				Menu_SetItemState(hAiMenu, IDM_AI_DO_FORMAT, (prefs::get("ai-do-format") ? MF_CHECKED : 0) | MF_ENABLED);
+				Menu_SetItemState(hAiMenu, IDM_AI_PROCESS_NOSQL, (prefs::get("ai-process-nosql") ? MF_CHECKED : 0) | MF_ENABLED);
+
+				POINT p = {rc.left + rc2.left, rc.top};
+				TrackPopupMenu(hAiMenu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hWnd, NULL);
 			}
 		}
 		break;
@@ -3358,31 +3602,89 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			float z = utils::getWndScale(hTabWnd).x;
 			int splitterX = CLAMP(prefs::get("splitter-position-x"), 50 * z, rc.right - 50 * z);
-			int splitterY = CLAMP(prefs::get("splitter-position-y"), 50 * z + rcToolbar.bottom, h - 50 * z);
+			int splitterY = CLAMP(prefs::get("splitter-position-y"), 50 * z + rcToolbar.bottom, h - 100 * z);
+			prefs::set("splitter-position-y", splitterY);
+
 			int tabH = 19 * z;
-			int editorSearchH = IsWindowVisible(hEditorSearchWnd) ? rcEditorSearch.bottom : 0;
+			int editorSearchH = IsWindowVisible(hEditorSearchWnd) ? rcEditorSearch.bottom + 2: 0;
 			int treeSearchH = IsWindowVisible(hTreeSearchWnd) ? utils::getEditHeightByFont(hTreeSearchWnd) + 2 * GetSystemMetrics(SM_CYFIXEDFRAME): 0;
+			int splitterW = 5;
+
+			bool isShowChat = prefs::get("ai-enable") && prefs::get("ai-show-chat");
+			bool isChatMaximized = prefs::get("ai-chat-maximized");
+			int chatW = isShowChat ? (isChatMaximized ? rc.right - splitterX : MIN(rc.right - splitterX, prefs::get("ai-chat-width") + splitterW)) : 0;
 
 			RECT rcEditor;
 			GetClientRect(hEditorWnd, &rcEditor);
 
 			LONG flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_DEFERERASE;
+
 			SetWindowPos(hSchemaWnd, 0, 0, top + 2, splitterX, tabH, flags);
 			SetWindowPos(hTreeWnd, 0, 0, top + tabH + 2, splitterX, h - tabH - 2 - treeSearchH - (treeSearchH > 0), flags);
 			SetWindowPos(hTreeSearchWnd, 0, 0, top + h - treeSearchH, splitterX, treeSearchH, flags);
-			SetWindowPos(hMainTabWnd, 0, splitterX + 5, top + 2, rc.right - splitterX - 5, tabH, flags);
-			SetWindowPos(hEditorWnd, 0, splitterX + 5, top + tabH + 2, rc.right - splitterX - 5, splitterY - tabH + 2 - editorSearchH, flags);
-			SetWindowPos(hEditorSearchWnd, 0, splitterX + 5, top + splitterY - rcEditorSearch.bottom + 2, rc.right - splitterX - 5, rcEditorSearch.bottom, flags);
-			SetWindowPos(cli.hResultWnd, 0, splitterX + 3, top + splitterY + 7, rc.right - splitterX, h - splitterY - 10, flags);
+			SetWindowPos(hMainTabWnd, 0, splitterX + splitterW, top + 2, rc.right - splitterX - splitterW - chatW, tabH, flags);
+			SetWindowPos(hEditorWnd, 0, splitterX + splitterW, top + tabH + 2, rc.right - splitterX - splitterW - chatW, splitterY - tabH + 2 - editorSearchH, flags);
+			SetWindowPos(hEditorSearchWnd, 0, splitterX + splitterW, top + splitterY - rcEditorSearch.bottom + 2, rc.right - splitterW - chatW, rcEditorSearch.bottom, flags);
+			SetWindowPos(cli.hResultWnd, 0, splitterX + 3, top + splitterY + 7, rc.right - splitterX - splitterW - chatW, h - splitterY - 10, flags);
+			SetWindowPos(hAiChatWnd, 0, rc.right - chatW + splitterW, top + 2, chatW - splitterW, h - 2, flags);
+
+			setEditorPadding(hEditorWnd);
 
 			int dy = MAX(abs(rcEditor.bottom - (splitterY - tabH + 2)) + 10, 20);
 			rcEditor = (RECT){0, rcEditor.bottom - dy, rcEditor.right, rcEditor.bottom + dy};
 			InvalidateRect(hEditorWnd, &rcEditor, FALSE);
 			InvalidateRect(hSchemaWnd, NULL, TRUE);
 			InvalidateRect(hTreeSearchWnd, NULL, TRUE);
+			InvalidateRect(hAiChatWnd, NULL, TRUE);
 
-			SetWindowPos(hTabWnd, 0, splitterX + 3, top + splitterY + 5, rc.right - splitterX, h - splitterY - 3, flags);
+			SetWindowPos(hTabWnd, 0, splitterX + 3, top + splitterY + splitterW, rc.right - splitterX - chatW, h - splitterY - 3, flags);
 			EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
+
+			SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
+		}
+		break;
+
+		case WMU_UPDATE_TOOLBAR_BUTTONS: {
+			bool isEnable = prefs::get("ai-enable");
+			bool isShowChat = isEnable && prefs::get("ai-show-chat");
+			bool isChatMaximized = isEnable && isShowChat && prefs::get("ai-chat-maximized");
+			int tabCurrent = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
+
+			if (isChatMaximized) {
+				Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_SPAN, TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_PLAN, TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_AI_EXPLAIN, TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_EXECUTE, TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_HIDDEN);
+			} else {
+				bool isRunning = tabCurrent == -1 ? cli.thread : tabs[tabCurrent].thread;
+				BYTE state = isRunning ? TBSTATE_INDETERMINATE : TBSTATE_ENABLED;
+
+				Toolbar_SetButtonState(hToolbarWnd, IDM_SAVE, TBSTATE_ENABLED);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_SPAN, TBSTATE_ENABLED);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_PLAN, state);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_AI_EXPLAIN, isEnable ? (tabCurrent != -1 ? state : TBSTATE_INDETERMINATE) : TBSTATE_HIDDEN);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_EXECUTE, state);
+				Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, isRunning ? TBSTATE_ENABLED : TBSTATE_HIDDEN);
+			}
+
+			Toolbar_SetButtonState(hToolbarWnd, IDM_AI_CHAT, !isEnable ? TBSTATE_HIDDEN : (isShowChat ? TBSTATE_CHECKED : 0) | TBSTATE_ENABLED);
+
+			if (isEnable) {
+				RECT rcToolbar;
+				GetClientRect(hToolbarWnd, &rcToolbar);
+
+				RECT rcSpan, rcChat;
+				SendMessage(hToolbarWnd, TB_GETRECT, IDM_SPAN2, (LPARAM)&rcSpan);
+				SendMessage(hToolbarWnd, TB_GETRECT, IDM_AI_CHAT, (LPARAM)&rcChat);
+
+				TBBUTTONINFO bi = {0};
+				bi.cbSize = sizeof(TBBUTTONINFO);
+				bi.dwMask = TBIF_SIZE;
+				bi.cx = rcToolbar.right - (rcChat.right - rcChat.left) - rcSpan.left;
+				SendMessage(hToolbarWnd, TB_SETBUTTONINFO, IDM_SPAN2, (LPARAM)&bi);
+			}
 		}
 		break;
 
@@ -3409,6 +3711,8 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (hDlg)
 					setEditorFont(GetDlgItem(hDlg, IDC_DLG_EDITOR));
 			}
+
+			SendMessage(hAiChatWnd, WMU_SET_THEME, 0, 0);
 		}
 		break;
 
@@ -4336,7 +4640,7 @@ TCHAR* parseInja(TCHAR* buf) {
 
 unsigned int __stdcall processCliQuery (void* data) {
 	updateExecuteMenu(false);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_ENABLED);
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, -1, 1);
 
 	float elapsed = 0;
@@ -4487,7 +4791,7 @@ unsigned int __stdcall processCliQuery (void* data) {
 	cli.thread = 0;
 
 	updateExecuteMenu(true);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_HIDDEN);
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 	SendMessage(hMainTabWnd, WMU_TAB_SET_STYLE, -1, 0);
 	updateTransactionState();
 	return 1;
@@ -4528,7 +4832,7 @@ int executeCLIQuery(bool isPlan) {
 			_tcscat(result16, TEXT("Error: incorrect input\nUsage: .set <name> <value>"));
 		} else if (_tcscmp(args[0], TEXT(".get")) == 0) {
 			sqlite3_stmt* stmt;
-			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name, value from prefs where name = coalesce(trim(?1), name) and name not like 'editor-%' order by 1", -1, &stmt, 0)) {
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select name, coalesce(value, '') from prefs where name = coalesce(trim(?1), name) and name not like 'editor-%' order by 1", -1, &stmt, 0)) {
 				if (nArgs > 1) {
 					char* name8 = utils::utf16to8(args[1]);
 					sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
@@ -4637,7 +4941,7 @@ int getPinnedResultCount(int tabNo) {
 unsigned int __stdcall processEditorQuery (void* data) {
 	TEditorTab* tab = (TEditorTab*)data;
 	updateExecuteMenu(false);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_ENABLED);
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 
 	if (!tab->db)
 		openConnection(&tab->db, sqlite3_db_filename(db, 0));
@@ -4768,30 +5072,54 @@ unsigned int __stdcall processEditorQuery (void* data) {
 
 		MessageBeep(0);
 	} else {
+		bool isExplain = _tab.isExplain;
+		bool isAiEnable = prefs::get("ai-enable");
+
 		for (int queryNo = 0; queryNo < ListBox_GetCount(_tab.hQueryListWnd); queryNo++) {
 			int resultNo = queryNo + pinCount;
 
 			int size = ListBox_GetTextLen(_tab.hQueryListWnd, queryNo) + 1;
-			TCHAR query16[size]{0};
+			TCHAR* query16 = new TCHAR[size] {0};
 			ListBox_GetText(_tab.hQueryListWnd, queryNo, query16);
 
 			char* sql8 = utils::utf16to8(query16);
+			bool isSql = !isAiEnable || !prefs::get("ai-process-nosql") || dbutils::isSqlQuery(sql8);
 
-			sqlite3_stmt *stmt;
-			int rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
-			if (rc == SQLITE_OK && _tab.isPlan && !sqlite3_stmt_isexplain(stmt)) {
-				sqlite3_finalize(stmt);
-				char* new8 = new char[strlen(sql8) + strlen("explain query plan ") + 1]{0};
-				sprintf(new8, prefs::get("extended-query-plan") ? "explain %s" : "explain query plan %s", sql8);
-				delete [] sql8;
-				sql8 = new8;
-				rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
+			int rc = 0;
+			sqlite3_stmt *stmt = 0;
+			TCHAR* aiResult16 = 0;
+			if (!isExplain) {
+				if (isSql) {
+					rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
+					if (rc == SQLITE_OK && _tab.isPlan && !sqlite3_stmt_isexplain(stmt)) {
+						sqlite3_finalize(stmt);
+						char* new8 = new char[strlen(sql8) + strlen("explain query plan ") + 1]{0};
+						sprintf(new8, prefs::get("extended-query-plan") ? "explain %s" : "explain query plan %s", sql8);
+						delete [] sql8;
+						sql8 = new8;
+						rc = sqlite3_prepare_v2(_tab.db, sql8, -1, &stmt, 0);
+					}
+
+					if (sqlite3_bind_parameter_count(stmt))
+						DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_BIND_PARAMETERS), hMainWnd, (DLGPROC)&dialogs::cbDlgBindParameters, (LPARAM)stmt);
+				} else {
+					int sid = aiGetSid();
+					tab->aiSid = sid;
+
+					aiResult16 = aiRequest(TEXT("execute-prompt"), query16, 0, sid);
+					if (aiResult16) {
+						if (_tcsstr(aiResult16, TEXT("QUERY:"))) {
+							char* query8 = utils::utf16to8(aiResult16 + 6);
+							rc = sqlite3_prepare_v2(_tab.db, query8, -1, &stmt, 0);
+							delete [] query8;
+						}
+					} else {
+						aiResult16 = utils::utf8to16(tab->aiNeedStop ? AI_TERMINATE_MESSAGE : AI_ERROR_MESSAGE);
+					}
+				}
 			}
+
 			int colCount = rc == SQLITE_OK ? sqlite3_column_count(stmt) : 0;
-
-			if (sqlite3_bind_parameter_count(stmt))
-				DialogBoxParam (GetModuleHandle(0), MAKEINTRESOURCE(IDD_BIND_PARAMETERS), hMainWnd, (DLGPROC)&dialogs::cbDlgBindParameters, (LPARAM)stmt);
-
 			DWORD tStart, tEnd;
 			tStart = GetTickCount();
 
@@ -4806,36 +5134,63 @@ unsigned int __stdcall processEditorQuery (void* data) {
 				rc = sqlite3_errcode(_tab.db);
 				if (rc != SQLITE_OK && rc != SQLITE_DONE && rowCount == 0)
 					hResultWnd = 0;
-				else {
-					//ListView_SetItemState (hResultWnd, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
-				}
 			}
 
 			if (hResultWnd == 0) {
 				hResultWnd = hMessageWnd;
-				if (rc == SQLITE_OK && SQLITE_DONE == sqlite3_step(stmt)) {
-					TCHAR text[64];
-					if (detectDataChanges(sql8))
-						_sntprintf(text, 63, TEXT("%i rows have been changed"), sqlite3_changes(_tab.db));
-					else
-						_sntprintf(text, 63, TEXT("Done"));
-					SetWindowText(hResultWnd, text);
-					isMetaChanged = isMetaChanged || detectMetaChanges(sql8);
+				if (isExplain) {
+					TCHAR* res16 = aiRequest(isSql ? TEXT("explain-sql-prompt") : TEXT("explain-nosql-prompt"), query16);
+					if (res16) {
+						int len = _tcslen(res16) + 64;
+						TCHAR* result16 = new TCHAR[len] {0};
+						_sntprintf(result16, len, TEXT("Explanation\n%ls"), res16);
+						SetWindowText(hResultWnd, result16);
+						delete [] res16;
+						delete [] result16;
+					} else {
+						SetWindowText(hResultWnd, TEXT(AI_ERROR_MESSAGE));
+					}
 				} else {
-					char *err8 = (char*)sqlite3_errmsg(_tab.db);
-					TCHAR* err16 = utils::utf8to16(err8);
-					int len = _tcslen(err16) + 128;
-					TCHAR text16[len + 1];
-					int lineNo = ListBox_GetItemData(_tab.hQueryListWnd, resultNo);
-					_sntprintf(text16, len, TEXT("Error\n%ls\nat line %i"), err16, lineNo + 1);
-					SetWindowText(hResultWnd, text16);
-					delete [] err16;
+					if (rc == SQLITE_OK && SQLITE_DONE == sqlite3_step(stmt)) {
+						TCHAR text[64];
+						if (detectDataChanges(sql8))
+							_sntprintf(text, 63, TEXT("%i rows have been changed"), sqlite3_changes(_tab.db));
+						else
+							_sntprintf(text, 63, TEXT("Done"));
+						SetWindowText(hResultWnd, text);
+						isMetaChanged = isMetaChanged || detectMetaChanges(sql8);
+					} else {
+						if (isSql) {
+							TCHAR* err16 = utils::utf8to16((char*)sqlite3_errmsg(_tab.db));
+
+							TCHAR* exp16 = 0;
+							if (prefs::get("ai-enable") && prefs::get("ai-explain-query-error"))
+								exp16 = aiRequest(TEXT("explain-sql-error-prompt"), query16, err16);
+
+							int len = _tcslen(err16) + (exp16 ? _tcslen(exp16) : 0) + 128;
+							TCHAR* result16 = new TCHAR[len + 1];
+							int lineNo = ListBox_GetItemData(_tab.hQueryListWnd, resultNo);
+
+							if (exp16) {
+								_sntprintf(result16, len, TEXT("Error\n%ls\nat line %i\n\nExplanation\n%ls"), err16, lineNo + 1, exp16);
+							} else {
+								_sntprintf(result16, len, TEXT("Error\n%ls\nat line %i"), err16, lineNo + 1);
+							}
+							SetWindowText(hResultWnd, result16);
+
+							delete [] err16;
+							delete [] result16;
+							if (exp16)
+								delete [] exp16;
+						} else {
+							SetWindowText(hResultWnd, aiResult16);
+						}
+					}
 				}
 			}
 
 			if (hResultWnd == hRowsWnd) {
 				SetWindowLongPtr(hMessageWnd, GWLP_USERDATA, -1);
-
 				ShowWindow(hRowsWnd, resultNo == 0 ? SW_SHOW : SW_HIDE);
 				ShowWindow(hPreviewWnd, resultNo == 0 && prefs::get("show-preview") ? SW_SHOW : SW_HIDE);
 			} else {
@@ -4849,15 +5204,22 @@ unsigned int __stdcall processEditorQuery (void* data) {
 
 			if (rc == SQLITE_OK || rc == SQLITE_DONE)
 				saveQuery("history", sql8);
-			delete [] sql8;
 
 			if (tab->tabTooltips[resultNo] != NULL)
 				delete [] tab->tabTooltips[resultNo];
 
-			TCHAR* exp_query16 = utils::utf8to16(sqlite3_expanded_sql(stmt));
+			TCHAR* exp_query16 = utils::utf8to16(stmt ? sqlite3_expanded_sql(stmt) : sql8);
 			tab->tabTooltips[resultNo] = utils::replaceAll(exp_query16, TEXT("\t"), TEXT("    "));
+
 			delete [] exp_query16;
-			sqlite3_finalize(stmt);
+			delete [] sql8;
+			if (stmt)
+				sqlite3_finalize(stmt);
+
+			if (aiResult16)
+				delete [] aiResult16;
+
+			delete [] query16;
 
 			int tabNo = getTabNo(_tab.id);
 			tab = &tabs[tabNo];
@@ -4910,13 +5272,14 @@ unsigned int __stdcall processEditorQuery (void* data) {
 		RedrawWindow(tab->hTabWnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
 		updateTransactionState();
 		updateExecuteMenu(true);
-		Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_HIDDEN);
 	}
 
 	CloseHandle(tab->thread);
 	tab->thread = 0;
 	tab->isPlan = 0;
 	tab->isBatch = 0;
+	tab->aiNeedStop = 0;
+	tab->aiSid = 0;
 	updateTransactionState();
 
 	EnumChildWindows(tab->hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_UPDATETAB);
@@ -4926,14 +5289,19 @@ unsigned int __stdcall processEditorQuery (void* data) {
 		updateReferences();
 	}
 
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
+
 	return 1;
 }
 
-int executeEditorQuery(bool isPlan, bool isBatch, bool onlyCurrent, int vkKey) {
+int executeEditorQuery(char flags, int vkKey) {
+	bool onlyCurrent = flags & EQ_CURRENT;
+
 	int tabNo = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
 	TEditorTab* tab = &tabs[tabNo];
-	tab->isBatch = isBatch;
-	tab->isPlan = isPlan;
+	tab->isPlan = flags & EQ_PLAN;
+	tab->isExplain = flags & EQ_EXPLAIN;
+	tab->isBatch = flags & EQ_BATCH;
 
 	if (tab->thread) {
 		MessageBox(hMainWnd, TEXT("The tab is busy"), TEXT("Error"), MB_OK);
@@ -5212,7 +5580,7 @@ void updateAttachedRecentList(bool isODBC) {
 	int keepCount = 2; // Choose and separator
 	sqlite3_stmt* stmt;
 	char query8[256];
-	sprintf(query8, "select %s from %s order by time desc limit 100", isODBC ? "alias" : "path", isODBC ? "odbc_recents" : "attached_recents");
+	sprintf(query8, "select coalesce(%s, '') from %s order by time desc limit 100", isODBC ? "alias" : "path", isODBC ? "odbc_recents" : "attached_recents");
 	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, query8, -1, &stmt, 0)) {
 		while(SQLITE_ROW == sqlite3_step(stmt) && cnt < prefs::get("recent-count")) {
 			const char* path8 = (const char*)sqlite3_column_text(stmt, 0);
@@ -5878,7 +6246,10 @@ void setEditorFont(HWND hWnd) {
 		return;
 
 	SendMessage(hWnd, WM_SETFONT, (LPARAM)hFont, 0);
+	setEditorPadding(hWnd);
+}
 
+void setEditorPadding(HWND hWnd) {
 	HWND hParentWnd = GetAncestor(hWnd, GA_ROOT);
 	POINTFLOAT s = hParentWnd == hMainWnd ? utils::getWndScale(hParentWnd) : utils::getDlgScale(hParentWnd);
 
@@ -5910,11 +6281,13 @@ void updateExecuteMenu(bool isEnable) {
 	int state = isEnable ? MF_BYCOMMAND | MF_ENABLED : MF_BYCOMMAND | MF_GRAYED;
 	HMENU hMenu = GetSubMenu(hMainMenu, 1);
 	EnableMenuItem(hMenu, IDM_PLAN, state);
+	EnableMenuItem(hMenu, IDM_AI_EXPLAIN, state);
 	EnableMenuItem(hMenu, IDM_EXECUTE, state);
 	EnableMenuItem(hMenu, IDM_EXECUTE_BATCH, state);
 
 	state = isEnable ? TBSTATE_ENABLED : TBSTATE_INDETERMINATE;
 	Toolbar_SetButtonState(hToolbarWnd, IDM_PLAN, state);
+	Toolbar_SetButtonState(hToolbarWnd, IDM_AI_EXPLAIN, state);
 	Toolbar_SetButtonState(hToolbarWnd, IDM_EXECUTE, state);
 }
 
@@ -5931,6 +6304,7 @@ void disableMainMenu() {
 
 	hMenu = GetSubMenu(hMainMenu, 1);
 	EnableMenuItem(hMenu, IDM_PLAN, MF_BYCOMMAND | MF_GRAYED);
+	EnableMenuItem(hMenu, IDM_AI_EXPLAIN, MF_BYCOMMAND | MF_GRAYED);
 	EnableMenuItem(hMenu, IDM_EXECUTE, MF_BYCOMMAND | MF_GRAYED);
 	EnableMenuItem(hMenu, IDM_EXECUTE_BATCH, MF_BYCOMMAND | MF_GRAYED);
 
@@ -5939,8 +6313,7 @@ void disableMainMenu() {
 		EnableMenuItem(hMenu, i, MF_BYPOSITION | MF_GRAYED);
 
 	Toolbar_SetButtonState(hToolbarWnd, IDM_CLOSE, TBSTATE_INDETERMINATE);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_PLAN, TBSTATE_INDETERMINATE);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_EXECUTE, TBSTATE_INDETERMINATE);
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 }
 
 void enableMainMenu() {
@@ -5958,6 +6331,7 @@ void enableMainMenu() {
 	// Query
 	hMenu = GetSubMenu(hMainMenu, 1);
 	EnableMenuItem(hMenu, IDM_PLAN, MF_BYCOMMAND | MF_ENABLED);
+	EnableMenuItem(hMenu, IDM_AI_EXPLAIN, MF_BYCOMMAND | MF_ENABLED);
 	EnableMenuItem(hMenu, IDM_EXECUTE, MF_BYCOMMAND | MF_ENABLED);
 	EnableMenuItem(hMenu, IDM_EXECUTE_BATCH, MF_BYCOMMAND | MF_ENABLED);
 
@@ -5967,9 +6341,7 @@ void enableMainMenu() {
 		EnableMenuItem(hMenu, i, MF_BYPOSITION | MF_ENABLED);
 
 	Toolbar_SetButtonState(hToolbarWnd, IDM_CLOSE, TBSTATE_ENABLED);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_PLAN, TBSTATE_ENABLED);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_EXECUTE, TBSTATE_ENABLED);
-	Toolbar_SetButtonState(hToolbarWnd, IDM_INTERRUPT, TBSTATE_HIDDEN);
+	SendMessage(hMainWnd, WMU_UPDATE_TOOLBAR_BUTTONS, 0, 0);
 }
 
 int pluginSorter (const void* a, const void* b) {
@@ -6129,6 +6501,25 @@ void reloadPlugins(int type) {
 	}
 }
 
+void updatePlugins(int type) {
+	TCHAR tmpPath16[MAX_PATH + 1] = {0};
+	GetTempPath(MAX_PATH, tmpPath16);
+	_tcscat(tmpPath16, TEXT("sqlite-gui\\update\\*.*\0"));
+
+	TCHAR path16[MAX_PATH + 1] = {0};
+	if (type == ADDON_SQLITE_EXTENSION)
+		_sntprintf(path16, MAX_PATH, TEXT("%ls" EXTENSION_DIRECTORY), APP_PATH);
+	else
+		_sntprintf(path16, MAX_PATH, TEXT("%ls" PLUGIN_DIRECTORY "%ls\\"), APP_PATH, ADDON_EXTS16[type]);
+
+	SHFILEOPSTRUCT fo = {0};
+	fo.wFunc = FO_MOVE;
+	fo.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_FILESONLY;
+	fo.pFrom = tmpPath16;
+	fo.pTo = path16;
+	SHFileOperation(&fo);
+}
+
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam) {
 	TBBUTTONINFO tbi{0};
 	tbi.cbSize = sizeof(TBBUTTONINFO);
@@ -6159,7 +6550,13 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 	}
 
 	if (action == ACTION_SETFONT) {
-		SendMessage(hWnd, WM_SETFONT, (LPARAM)hFont, true);
+		TCHAR wndClass[256];
+		GetClassName(hWnd, wndClass, 256);
+
+		if (_tcscmp(TEXT("RICHEDIT50W"), wndClass) == 0)
+			setEditorFont(hWnd);
+		else
+			SendMessage(hWnd, WM_SETFONT, (LPARAM)hFont, true);
 	}
 
 	if (action == ACTION_SETMENUFONT) {
@@ -6176,6 +6573,7 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action) {
 	}
 
 	if (action == ACTION_RESIZETAB && GetParent(hWnd) == hTabWnd) {
+
 		RECT rect, rect2;
 		GetClientRect(hTabWnd, &rect);
 		TabCtrl_GetItemRect(hTabWnd, 0, &rect2);
@@ -7015,24 +7413,25 @@ int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo) {
 	char* refname8 = utils::utf16to8(refname16);
 	char* query8 = utils::utf16to8(query16);
 	char* value8 = utils::utf16to8(value16);
+
 	sqlite3_stmt *stmt;
 	if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
 		sqlite3_bind_text(stmt, 1, value8, -1, SQLITE_TRANSIENT);
 		if (SQLITE_ROW == sqlite3_step(stmt)) {
-			char res8[MAX_TEXT_LENGTH] = {0};
+			char* res8 = new char[MAX_TEXT_LENGTH + 1]{0};
 			sprintf(res8, "%s\n", refname8);
 			int colCount = sqlite3_column_count(stmt);
 			for (int i = 0; i < colCount; i++) {
 				if (i > 0)
 					strcat(res8, "\n");
 
-				char* colname8 = (char*)sqlite3_column_name(stmt, i);
-				char* value8 = (char*)sqlite3_column_text(stmt, i);
+				const char* colname8 = (const char*)sqlite3_column_name(stmt, i);
+				const char* value8 = (const char*)sqlite3_column_text(stmt, i);
 				if (strlen(colname8) && colCount > 1) {
 					strcat(res8, colname8);
 					strcat(res8, ": ");
 				}
-				strcat(res8, value8);
+				strcat(res8, value8 ? value8 : "(null)");
 			}
 
 			TCHAR* res16 = utils::utf8to16(res8);
@@ -7041,6 +7440,7 @@ int ListView_ShowRef(HWND hListWnd, int rowNo, int colNo) {
 			showTooltip(p.x, p.y + 10, res16);
 
 			delete [] res16;
+			delete [] res8;
 		}
 	} else {
 		showDbError(0);
@@ -7938,6 +8338,14 @@ bool processEditorEvents(MSGFILTER* pF) {
 			return true;
 		}
 
+		if (key == 0x4A && isControl) { // Ctrl + J
+			if (isKeyDown)
+				SendMessage(hMainWnd, WM_COMMAND, IDM_EDITOR_FIX_ERROR, 0);
+
+			pF->wParam = 0;
+			return true;
+		}
+
 		if ((key == 0x46 || key == 0x52) && isControl) { // Ctrl + F or Ctrl + R
 			HWND hParentWnd = GetAncestor(hWnd, GA_ROOT);
 			if (hParentWnd == hMainWnd && key == 0x46) {
@@ -8277,14 +8685,26 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 
 	const HWND hWnd = hAutoComplete;
 	auto addString = [&word, &word2, wLen, hWnd, wPos, isCtrlSpace](const TCHAR* str, bool noEntryCheck = false) {
-		if (!_tcsnicmp(str, word, wLen) && _tcslen(str) == wLen)
+		if (_tcsnicmp(str, word, wLen) == 0 && _tcslen(str) == wLen)
 			return 1;
 
-		if (!_tcsicmp(str, word2))
+		if (_tcsicmp(str, word2) == 0)
 			return 1;
 
 		if (_tcsstr(word2, str)) // disable shows existing words e.g. "table" in "tables"
 			return 0;
+
+		if (_tcsstr(str, word) == str && _tcscmp(word, word2)) {
+			TCHAR* ending = word2 + MAX(wPos - 1, 0);
+			bool isEnding = true;
+			int eLen = _tcslen(ending);
+			int sLen = _tcslen(str);
+			for (int i = 0; i < eLen && isEnding; i++)
+				isEnding = isEnding && (str[sLen - i] ==  ending[eLen - i]);
+
+			if (!isEnding)
+				return 0;
+		}
 
 		TCHAR* dotPos = _tcsrchr(word, TEXT('.'));
 		if (dotPos && !_tcsicmp(str, dotPos + 1))
@@ -8454,7 +8874,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 			_tcsncpy(query16, text + qStart, qEnd - qStart);
 			_tcslwr(query16);
 
-			if (_tcslen(query16) > 0 && wLen == 0) {
+			if (_tcslen(query16) > 0) {
 				auto hasWord = [](TCHAR* str, TCHAR* word) {
 					bool res = false;
 
@@ -8569,6 +8989,7 @@ bool processAutoComplete(HWND hEditorWnd, int key, bool isKeyDown) {
 	ListBox_SetCurSel(hAutoComplete, 0);
 	ShowWindow(hAutoComplete, iCount ? SW_SHOWNOACTIVATE : SW_HIDE);
 	SetFocus(hEditorWnd);
+
 	return false;
 }
 
@@ -8586,8 +9007,6 @@ LRESULT CALLBACK cbNewAutoComplete(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
 			if (prefs::get("disable-autocomplete-help"))
 				return rc;
-
-
 
 			int itemNo = ListBox_GetCurSel(hWnd);
 
@@ -8693,6 +9112,492 @@ LRESULT CALLBACK cbNewAutoCompleteHelp(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			EndPaint(hWnd, &ps);
 
 			return 1;
+		}
+		break;
+
+		case WM_NCHITTEST: {
+			return HTCLIENT;
+		}
+		break;
+
+		case WM_LBUTTONDOWN: {
+			ShowWindow(hWnd, SW_HIDE);
+			SetFocus(hEditorWnd);
+			return TRUE;
+		}
+		break;
+	}
+
+	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK cbNewAiChatMessages (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	switch (msg) {
+		case WM_PAINT: {
+			if (GetWindowTextLength(hWnd))
+				return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+
+			PAINTSTRUCT ps {0};
+			ps.fErase = FALSE;
+			HDC hDC = BeginPaint(hWnd, &ps);
+
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+
+			FillRect(hDC, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+			const TCHAR hi16[] = TEXT("Hi, I'm AI SQL assistant.\nInput your request below.");
+			HFONT hOldFont = (HFONT) SelectObject(hDC, hFont);
+			RECT rc2 {0, 0, rc.right, 0};
+			DrawText(hDC, hi16, -1, &rc2, DT_TOP | DT_WORDBREAK | DT_CENTER | DT_CALCRECT);
+
+			rc.top = rc.bottom - rc2.bottom - 10;
+			DrawText(hDC, hi16, -1, &rc, DT_CENTER | DT_MODIFYSTRING | DT_WORDBREAK);
+			SelectObject(hDC, hOldFont);
+			EndPaint(hWnd, &ps);
+
+			return TRUE;
+		}
+		break;
+
+		case WM_KEYDOWN: {
+			bool isCtrl = HIWORD(GetKeyState(VK_CONTROL));
+			if (LOWORD(wParam) == 0x57 && isCtrl)  // Ctrl + W
+				SendMessage(GetParent(hWnd), WMU_TOGGLE_AI_WORD_WRAP, 0, 0);
+
+			if (LOWORD(wParam) == 0x43 && isCtrl)  {// Ctrl + C
+				int crStart, crEnd;
+				SendMessage(hWnd, EM_GETSEL, (WPARAM)&crStart, (LPARAM)&crEnd);
+				if (crStart == crEnd)
+					return TRUE;
+
+				int len = crEnd - crStart;
+				TCHAR* text16 = new TCHAR[len + 1]{0};
+				TEXTRANGE tr{{crStart, crEnd}, text16};
+				SendMessage(hWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
+				utils::setClipboardText(text16);
+				delete [] text16;
+
+				return TRUE;
+			}
+		}
+		break;
+
+		case WM_MOUSEWHEEL: {
+			if (LOWORD(wParam) == MK_CONTROL) {
+				SendMessage(hMainWnd, WM_MOUSEWHEEL, wParam, lParam);
+				return 1;
+			}
+		}
+		break;
+
+		case WM_RBUTTONDOWN: {
+			POINT p;
+			GetCursorPos(&p);
+			TrackPopupMenu(hAiChatMenu, 0, p.x, p.y, 0, hMainWnd, NULL);
+		}
+		break;
+	}
+
+	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK cbNewAiChatInput (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	switch (msg) {
+		case WM_KEYDOWN: {
+			bool isCtrl = HIWORD(GetKeyState(VK_CONTROL));
+			if (wParam == VK_RETURN && !isCtrl) {
+				SendMessage(GetParent(hWnd), WM_COMMAND, IDM_AI_SEND_MESSAGE, 0);
+				return 1;
+			}
+
+			if (LOWORD(wParam) == 0x57 && isCtrl)  // Ctrl + W
+				SendMessage(GetParent(hWnd), WMU_TOGGLE_AI_WORD_WRAP, 0, 0);
+		}
+		break;
+
+		case WM_MOUSEWHEEL: {
+			if (LOWORD(wParam) == MK_CONTROL) {
+				SendMessage(hMainWnd, WM_MOUSEWHEEL, wParam, lParam);
+				return 1;
+			}
+		}
+		break;
+	}
+
+	return CallWindowProc((WNDPROC)GetProp(hWnd, TEXT("WNDPROC")), hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK cbNewAiChat(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	HWND hMessagesWnd = GetDlgItem(hWnd, IDC_AI_CHAT_MESSAGES);
+	HWND hInputWnd = GetDlgItem(hWnd, IDC_AI_CHAT_INPUT);
+	const int BTN_WIDTH = 30;
+
+	switch (msg) {
+		case WM_PAINT: {
+			PAINTSTRUCT ps{0};
+			HDC hDC = BeginPaint(hWnd, &ps);
+
+			if (ps.rcPaint.right == 0) {
+				EndPaint(hWnd, &ps);
+				return true;
+			}
+
+			int tabH = PtrToInt(GetProp(hWnd, TEXT("TAB_HEIGHT")));
+			bool isMaximized = prefs::get("ai-chat-maximized");
+
+			RECT rc {0};
+			GetClientRect(hWnd, &rc);
+			int w = rc.right;
+
+			HBRUSH hBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+			FillRect(hDC, &rc, hBrush);
+			DeleteObject(hBrush);
+			if (isMaximized) {
+				RECT rc = {0, 0, BTN_WIDTH, tabH};
+				hBrush = CreateSolidBrush(RGB(255, 255, 255));
+				FillRect(hDC, &rc, hBrush);
+				DeleteObject(hBrush);
+			}
+
+			HFONT hOldFont = (HFONT)SelectObject(hDC, hMenuFont);
+			HPEN hBorderPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_GRAYTEXT));
+
+			SetTextColor(hDC, RGB(0, 0, 0));
+			const TCHAR* CAPTIONS16[4] = { isMaximized ? TEXT("-->") : TEXT("<--"), TEXT("<"), TEXT(">"), TEXT("+")};
+
+			SelectObject(hDC, hBorderPen);
+			MoveToEx(hDC, 0, tabH - 1, NULL);
+			LineTo(hDC, w, tabH - 1);
+
+			for (int btnNo = 0; btnNo < 4; btnNo++) {
+				COLORREF bgColor = isMaximized && btnNo == 0 ? RGB(255, 255, 255) : GetSysColor(COLOR_BTNFACE);
+				SetBkColor(hDC, bgColor);
+				RECT rc = {btnNo * BTN_WIDTH, 3, (btnNo + 1) * BTN_WIDTH, tabH + 2};
+				DrawText(hDC, CAPTIONS16[btnNo], -1, &rc, DT_CENTER | DT_BOTTOM);
+
+				MoveToEx(hDC, btnNo * BTN_WIDTH, tabH - 1, NULL);
+				LineTo(hDC, btnNo * BTN_WIDTH, 0);
+				LineTo(hDC, (btnNo + 1) * BTN_WIDTH, 0);
+				LineTo(hDC, (btnNo + 1) * BTN_WIDTH, tabH - 1);
+			}
+
+			DeleteObject(hBorderPen);
+			SelectObject(hDC, hOldFont);
+			EndPaint(hWnd, &ps);
+
+			return true;
+		}
+		break;
+
+		case WM_SIZE: {
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+			int ih = 100;
+			int tabH = PtrToInt(GetProp(hWnd, TEXT("TAB_HEIGHT")));
+
+			SetWindowPos(hMessagesWnd, 0, 0, tabH, rc.right, rc.bottom - ih - 5 - tabH, SWP_NOACTIVATE | SWP_NOZORDER);
+			SetWindowPos(hInputWnd, 0, 0, rc.bottom - ih, rc.right, ih, SWP_NOACTIVATE | SWP_NOZORDER);
+
+			rc = {0, 0, rc.right, tabH};
+			InvalidateRect(hWnd, &rc, FALSE);
+
+			return 1;
+		}
+		break;
+
+		case WM_LBUTTONDOWN: {
+			int x = GET_X_LPARAM(lParam);
+			int y = GET_Y_LPARAM(lParam);
+			int tabH = PtrToInt(GetProp(hWnd, TEXT("TAB_HEIGHT")));
+
+			if (x > 0 && x < 4 * BTN_WIDTH && y > 0 && y < tabH)
+				SendMessage(hWnd, WM_COMMAND, IDM_AI_COMMAND + x / BTN_WIDTH, 0);
+		}
+		break;
+
+		case WM_MOUSEMOVE: {
+			int x = GET_X_LPARAM(lParam);
+			int y = GET_Y_LPARAM(lParam);
+			int tabH = PtrToInt(GetProp(hWnd, TEXT("TAB_HEIGHT")));
+			int prevTabNo = PtrToInt(GetProp(hWnd, TEXT("TABNO")));
+			int tabNo = x > 0 && x < 4 * BTN_WIDTH && y > 0 && y < tabH ? x / BTN_WIDTH + 1 : 0;
+
+			if ((prevTabNo == 0 && tabNo == 0) || prevTabNo == tabNo)
+				return 0;
+
+			if (tabNo == 0)
+				return SendMessage(hWnd, WM_MOUSELEAVE, 0, 0);
+
+			if (prevTabNo != tabNo) {
+				HWND hTooltipWnd = (HWND)GetProp(hWnd, TEXT("TOOLTIP"));
+				TOOLINFO ti{0};
+				ti.cbSize = TTTOOLINFOW_V1_SIZE;
+				SendMessage(hTooltipWnd, TTM_ENUMTOOLS, 0, (LPARAM)&ti);
+
+				TCHAR title16[5][128] = {
+					TEXT("ERROR"),
+					TEXT("Increase/Reduce the AI Chat area"),
+					TEXT("Load a previous chat"),
+					TEXT("Load a next chat"),
+					TEXT("Start a new chat")
+				};
+
+				POINT p {(int)((tabNo - 0.25) * BTN_WIDTH * 1.), tabH + 5};
+				ClientToScreen(hWnd, &p);
+
+				ti.lpszText = tabNo < 5 ? title16[tabNo] : title16[0];
+				SendMessage(hTooltipWnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
+				SendMessage(hTooltipWnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(p.x, p.y));
+				SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)(LPTOOLINFO) &ti);
+
+				TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hWnd, 0};
+				TrackMouseEvent(&tme);
+				SetProp(hWnd, TEXT("TABNO"), IntToPtr(tabNo));
+			}
+		}
+		break;
+
+		case WM_MOUSELEAVE: {
+			HWND hTooltipWnd = (HWND)GetProp(hWnd, TEXT("TOOLTIP"));
+			SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, FALSE, 0);
+			SetProp(hWnd, TEXT("TABNO"), 0);
+		}
+		break;
+
+		case WM_COMMAND: {
+			WORD cmd = LOWORD(wParam);
+
+			if (cmd == IDM_AI_COMMAND) {
+				prefs::set("ai-chat-maximized", !prefs::get("ai-chat-maximized"));
+				SendMessage(hMainWnd, WMU_UPDATE_SIZES, 0, 0);
+			}
+
+			if (cmd == IDM_AI_COMMAND + 1 || cmd == IDM_AI_COMMAND + 2) {
+				int sid = prefs::get("ai-chat-sid");
+
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, cmd == IDM_AI_COMMAND + 1 ?
+					"select coalesce(max(sid), ?1) from ai_messages where sid < iif(?1 > 0, ?1, sid + 1) and json_extract(details, '$.prompt-id') = 'chat-prompt' order by sid" : // prev
+					"select coalesce(min(sid), ?1) from ai_messages where sid > iif(?1 > 0, ?1, sid) and json_extract(details, '$.prompt-id') = 'chat-prompt' order by sid",  // next
+					-1, &stmt, 0)) {
+					sqlite3_bind_int(stmt, 1, sid);
+
+					if (SQLITE_ROW == sqlite3_step(stmt)) {
+						int newSid = sqlite3_column_int(stmt, 0);
+						if (newSid != sid) {
+							prefs::set("ai-chat-sid", newSid);
+							SendMessage(hWnd, WMU_LOAD_AI_CHAT, 0, 0);
+						}
+					}
+				}
+				sqlite3_finalize(stmt);
+			}
+
+			if (cmd == IDM_AI_COMMAND + 3) {
+				prefs::set("ai-chat-sid", 0);
+				SetWindowText(hMessagesWnd, 0);
+				SetFocus(hInputWnd);
+			}
+
+			if (cmd == IDM_AI_SEND_MESSAGE) {
+				GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 0};
+				int len = SendMessage(hInputWnd, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+				TCHAR* query16 = new TCHAR[len + 1] {0};
+
+				GETTEXTEX gt = {0};
+				gt.flags = 0;
+				gt.codepage = 1200;
+				gt.cb = (len + 1) * sizeof(TCHAR);
+				SendMessage(hInputWnd, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)query16);
+
+				SendMessage(hWnd, WMU_ADD_AI_CHAT_MESSAGE, (WPARAM)query16, 1);
+
+				LONG_PTR style = GetWindowLongPtr(hInputWnd, GWL_STYLE);
+				SetWindowLongPtr(hInputWnd, GWL_STYLE, style | ES_READONLY | WS_DISABLED | WS_BORDER);
+				SendMessage(hInputWnd, EM_SETBKGNDCOLOR, 0, RGB(220, 220, 220));
+				UpdateWindow(hInputWnd);
+
+				int sid = prefs::get("ai-chat-sid");
+				if (sid == 0) {
+					sid = aiGetSid();
+					prefs::set("ai-chat-sid", sid);
+				}
+
+				TCHAR* res16 = aiRequest(TEXT("chat-prompt"), query16, 0, sid);
+				if (res16) {
+					SendMessage(hWnd, WMU_ADD_AI_CHAT_MESSAGE, (WPARAM)res16, 0);
+					delete [] res16;
+					SetWindowText(hInputWnd, 0);
+				} else {
+					SendMessage(hWnd, WMU_ADD_AI_CHAT_MESSAGE, (WPARAM)TEXT(AI_ERROR_MESSAGE), 0);
+				}
+				delete [] query16;
+
+				SendMessage(hInputWnd, EM_SETBKGNDCOLOR, 0, RGB(255, 255, 255));
+				SetWindowLongPtr(hInputWnd, GWL_STYLE, style);
+
+				SendMessage(hMessagesWnd, EM_SCROLL, SB_BOTTOM, 0);
+			}
+
+			if (cmd == IDM_AI_CHAT_COPY || cmd == IDM_AI_CHAT_EXECUTE) {
+				int crStart, crEnd;
+				SendMessage(hMessagesWnd, EM_GETSEL, (WPARAM)&crStart, (LPARAM)&crEnd);
+
+				TCHAR* text16 = 0;
+
+				// Execute last QUERY:-message
+				if (crStart == crEnd && cmd == IDM_AI_CHAT_EXECUTE) {
+					int sid = prefs::get("ai-chat-sid");
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select substr(content, 7) from ai_messages where sid = ? and role = 'assistant' and is_aux = 0 and instr(content, 'QUERY:') = 1 order by id desc", -1, &stmt, 0)) {
+						sqlite3_bind_int(stmt, 1, sid);
+						if (SQLITE_ROW == sqlite3_step(stmt))
+							text16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 0));
+					}
+					sqlite3_finalize(stmt);
+
+					if (text16 == 0)
+						return 0;
+				} else {
+					int len = crStart == crEnd ? GetWindowTextLength(hMessagesWnd) : crEnd - crStart;
+					text16 = new TCHAR[len + 1]{0};
+
+					if (crStart == crEnd) {
+						GetWindowText(hMessagesWnd, text16, len + 1);
+					} else {
+						TEXTRANGE tr{{crStart, crEnd}, text16};
+						SendMessage(hMessagesWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
+					}
+				}
+
+				if (cmd == IDM_AI_CHAT_COPY)
+					utils::setClipboardText(text16);
+
+				if (cmd == IDM_AI_CHAT_EXECUTE) {
+					int viewId = GetTickCount();
+
+					int qlen = _tcslen(text16);
+					char* query8 = utils::utf16to8(text16);
+					char* view8 = new char[qlen + 256];
+					snprintf(view8, qlen + 256, "create view temp.ai_view%i as %s", viewId, query8);
+
+					sqlite3_stmt* stmt;
+					if (SQLITE_OK == sqlite3_prepare_v2(db, view8, -1, &stmt, 0)) {
+						sqlite3_step(stmt);
+
+						TCHAR viewname16[128];
+						_sntprintf(viewname16, 127, TEXT("temp.ai_view%i"), viewId);
+						openDialog(IDD_EDITDATA, (DLGPROC)&dialogs::cbDlgEditData, (LPARAM)viewname16);
+					} else {
+						int rc = sqlite3_exec(db, query8, 0, 0, 0);
+						if (rc == SQLITE_OK || rc == SQLITE_DONE || rc == SQLITE_ROW) {
+							MessageBox(hWnd, TEXT("Done"), TEXT("Info"), MB_OK);
+						} else {
+							showDbError(hWnd);
+						}
+					}
+					sqlite3_finalize(stmt);
+
+					delete [] query8;
+					delete [] view8;
+				}
+
+				delete [] text16;
+			}
+		}
+		break;
+
+		case WMU_SET_THEME: {
+			setEditorFont(hMessagesWnd);
+			setEditorFont(hInputWnd);
+			PostMessage(hWnd, WMU_LOAD_AI_CHAT, 0, 0);
+		}
+		break;
+
+		case WMU_INIT_AI_CHAT: {
+			SetProp(hInputWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hInputWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewAiChatInput));
+			SetProp(hMessagesWnd, TEXT("WNDPROC"), (HANDLE)SetWindowLongPtr(hMessagesWnd, GWLP_WNDPROC, (LONG_PTR)&cbNewAiChatMessages));
+			SendMessage(hWnd, WMU_SET_THEME, 0, 0);
+			SendMessage(hWnd, WMU_SET_THEME, 0, 0);
+
+			float z = utils::getWndScale(hTabWnd).x;
+			SetProp(hWnd, TEXT("TAB_HEIGHT"), IntToPtr(19 * z));
+
+			SendMessage(hMessagesWnd, EM_SETTARGETDEVICE, 0, !prefs::get("ai-chat-word-wrap"));
+
+			HWND hTooltipWnd = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hWnd, NULL, GetModuleHandle(0), NULL);
+			TOOLINFO ti{0};
+			ti.cbSize = TTTOOLINFOW_V1_SIZE;
+			ti.hwnd = hWnd;
+			ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS |  TTF_TRACK | TTF_ABSOLUTE;
+			ti.uId = (UINT_PTR)hWnd;
+
+			SendMessage(hTooltipWnd, TTM_ADDTOOL, 0, (LPARAM)&ti);
+			SendMessage(hTooltipWnd, TTM_SETMAXTIPWIDTH, 0, 400);
+			SendMessage(hTooltipWnd, WM_SETFONT, (LPARAM)hMenuFont, 0);
+			SetProp(hWnd, TEXT("TOOLTIP"), hTooltipWnd);
+
+			PostMessage(hWnd, WM_SIZE, 0, 0);
+			PostMessage(hWnd, WMU_LOAD_AI_CHAT, 0, 0);
+		}
+		break;
+
+		case WMU_LOAD_AI_CHAT: {
+			int sid = prefs::get("ai-chat-sid");
+
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select role = 'user', iif(instr(content, 'QUERY:') = 1, substr(content, 7), content) from ai_messages where sid = ? and role in ('user', 'assistant') and is_aux = 0 order by id", -1, &stmt, 0)) {
+				sqlite3_bind_int(stmt, 1, sid);
+
+				SetWindowText(hMessagesWnd, 0);
+				while (SQLITE_ROW == sqlite3_step(stmt)) {
+					bool isUser = sqlite3_column_int(stmt, 0);
+					TCHAR* msg16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+					SendMessage(hWnd, WMU_ADD_AI_CHAT_MESSAGE, (WPARAM)msg16, isUser);
+					delete [] msg16;
+				}
+			}
+			sqlite3_finalize(stmt);
+
+			SendMessage(hMessagesWnd, EM_SCROLL, SB_BOTTOM, 0);
+		}
+		break;
+
+		// wMaram = msg16, lParam = isUser = 0/1
+		case WMU_ADD_AI_CHAT_MESSAGE: {
+			TCHAR* msg16 = (TCHAR*)wParam;
+			bool isUser = lParam;
+
+			GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 0};
+			int len = SendMessage(hMessagesWnd, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 1200);
+			SendMessage(hMessagesWnd, EM_SETSEL, len, len);
+
+			int mlen = _tcslen(msg16);
+			TCHAR* buf16 = new TCHAR[mlen + 32]{0};
+			_sntprintf(buf16, mlen + 32, TEXT("%ls%ls%ls"), isUser ? TEXT("Me: ") : TEXT("AI: "), msg16 + (_tcsncmp(msg16, TEXT("QUERY:"), 6) == 0 ? 6 : 0), isUser ? TEXT("\n") : TEXT("\n\n"));
+			SendMessage(hMessagesWnd, EM_REPLACESEL, TRUE, (LPARAM)buf16);
+			int blen = _tcslen(buf16);
+			delete [] buf16;
+
+			CHARFORMAT cf = {0};
+			cf.cbSize = sizeof(cf);
+			cf.dwMask = CFM_COLOR;
+			cf.crTextColor = isUser ? RGB(0, 0, 255) : RGB(0, 0, 0);
+			SendMessage(hMessagesWnd, EM_SETSEL, len, len + blen);
+			SendMessage(hMessagesWnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+			SendMessage(hMessagesWnd, EM_SETSEL, len + blen, len + blen);
+
+			if (len == 0)
+				RedrawWindow(hMessagesWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_UPDATENOW);
+		}
+		break;
+
+		case WMU_TOGGLE_AI_WORD_WRAP: {
+			bool isWordWrap = !prefs::get("ai-chat-word-wrap");
+			prefs::set("ai-chat-word-wrap", isWordWrap);
+			SendMessage(hMessagesWnd, EM_SETTARGETDEVICE, 0, !isWordWrap);
 		}
 		break;
 	}
@@ -9061,7 +9966,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			for (int i = 0; i < TAB_LENGTH; i++)
 				headers[tabNo * TAB_LENGTH + i] = i < len ? text[i] : 0;
 
-			SendMessage(hWnd, WM_PAINT, 0, 0);
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 
@@ -9076,7 +9981,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			else
 				styles[tabNo] = lParam;
 
-			SendMessage(hWnd, WM_PAINT, 0, 0);
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 
@@ -9096,8 +10001,6 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			for (int i = 0; i < TAB_LENGTH; i++)
 				buf[i] = headers[tabNo * TAB_LENGTH + i];
 			buf[TAB_LENGTH - 1] = 0;
-
-			SendMessage(hWnd, WM_PAINT, 0, 0);
 		}
 		break;
 
@@ -9106,7 +10009,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				return 0;
 
 			SetProp(hMainTabWnd, TEXT("CURRENT"), (HANDLE)wParam);
-			SendMessage(hWnd, WM_PAINT, 0, 0);
+			InvalidateRect(hWnd, NULL, FALSE);
 
 			NMHDR Hdr = {hWnd, (UINT)GetWindowLongPtr(hWnd, GWL_ID), NM_TAB_CHANGE};
 			SendMessage(GetParent(hWnd), WM_NOTIFY, wParam, (LPARAM)&Hdr);
@@ -9122,29 +10025,22 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			return currTab;
 		}
 
-		case WM_ERASEBKGND: {
-			RECT rc{0};
-			GetClientRect(hWnd, &rc);
-			HBRUSH hBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-			FillRect((HDC)wParam, &rc, hBrush);
-			DeleteObject(hBrush);
-
-			return true;
-		}
-		break;
-
 		case WM_PAINT: {
-			InvalidateRect(hWnd, NULL, TRUE);
-
 			PAINTSTRUCT ps{0};
-			ps.fErase = TRUE;
 			HDC hDC = BeginPaint(hWnd, &ps);
 			int w = ps.rcPaint.right;
 			int h = ps.rcPaint.bottom;
+
 			if (w == 0) {
 				EndPaint(hWnd, &ps);
 				return true;
 			}
+
+			RECT rc{0};
+			GetClientRect(hWnd, &rc);
+			HBRUSH hBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+			FillRect(hDC, &rc, hBrush);
+			DeleteObject(hBrush);
 
 			HFONT hOldFont = (HFONT)SelectObject(hDC, hMenuFont);
 			HPEN hCrossPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
@@ -9174,10 +10070,15 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			// Bottom line
 			SelectObject(hDC, hBorderPen);
 			MoveToEx(hDC, CLI_WIDTH, h - 1, NULL);
-			LineTo(hDC, CLI_WIDTH + w - 1, h - 1);
+			LineTo(hDC, w, h - 1);
 
 			for (int tabNo = 0; tabNo < tabCount; tabNo++) {
-				RECT rc = {CLI_WIDTH + tabNo * TAB_WIDTH, 0, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH, h};
+				int l = CLI_WIDTH + tabNo * TAB_WIDTH;
+				int r = CLI_WIDTH + (tabNo + 1) * TAB_WIDTH;
+				if (l > w)
+					break;
+
+				RECT rc = {l, 0, MIN(CLI_WIDTH + (tabNo + 1) * TAB_WIDTH, w), h};
 
 				if (tabNo == currTab) {
 					HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255));
@@ -9190,7 +10091,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				int pos = tabNo * TAB_LENGTH;
 				int len = 0;
 				for (len = 0; len < TAB_LENGTH && (headers[pos + len] != 0); len++);
-				RECT rcText = {rc.left + 5, 0, rc.right - h, h};
+				RECT rcText = {rc.left + 5, 0, rc.right, h};
 				DrawText(hDC, (TCHAR*)headers + pos, len, &rcText, DT_VCENTER | DT_SINGLELINE);
 
 				if (tabNo == 0) {
@@ -9200,38 +10101,43 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 
 				// right border
-				SelectObject(hDC, hBorderPen);
-				MoveToEx(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - 1, 0, NULL);
-				LineTo(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - 1, h - 1);
+				if (r < w) {
+					SelectObject(hDC, hBorderPen);
+					MoveToEx(hDC, r - 1, 0, NULL);
+					LineTo(hDC, r - 1, h - 1);
+				}
 
 				// Top
 				SelectObject(hDC, hBorderPen);
-				MoveToEx(hDC, CLI_WIDTH + tabNo * TAB_WIDTH, 0, NULL);
-				LineTo(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH, 0);
+				MoveToEx(hDC, l, 0, NULL);
+				LineTo(hDC, rc.right, 0);
 
-				// Unborder bottom
+				// Current bottom
 				if (tabNo == currTab) {
 					SelectObject(hDC, hUnborderPen);
-					MoveToEx(hDC, CLI_WIDTH + tabNo * TAB_WIDTH, h - 1, NULL);
-					LineTo(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - 1, h - 1);
+					MoveToEx(hDC, l, h - 1, NULL);
+					LineTo(hDC, rc.right - 1, h - 1);
 				}
 
 				// Cross
-				if (tabCount > 1) {
+				if (tabCount > 1 && r < w) {
 					SelectObject(hDC, hCrossPen);
-					MoveToEx(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - h + h/3, h/3, NULL);
-					LineTo(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - h/3, h - h/3);
-					MoveToEx(hDC, CLI_WIDTH + (tabNo + 1) * TAB_WIDTH - h + h/3, h - h/3, NULL);
-					LineTo(hDC, CLI_WIDTH + (tabNo + 1 ) * TAB_WIDTH - h/3, h/3);
+					MoveToEx(hDC, r - h + h/3, h/3, NULL);
+					LineTo(hDC, r - h/3, h - h/3);
+					MoveToEx(hDC, r - h + h/3, h - h/3, NULL);
+					LineTo(hDC, r - h/3, h/3);
 				}
 			}
 
 			// Plus
-			SelectObject(hDC, hCrossPen);
-			MoveToEx(hDC, CLI_WIDTH + tabCount * TAB_WIDTH + h/4, h/2 + h % 2, NULL);
-			LineTo(hDC, CLI_WIDTH + tabCount * TAB_WIDTH + h - h/4, h/2 + h % 2);
-			MoveToEx(hDC, CLI_WIDTH + tabCount * TAB_WIDTH + h/2 + h % 2, h/4, NULL);
-			LineTo(hDC, CLI_WIDTH + tabCount * TAB_WIDTH + h/2 + h % 2, h - h/4);
+			int c = CLI_WIDTH + tabCount * TAB_WIDTH;
+			if (c + h < w) {
+				SelectObject(hDC, hCrossPen);
+				MoveToEx(hDC, c + h/4, h/2 + h % 2, NULL);
+				LineTo(hDC, c + h - h/4, h/2 + h % 2);
+				MoveToEx(hDC, c + h/2 + h % 2, h/4, NULL);
+				LineTo(hDC, c + h/2 + h % 2, h - h/4);
+			}
 
 			DeleteObject(hCrossPen);
 			DeleteObject(hBorderPen);
@@ -9240,6 +10146,11 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			SelectObject(hDC, hOldFont);
 
 			EndPaint(hWnd, &ps);
+		}
+		break;
+
+		case WM_SIZE: {
+			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		break;
 
@@ -9260,7 +10171,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						if (tabNo == currTab)
 							SendMessage(hWnd, WMU_TAB_SET_CURRENT, tabNo == tabCount - 1 ? tabNo - 1 : tabNo, 0);
 
-						SendMessage(hWnd, WM_PAINT, 0, 0);
+						InvalidateRect(hWnd, NULL, FALSE);
 					}
 				} else {
 					SendMessage(hWnd, WMU_TAB_SET_CURRENT, tabNo, 1);
@@ -9316,7 +10227,7 @@ LRESULT CALLBACK cbNewMainTab(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				if (tabNo == currTab)
 					SendMessage(hWnd, WMU_TAB_SET_CURRENT, tabNo == tabCount - 1 ? tabNo - 1 : tabNo, 0);
 
-				SendMessage(hWnd, WM_PAINT, 0, 0);
+				InvalidateRect(hWnd, NULL, FALSE);
 			}
 			return 0;
 		}
@@ -9521,6 +10432,34 @@ TCHAR* getCurrentText(HWND hWnd) {
 	}
 
 	return text;
+}
+
+// Returns selected text if the editor has selection or entire text otherwise
+TCHAR* getEditorText(HWND hWnd) {
+	int crStart, crEnd;
+	SendMessage(hWnd, EM_GETSEL, (WPARAM)&crStart, (LPARAM)&crEnd);
+
+	int len = crStart == crEnd ? GetWindowTextLength(hWnd) : crEnd - crStart;
+	TCHAR* text16 = new TCHAR[len + 1]{0};
+
+	if (crStart == crEnd) {
+		GetWindowText(hWnd, text16, len + 1);
+	} else {
+		TEXTRANGE tr{{crStart, crEnd}, text16};
+		SendMessage(hWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
+	}
+
+	return text16;
+}
+
+void setEditorText(HWND hWnd, TCHAR* text16) {
+	CHARRANGE range;
+	SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&range);
+
+	if (range.cpMin == range.cpMax)
+		SendMessage(hWnd, EM_SETSEL, 0, -1);
+	SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)text16);
+	SendMessage(hWnd, EM_SETSEL, range.cpMin, range.cpMin);
 }
 
 HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam) {
@@ -9927,7 +10866,7 @@ unsigned int __stdcall checkUpdate (void* data) {
 	int date = (now->tm_year + 1900) * 10000 + (now->tm_mon + 1) * 100 + now->tm_mday;
 
 	if (date != prefs::get("last-update-check")) {
-		char* buf8 = utils::httpRequest("GET", "api.github.com", "repos/little-brother/sqlite-gui/commits/master");
+		char* buf8 = utils::httpRequest("GET", "api.github.com/repos/little-brother/sqlite-gui/commits/master");
 		if (buf8 == 0)
 			return 0;
 
@@ -9957,7 +10896,9 @@ void createResultControls(HWND hTabWnd, int resultNo) {
 	HWND hRowsWnd = createResultList(hTabWnd, resultNo);
 	ShowWindow(hRowsWnd, SW_HIDE); // hEdit = 0 if hRowsWnd is not visible
 
-	HWND hMessageWnd = CreateWindow(WC_STATIC, NULL, WS_CHILD | WS_CLIPSIBLINGS | SS_LEFT, 20, 20, 100, 100, hTabWnd, (HMENU)IntToPtr(IDC_TAB_MESSAGE + resultNo), GetModuleHandle(0), NULL);
+	HWND hMessageWnd = CreateWindow(TEXT("RICHEDIT50W"), NULL, WS_CHILD | WS_CLIPSIBLINGS | ES_MULTILINE | ES_READONLY | ES_AUTOHSCROLL | ES_AUTOVSCROLL | WS_VSCROLL | WS_HSCROLL, 20, 20, 100, 100, hTabWnd, (HMENU)IntToPtr(IDC_TAB_MESSAGE + resultNo), GetModuleHandle(0), NULL);
+	SendMessage(hMessageWnd, EM_SETTARGETDEVICE, 0, 0);
+	SendMessage(hMessageWnd, EM_SETBKGNDCOLOR, 0, GetSysColor(COLOR_BTNFACE));
 	CreateWindow(WC_LISTBOX, NULL, WS_CHILD, 300, 0, 400, 100, hRowsWnd, (HMENU)IDC_REFLIST, GetModuleHandle(0), 0);
 
 	HWND hPreviewWnd = CreateWindow(WC_STATIC, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | SS_CENTER | WS_BORDER | SS_CENTERIMAGE, 20, 20, 100, 100, hTabWnd, (HMENU)IntToPtr(IDC_TAB_PREVIEW + resultNo), GetModuleHandle(0), NULL);
@@ -10246,13 +11187,39 @@ void showTooltip(int x, int y, TCHAR* text16) {
 	ti.lpszText = text16;
 	SendMessage(hTooltipWnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
 	SendMessage(hTooltipWnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(x, y));
-	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO) &ti);
+	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)(LPTOOLINFO) &ti);
 }
 
 void hideTooltip() {
-	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, false, 0);
+	SendMessage(hTooltipWnd, TTM_TRACKACTIVATE, FALSE, 0);
 }
 
+void showPopup(const TCHAR* text16, HWND hParentWnd) {
+	SetWindowText(hAutoCompleteHelp, text16);
+
+	if (text16 == 0) {
+		ShowWindow(hAutoCompleteHelp, SW_HIDE);
+		return;
+	}
+
+	DRAWTEXTPARAMS p {0};
+	p.cbSize = sizeof(DRAWTEXTPARAMS);
+	p.iLeftMargin = 10;
+	p.iRightMargin = 10;
+
+	RECT rc {0};
+	HDC hDC = GetDC(hAutoCompleteHelp);
+	HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
+
+	DrawTextEx(hDC, (TCHAR*)text16, -1, &rc, DT_LEFT | DT_NOCLIP | DT_CALCRECT, &p);
+	SelectObject(hDC, hOldFont);
+	ReleaseDC(hAutoCompleteHelp, hDC);
+
+	SetWindowPos(hAutoCompleteHelp, 0, 0, 0, rc.right + 20, rc.bottom + 10, SWP_NOZORDER);
+	utils::alignDialog(hAutoCompleteHelp, hParentWnd);
+	ShowWindow(hAutoCompleteHelp, SW_SHOW);
+	RedrawWindow(hAutoCompleteHelp, 0, 0, RDW_ERASE);
+}
 
 void logger(ULONG_PTR type, TCHAR* msg16) {
 	if (prefs::get("use-logger") == 0)
@@ -10387,31 +11354,21 @@ int processBlock (int startPos, int startIndent, const TCHAR* input, int* indent
 	return pos - startPos + 1;
 }
 
-bool formatQuery (HWND hEditorWnd) {
-	CHARRANGE range;
-	SendMessage(hEditorWnd, EM_EXGETSEL, 0, (LPARAM)&range);
+TCHAR* formatQuery (TCHAR* query16) {
+	int qLen = _tcslen(query16);
 
-	bool isSelection = range.cpMin != range.cpMax;
-	int size =  isSelection ? range.cpMax - range.cpMin + 1 : GetWindowTextLength(hEditorWnd);
-	if (size <= 0)
-		return false;
+	logger(LOGGER_FORMAT, query16);
 
-	TCHAR sql[size + 1]{0};
-	if (!SendMessage(hEditorWnd, isSelection ? EM_GETSELTEXT : WM_GETTEXT, size + 1, (LPARAM)sql))
-		return false;
-
-	logger(LOGGER_FORMAT, sql);
-
-	TCHAR buf[size + 1]{0};
+	TCHAR* buf = new TCHAR[qLen + 1]{0};
 	int mode = 0;
 	int pos = 0;
 	int bPos = 0;
 	int len = 0;
 
 	// Minify
-	while (pos < (int)_tcslen(sql)) {
-		TCHAR c = sql[pos];
-		TCHAR cn = sql[pos + 1];
+	while (pos < (int)_tcslen(query16)) {
+		TCHAR c = query16[pos];
+		TCHAR cn = query16[pos + 1];
 		TCHAR cp = bPos > 0 ? buf[bPos - 1] : 0;
 
 		int pmode = mode;
@@ -10430,7 +11387,7 @@ bool formatQuery (HWND hEditorWnd) {
 			}
 
 			// Keep a line starting comment --
-			if (bPos > 0 && buf[bPos - 1] != TEXT('\n') && c == TEXT('\n') && cn == TEXT('-') && sql[pos + 2] == TEXT('-')) {
+			if (bPos > 0 && buf[bPos - 1] != TEXT('\n') && c == TEXT('\n') && cn == TEXT('-') && query16[pos + 2] == TEXT('-')) {
 				buf[bPos] = c;
 				bPos++;
 			}
@@ -10452,7 +11409,7 @@ bool formatQuery (HWND hEditorWnd) {
 	bPos = 0;
 	mode = 0;
 	len = 0;
-	TCHAR buf2[MAX_TEXT_LENGTH]{0};
+	TCHAR* buf2 = new TCHAR[MAX_TEXT_LENGTH]{0};
 	while (pos < (int)_tcslen(buf)) {
 		TCHAR c = buf[pos];
 		TCHAR cn = buf[pos + 1];
@@ -10568,7 +11525,7 @@ bool formatQuery (HWND hEditorWnd) {
 	bool newlines[_tcslen(buf2)]{0};
 	processBlock(0, 0, buf2, indents, newlines);
 
-	TCHAR buf3[_tcslen(buf2) * 10 + 1]{0};
+	TCHAR* buf3 = new TCHAR[_tcslen(buf2) * 10 + 1]{0};
 	for (int pos = 0; pos < (int)_tcslen(buf2); pos++) {
 		if (newlines[pos]) {
 			buf3[bPos] = TEXT('\n');
@@ -10584,15 +11541,353 @@ bool formatQuery (HWND hEditorWnd) {
 		bPos++;
 	}
 
-	SetWindowRedraw(hEditorWnd, false);
-	if (!isSelection)
-		SendMessage(hEditorWnd, EM_SETSEL, 0, -1);
-
-	SendMessage(hEditorWnd, EM_REPLACESEL, true, (LPARAM)buf3);
-	SendMessage(hEditorWnd, EM_SETSEL, range.cpMin, range.cpMin);
-	SetWindowRedraw(hEditorWnd, true);
+	delete [] buf;
+	delete [] buf2;
 
 	logger(LOGGER_FORMAT, 0);
 
-	return true;
+	return buf3;
+}
+
+int aiGetSid() {
+	int sid = 1;
+	sqlite3_stmt* stmt;
+	if ((SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select coalesce(max(sid), 0) + 1 from ai_messages", -1, &stmt, 0)) && (SQLITE_ROW == sqlite3_step(stmt)))
+		sid = sqlite3_column_int(stmt, 0);
+	sqlite3_finalize(stmt);
+
+	return sid;
+}
+
+bool aiNeedStop(int sid) {
+	int tabCount = SendMessage(hMainTabWnd, WMU_TAB_GET_COUNT, 0, 0);
+	for (int tabNo = 0; tabNo < tabCount; tabNo++) {
+		if (tabs[tabNo].aiSid == sid)
+			return tabs[tabNo].aiNeedStop;
+	}
+
+	return false;
+}
+
+TCHAR* aiRequest(const TCHAR* promptId, const TCHAR* arg1, const TCHAR* arg2, int sid) {
+	TCHAR* res16 = 0;
+
+	char* prompt8 = 0;
+	char* headers8 = 0;
+	char* options8 = 0;
+	char* data8 = 0;
+	char* tables8 = 0;
+	char* functions8 = 0;
+	char* init8 = 0;
+	char* details8 = 0;
+	char* messages8 = 0;
+
+	if (sid == 0)
+		sid = aiGetSid();
+
+	if (aiNeedStop(sid))
+		return 0;
+
+	char* url8 = prefs::get("ai-api-url", DEFAULT_AI_API_URL);
+	char* model8 = prefs::get("ai-model", "openai-large");
+	char* promptId8 = utils::utf16to8(promptId);
+	bool hasDbAccess = prefs::get("ai-has-db-access");
+
+	auto getValue = [](sqlite3_stmt* stmt, int colNo) {
+		char* param8 = 0;
+		if (sqlite3_column_type(stmt, colNo) != SQLITE_NULL) {
+			param8 = new char[sqlite3_column_bytes(stmt, colNo) + 1] {0};
+			strcpy(param8, (const char*)sqlite3_column_text(stmt, colNo));
+		}
+
+		return param8;
+	};
+
+	auto registerMessage = [] (int sid, const char* role8, const char* content8, const char* details8 = 0) {
+		bool isAux = false;
+
+		if (strcmp(role8, "user") == 0) {
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select is_aux and instr(content, 'CONFIRMED') = 0 from ai_messages where id = (select max(id) from ai_messages where sid = ?1 and role = 'assistant')", -1, &stmt, 0)) {
+				sqlite3_bind_int(stmt, 1, sid);
+				sqlite3_step(stmt);
+				isAux = sqlite3_column_int(stmt, 0) == 1;
+			}
+			sqlite3_finalize(stmt);
+		}
+
+		if (strcmp(role8, "assistant") == 0 && (strstr(content8, "GET:") == content8 || strstr(content8, "QUERY:") == content8 || strstr(content8, "CONFIRMED") == content8))
+			isAux = true;
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "insert into ai_messages (sid, role, content, details, is_aux) values (?1, ?2, ?3, ?4, ?5)", -1, &stmt, 0)) {
+			sqlite3_bind_int(stmt, 1, sid);
+			sqlite3_bind_text(stmt, 2, role8, -1, SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 3, content8, -1, SQLITE_TRANSIENT);
+
+			if (details8) {
+				sqlite3_bind_text(stmt, 4, details8, -1, SQLITE_TRANSIENT);
+			} else {
+				sqlite3_bind_null(stmt, 4);
+			}
+
+			sqlite3_bind_int(stmt, 5, isAux);
+
+			sqlite3_step(stmt);
+		}
+		sqlite3_finalize(stmt);
+	};
+
+	sqlite3_stmt* stmt;
+	if (SQLITE_OK == sqlite3_prepare_v2(db,
+			"with t (name, type, columns) as (select t.name, t.type, " \
+			"iif(t.type in ('table', 'view'), group_concat(c.name || iif(c.pk, ' [pk]', '') , ', '), null) columns " \
+			"from sqlite_master t left join pragma_table_xinfo c on t.tbl_name = c.arg " \
+			"where t.sql is not null and t.type in ('table', 'view') and t.name <> 'sqlite_sequence' " \
+			"group by t.type, t.name order by t.type, t.name) " \
+			"select group_concat(iif(type = 'view', '(view)', '') || name || '(' || columns || ')', ', ') from t",
+			-1, &stmt, 0)) {
+
+		if (SQLITE_ROW == sqlite3_step(stmt))
+			tables8 = getValue(stmt, 0);
+	} else {
+		if (SQLITE_OK == sqlite3_prepare_v2(db,
+			"select group_concat(iif(type = 'view', '(view)', '') || name, ', ') from sqlite_master where type in ('table', 'view') and name <> 'sqlite_sequence'",
+			-1, &stmt, 0)) {
+				if (SQLITE_ROW == sqlite3_step(stmt))
+					tables8 = getValue(stmt, 0);
+			}
+	}
+	sqlite3_finalize(stmt);
+
+	if (SQLITE_OK == sqlite3_prepare_v2(db, "select group_concat(name, ', ') from pragma_function_list where builtin = 0", -1, &stmt, 0)) {
+		if (SQLITE_ROW == sqlite3_step(stmt))
+			functions8 = getValue(stmt, 0);
+	}
+	sqlite3_finalize(stmt);
+
+	if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+			"with " \
+			"p(value) as (select value from ai_config where model in (?1, 'default') and param = ?2 order by iif(model <> 'default', 0, 1))," \
+			"ps(value) as (select json_extract(details, '$.query') from ai_messages where sid = ?7 and role = 'user' order by id asc limit 1)," \
+			"h(value) as (select value from ai_config where model in (?1, 'default') and param = 'request-headers' order by iif(model <> 'default', 0, 1))," \
+			"o(value) as (select value from ai_config where model in (?1, 'default') and param = 'request-options' order by iif(model <> 'default', 0, 1))," \
+			"i(value) as (select value from ai_config where model in (?1, 'default') and param = ?8 order by iif(model <> 'default', 0, 1))," \
+			"idef(value) as (select value from ai_config where model in (?1, 'default') and param = ?9 order by iif(model <> 'default', 0, 1))" \
+			"select " \
+			"(select replace(replace(replace(replace(replace( "\
+				"iif (?2 <> '', (select value from p limit 1), '{{QUERY}}'), "\
+				"'{{TABLES}}', ?3), " \
+				"'{{FUNCTIONS}}', ?4), " \
+				"'{{QUERY}}', ?5), " \
+				"'{{ERROR}}', ?6), " \
+				"'{{PROMPT}}', coalesce((select value from ps), ''))), " \
+			"(select value from h), " \
+			"(select value from o), " \
+			"(select replace(replace(value, '{{TABLES}}', ?3), '{{FUNCTIONS}}', ?4) from i), " \
+			"(select replace(replace(value, '{{TABLES}}', ?3), '{{FUNCTIONS}}', ?4) from idef), " \
+			"(select json_object('query', ?5, 'prompt-id', ?2))",
+			-1, &stmt, 0)) {
+
+		sqlite3_bind_text(stmt, 1, model8, -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 2, promptId8, -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 3, tables8 ? tables8 : "", -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 4, functions8 ? functions8 : "", -1, SQLITE_TRANSIENT);
+
+		char* arg1_8 = utils::utf16to8(arg1);
+		sqlite3_bind_text(stmt, 5, arg1_8, -1, SQLITE_TRANSIENT);
+		delete [] arg1_8;
+
+		char* arg2_8 = utils::utf16to8(arg2);
+		sqlite3_bind_text(stmt, 6, arg2_8, -1, SQLITE_TRANSIENT);
+		delete [] arg2_8;
+
+		sqlite3_bind_int(stmt, 7, sid);
+
+		char action8[32]{0}; // chat, explain, execute, fix-error
+		for(int i = 0; i < 31 && (i == 3 || promptId8[i] != '-'); i++)
+			action8[i] = promptId8[i];
+
+		char initPrompt8[128] {0};
+		snprintf(initPrompt8, 127, "%s%s-init-prompt", action8, hasDbAccess ? "" : "-no-access");
+		sqlite3_bind_text(stmt, 8, initPrompt8, -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 9, hasDbAccess ? "default-init-prompt" : "default-no-access-init-prompt", -1, SQLITE_TRANSIENT);
+
+		if (SQLITE_ROW == sqlite3_step(stmt)) {
+			prompt8 = getValue(stmt, 0);
+			headers8 = getValue(stmt, 1);
+			options8 = getValue(stmt, 2);
+			init8 = sqlite3_column_type(stmt, 3) == SQLITE_NULL ? getValue(stmt, 4) : getValue(stmt, 3);
+			details8 = getValue(stmt, 5);
+		}
+	}
+	sqlite3_finalize(stmt);
+
+	if (prompt8) {
+		if (init8) {
+			sqlite3_stmt* stmt;
+			if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+				"select " \
+				"(select json_extract(details, '$.database') from ai_messages where sid = ?1 and role = 'system' order by id desc), " \
+				"json_object('prompt-id', ?2, 'database', ?3), " \
+				"(select replace(value, '{{TABLES}}', ?5) from ai_config where model in (?4, 'default') and param = 'on-change-db-prompt' order by iif(model <> 'default', 0, 1))",
+				-1, &stmt, 0)) {
+				sqlite3_bind_int(stmt, 1, sid);
+				sqlite3_bind_text(stmt, 2, promptId8, -1, SQLITE_TRANSIENT);
+				sqlite3_bind_text(stmt, 3, sqlite3_db_filename(db, 0), -1, SQLITE_TRANSIENT);
+
+				sqlite3_bind_text(stmt, 4, model8, -1, SQLITE_TRANSIENT);
+				sqlite3_bind_text(stmt, 5, tables8, -1, SQLITE_TRANSIENT);
+
+				sqlite3_step(stmt);
+
+				const char* database8 = sqlite3_column_type(stmt, 0) != SQLITE_NULL ? (const char*)sqlite3_column_text(stmt, 0) : 0;
+				const char* details8 = (const char*)sqlite3_column_text(stmt, 1);
+				const char* prompt8 = (const char*)sqlite3_column_text(stmt, 2);
+				bool isDbChanged = database8 && strcmp(database8, sqlite3_db_filename(db, 0));
+				if (database8 == 0 || isDbChanged)
+					registerMessage(sid, "system", isDbChanged ? prompt8 : init8, details8);
+			}
+
+			sqlite3_finalize(stmt);
+		}
+
+		registerMessage(sid, "user", prompt8, details8);
+
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "with t (role, content) as (select role, content from ai_messages where sid = ?1 order by id) select json_group_array(json_object('role', role, 'content', content)) from t", -1, &stmt, 0)) {
+			sqlite3_bind_int(stmt, 1, sid);
+			if (SQLITE_ROW == sqlite3_step(stmt))
+				messages8 = getValue(stmt, 0);
+		}
+		sqlite3_finalize(stmt);
+
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+				"select json_patch(json_patch(json_object('messages', json_extract(?2, '$'), " \
+				"'private', json('true')), iif(?1 <> 'default', json_object('model', ?1), '{}')), ?3)",
+				-1, &stmt, 0)) {
+			sqlite3_bind_text(stmt, 1, model8, -1, SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 2, messages8, -1, SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 3, options8 ? options8 : "{}", -1, SQLITE_TRANSIENT);
+
+			if (SQLITE_ROW == sqlite3_step(stmt) && sqlite3_column_type(stmt, 0) != SQLITE_NULL)
+				data8 = getValue(stmt, 0);
+		}
+		sqlite3_finalize(stmt);
+
+		delete [] prompt8;
+	}
+
+	if (data8) {
+		DWORD statusCode = 0;
+
+		int timeout = prefs::get("ai-request-timeout");
+		int delay = prefs::get( "ai-delay-between-requests");
+		for (int attemptNo = 0; attemptNo < prefs::get("ai-request-attempt-count") && res16 == 0 && aiNeedStop(sid) == 0; attemptNo++) {
+			char* res8 = utils::httpRequest("POST", url8, headers8, data8, 0, &statusCode, timeout);
+			if (res8 && statusCode == 200) {
+				sqlite3_stmt* stmt;
+				if (SQLITE_OK == sqlite3_prepare_v2(prefs::db, "select json_extract(?1, '$.choices[0].message.content')", -1, &stmt, 0)) {
+					sqlite3_bind_text(stmt, 1, res8, -1, SQLITE_TRANSIENT);
+					if (SQLITE_ROW == sqlite3_step(stmt) && sqlite3_column_type(stmt, 0) == SQLITE_TEXT) {
+						char* content8 = strdup((const char*)sqlite3_column_text(stmt, 0));
+						char* advert8 = strstr(content8, "QUERY:") == content8 || strstr(content8, "GET:") == content8 ? strstr(content8, "---") : 0;
+						if (advert8)
+							advert8[0] = 0;
+
+						res16 = utils::utf8to16(content8);
+
+						registerMessage(sid, "assistant", content8, res8);
+						free(content8);
+					}
+				}
+				sqlite3_finalize(stmt);
+			} else {
+				if (delay > 0 && aiNeedStop(sid) == 0)
+					Sleep(delay);
+			}
+
+			if (res8)
+				delete [] res8;
+		}
+
+		delete [] data8;
+	}
+
+	if (tables8)
+		delete [] tables8;
+
+	if (functions8)
+		delete [] functions8;
+
+	if (init8)
+		delete [] init8;
+
+	if (details8)
+		delete [] details8;
+
+	if (messages8)
+		delete [] messages8;
+
+	if (headers8)
+		delete [] headers8;
+
+	delete [] model8;
+	delete [] url8;
+	delete [] promptId8;
+
+	// Stop by timeout/abort/chain requests limit
+	if (res16 == 0)
+		return 0;
+
+	if (_tcsstr(res16, TEXT("GET:")) == res16 || _tcsstr(res16, TEXT("QUERY:")) == res16) {
+		bool isQuery = res16[0] == TEXT('Q');
+		TCHAR* query16 = _tcsdup(res16 + (isQuery ? 6 : 4));
+		TCHAR* err16 = dbutils::getQueryError(db, query16);
+		if (err16) {
+			delete [] res16;
+			res16 = aiRequest(TEXT("on-error-prompt"), query16, err16, sid);
+			delete [] err16;
+		} else {
+			char* query8 = utils::utf16to8(query16);
+			int rowCount = 0;
+			char* csv8 = dbutils::queryCSV(db, query8, true, ",", true, &rowCount, "(null)");
+			char* msg8 = new char[strlen(csv8) + 64];
+			sprintf(msg8, "%s%s", csv8, rowCount ? "" : "\nNo rows\n");
+			TCHAR* msg16 = utils::utf8to16(msg8);
+
+			delete [] res16;
+			res16 = isQuery ? aiRequest(TEXT("result-confirm-prompt"), query16, msg16, sid) : aiRequest(0, msg16, 0, sid);
+
+			delete [] query8;
+			delete [] csv8;
+			delete [] msg8;
+			delete [] msg16;
+		}
+
+		free(query16);
+	} else if (_tcsstr(res16, TEXT("CONFIRMED")) == res16) {
+		delete [] res16;
+		res16 = 0;
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(prefs::db,
+				"select id, content from ai_messages where sid = ?1 and role = 'assistant' and instr(content, 'QUERY:') = 1 order by id desc limit 1",
+				-1, &stmt, 0)) {
+			sqlite3_bind_int(stmt, 1, sid);
+
+			if (SQLITE_ROW == sqlite3_step(stmt)) {
+				int id = sqlite3_column_int(stmt, 0);
+				char query8[256] {0};
+				snprintf(query8, 255, "update ai_messages set is_aux = 0 where id = %i", id);
+				sqlite3_exec(prefs::db, query8, 0, 0, 0);
+
+				res16 = utils::utf8to16((const char*)sqlite3_column_text(stmt, 1));
+			}
+		}
+		sqlite3_finalize(stmt);
+	}  else {
+		// Do nothing
+	}
+
+	return res16;
 }

@@ -140,6 +140,7 @@ bool CALLBACK cbEnumChildren (HWND hWnd, LPARAM action);
 bool CALLBACK cbEnumFixEditHeights (HWND hWnd, LPARAM height);
 int CALLBACK cbListComparator(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
+void setEditorPadding(HWND hWnd);
 void setEditorFont(HWND hWnd);
 void setEditorColor(HWND hWnd, COLORREF color, bool noEffects = false);
 
@@ -150,18 +151,24 @@ bool processEditorEvents(MSGFILTER* pF);
 bool processAutoComplete(HWND hParent, int key, bool isKeyDown);
 bool processEditKeys(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 TCHAR* getCurrentText(HWND hWnd);
+TCHAR* getEditorText(HWND hWnd);
+void setEditorText(HWND hWnd, TCHAR* text16);
 bool wrapSelectedText(HWND hEditorWnd, int key);
 bool toggleWordWrap(HWND hEditorWnd);
 bool toggleTextCase (HWND hEditorWnd);
 bool toggleComment (HWND hEditorWnd);
 bool pasteText (HWND hEditorWnd, bool detectCSV = false);
-bool formatQuery (HWND hEditorWnd);
+TCHAR* formatQuery (TCHAR* query16);
 HWND openDialog(int IDD, DLGPROC proc, LPARAM lParam = 0);
 void switchDialog(HWND hDlg, bool isNext);
 void createTooltip(HWND hWnd);
 void showTooltip(int x, int y, TCHAR* text16);
+void showPopup(const TCHAR* text16, HWND hParentWnd = hMainWnd);
 void hideTooltip();
 void logger(ULONG_PTR type, TCHAR* msg16);
+
+int aiGetSid();
+TCHAR* aiRequest(const TCHAR* promptId, const TCHAR* arg1, const TCHAR* arg2 = 0, int sid = 0);
 
 int Toolbar_SetButtonState(HWND hToolbar, int id, byte state, LPARAM lParam = 0);
 DWORD_PTR Toolbar_GetButtonData(HWND hToolbar, int id);

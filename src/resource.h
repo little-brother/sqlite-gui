@@ -1,16 +1,20 @@
-#define GUI_VERSION                "1.9.3"
-#define GUI_VERSION2               1, 9, 3, 0
+#define GUI_VERSION                "1.10.0"
+#define GUI_VERSION2               1, 10, 0, 0
 #ifdef __MINGW64__
 #define GUI_PLATFORM               64
 #else
 #define GUI_PLATFORM               32
 #endif
 #define HELP_VERSION               8
+
 #define EXTENSION_REPOSITORY       "little-brother/sqlite-extensions"
 #define EXTENSION_DIRECTORY        "\\extensions\\"
 #define VIEWER_REPOSITORY          "little-brother/sqlite-gui-value-viewers"
 #define MODIFIER_REPOSITORY        "little-brother/sqlite-gui-column-modifiers"
 #define PLUGIN_DIRECTORY           "\\plugins\\"
+#define DEFAULT_AI_API_URL         "text.pollinations.ai/openai"
+#define AI_ERROR_MESSAGE           "Error. Perhaps AI service is unavalable. Try later."
+#define AI_TERMINATE_MESSAGE       "Aborted"
 
 #define IDD_ADDVIEWEDIT            11
 #define IDD_EDITDATA               12
@@ -72,6 +76,8 @@
 #define IDC_MENU_CHART             109
 #define IDC_MENU_CLI               110
 #define IDC_MENU_PREVIEW           111
+#define IDC_MENU_AI                112
+#define IDC_MENU_AI_CHAT           113
 
 #define IDC_MENU_TABLEVIEW         121
 #define IDC_MENU_INDEXTRIGGER      122
@@ -95,6 +101,7 @@
 #define IDC_TREE                   265
 #define IDC_TREE_SEARCH            266
 #define IDC_SCHEMA                 267
+#define IDC_AI_CHAT                268
 #define IDC_EDITOR_SEARCH          270
 #define IDC_EDITOR_SEARCH_STRING   271
 #define IDC_EDITOR_SEARCH_PREV     272
@@ -108,6 +115,8 @@
 #define IDC_PREVIEW                282
 #define IDC_PREVIEW_INFO           283
 #define IDC_FUNCTION_CODES         290
+#define IDC_AI_CHAT_MESSAGES       295
+#define IDC_AI_CHAT_INPUT          296
 
 #define IDC_DLG_EDITOR             300
 #define IDC_DLG_LABEL              301
@@ -295,6 +304,7 @@
 #define IDC_DLG_VALUE_LABEL        515
 #define IDC_DLG_DUPLICATES_LABEL   516
 #define IDC_DLG_DUPLICATES         517
+#define IDC_DLG_ENABLE_AI          518
 
 #define IDC_DLG_CIPHER_KEY                  601
 #define IDC_DLG_CIPHER_SHOW_KEY             602
@@ -369,12 +379,16 @@
 #define IDM_EXECUTE                1512
 #define IDM_EXECUTE_BATCH          1513
 #define IDM_PLAN                   1514
-#define IDM_EXECUTE_SELECTION      1515
-#define IDM_PLAN_SELECTION         1516
-#define IDM_EXECUTE_CURRENT_LINE   1517
-#define IDM_HISTORY                1518
-#define IDM_GISTS                  1519
-#define IDM_INTERRUPT              1520
+#define IDM_EXECUTE_CURRENT_LINE   1515
+#define IDM_HISTORY                1516
+#define IDM_GISTS                  1517
+#define IDM_INTERRUPT              1518
+#define IDM_AI_EXPLAIN             1519
+#define IDM_AI_CHAT                1520
+#define IDM_AI_CHAT_COPY           1521
+#define IDM_AI_CHAT_EXECUTE        1522
+#define IDM_SPAN                   1523
+#define IDM_SPAN2                  1524
 
 #define IDM_IMPORT_SQL             1525
 #define IDM_IMPORT_CSV             1526
@@ -429,6 +443,7 @@
 #define IDM_EDITOR_COMMENT         1608
 #define IDM_EDITOR_FORMAT          1609
 #define IDM_EDITOR_COMPARE         1610
+#define IDM_EDITOR_FIX_ERROR       1611
 
 #define IDM_PREVIEW_SWITCH_PLUGIN  1616
 #define IDM_PREVIEW_TO_FILE        1617
@@ -515,10 +530,18 @@
 #define IDM_PREV_DIALOG            1770
 #define IDM_NEXT_DIALOG            1771
 
-#define IDM_TEST                   1780
+#define IDM_TEST                   1775
 
-#define IDM_RESULT_COMPARE         1800 // iterable, 100
-#define IDM_RESULT_MODIFIER        1900 // iterable, MAX_PLUGIN_COUNT
+#define IDM_AI_COMMAND             1580 // iterable, 5
+#define IDM_AI_SEND_MESSAGE        1790
+#define IDM_AI_HELP                1792
+#define IDM_AI_DB_ACCESS           1793
+#define IDM_AI_EXPLAIN_ERRORS      1794
+#define IDM_AI_DO_FORMAT           1795
+#define IDM_AI_PROCESS_NOSQL       1796
+
+#define IDM_RESULT_COMPARE         1900 // iterable, 100
+#define IDM_RESULT_MODIFIER        2000 // iterable, MAX_PLUGIN_COUNT
 #define IDM_MENU_TRIGGER           2200 // iterable, 50
 #define IDM_MENU_INDEX             2250 // iterable, 50
 
@@ -576,8 +599,10 @@
 #define IDS_TOOLTIP_CLOSE          IDM_CLOSE
 #define IDS_TOOLTIP_SAVE           IDM_SAVE
 #define IDS_TOOLTIP_PLAN           IDM_PLAN
+#define IDS_TOOLTIP_EXPLAIN        IDM_AI_EXPLAIN
 #define IDS_TOOLTIP_EXECUTE        IDM_EXECUTE
 #define IDS_TOOLTIP_INTERRUPT      IDM_INTERRUPT
+#define IDS_TOOLTIP_CHAT           IDM_AI_CHAT
 #define IDS_TOOLTIP_ROW_REFRESH    IDM_ROW_REFRESH
 #define IDS_TOOLTIP_ROW_ADD        IDM_ROW_ADD
 #define IDS_TOOLTIP_ROW_DELETE     IDM_ROW_DELETE
@@ -595,7 +620,6 @@
 #define WMU_TARGET_CHANGED         WM_USER + 6
 #define WMU_TYPE_CHANGED           WM_USER + 7
 #define WMU_REFTABLE_CHANGED       WM_USER + 8
-#define WMU_UPDATE_EXTENSIONS_UI   WM_USER + 9
 #define WMU_SHOW_INFO              WM_USER + 10
 #define WMU_RESET_LISTVIEW         WM_USER + 11
 #define WMU_EDIT_VALUE             WM_USER + 12
@@ -650,7 +674,14 @@
 #define WMU_TRANSFORM_TRANSPOSE    WM_USER + 67
 #define WMU_TRANSFORM_TO_MATRIX    WM_USER + 68
 #define WMU_TRANSFORM_TO_3COLUMNS  WM_USER + 69
-
+#define WMU_UPDATE_EXTENSIONS_UI   WM_USER + 70
+#define WMU_UPDATE_AI_UI           WM_USER + 71
+#define WMU_UPDATE_TOOLBAR_BUTTONS WM_USER + 72
+#define WMU_INIT_AI_CHAT           WM_USER + 73
+#define WMU_LOAD_AI_CHAT           WM_USER + 74
+#define WMU_ADD_AI_CHAT_MESSAGE    WM_USER + 75
+#define WMU_TOGGLE_AI_WORD_WRAP    WM_USER + 76
+#define WMU_NOTIFY_PLUGIN_CLOASED  WM_USER + 77
 
 // ricedit.h has own WM_USER + N message, but N less 210
 #define WMU_HIGHLIGHT              WM_USER + 260

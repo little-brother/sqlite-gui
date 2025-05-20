@@ -155,8 +155,18 @@ namespace dialogs {
 					SetFocus(hEditorWnd);
 				}
 
-				if (wParam == IDM_EDITOR_FORMAT)
-					formatQuery(hEditorWnd);
+				if (wParam == IDM_EDITOR_FORMAT) {
+					TCHAR* text16 = getEditorText(hEditorWnd);
+					TCHAR* formatted16 = prefs::get("ai-enable") && prefs::get("ai-do-format") ? aiRequest(TEXT("format-prompt"), text16) : formatQuery(text16);
+					if (formatted16) {
+						setEditorText(hEditorWnd, formatted16);
+						processHighlight(hEditorWnd, true, true, true);
+						delete [] formatted16;
+					} else {
+						MessageBox(hWnd, TEXT(AI_ERROR_MESSAGE), 0, MB_OK);
+					}
+					delete [] text16;
+				}
 
 				if (wParam == IDC_DLG_OK) {
 					int size = GetWindowTextLength(hEditorWnd) + 1;
@@ -202,7 +212,6 @@ namespace dialogs {
 		return false;
 	}
 
-
 	// lParam, USERDATA = in-out buffer: in - schema, out - new table name
 	BOOL CALLBACK cbDlgAddTable (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
@@ -244,6 +253,7 @@ namespace dialogs {
 				SetWindowTheme(hHeader, TEXT(" "), TEXT(" "));
 
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -557,7 +567,6 @@ namespace dialogs {
 				ShowWindow (hWnd, prefs::get("maximized") == 1 ? SW_MAXIMIZE : SW_SHOW);
 				SetWindowText(hWnd, lParam == IDM_HISTORY ? TEXT("Query history") : TEXT("Saved queries"));
 
-
 				SendMessage(GetDlgItem(hWnd, IDC_DLG_QUERYFILTER), WM_SETFONT, (LPARAM)hFont, true);
 				SendMessage(GetDlgItem(hWnd, IDC_DLG_QUERYLIST), WM_SETFONT, (LPARAM)hFont, true);
 				SendMessage(hWnd, WMU_UPDATE_DATA, 0, 0);
@@ -580,13 +589,13 @@ namespace dialogs {
 				HWND hFilterWnd = GetDlgItem(hWnd, IDC_DLG_QUERYFILTER);
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
-				RECT rc = {0, 14, 0, 0};
+				RECT rc = {0, utils::getEditHeight(hWnd), 0, 0};
 				MapDialogRect(hWnd, &rc);
 				int h = rc.top;
 
 				GetClientRect(hWnd, &rc);
-				SetWindowPos(hFilterWnd, 0, 0, 0, rc.right - rc.left, h, SWP_NOZORDER | SWP_NOMOVE);
-				SetWindowPos(hListWnd, 0, 0, 0, rc.right - rc.left, rc.bottom - rc.top - h - 1, SWP_NOZORDER | SWP_NOMOVE);
+				SetWindowPos(hFilterWnd, 0, 0, 0, rc.right - rc.left, h, SWP_NOZORDER);
+				SetWindowPos(hListWnd, 0, 0, h + 1, rc.right - rc.left, rc.bottom - rc.top - h - 1, SWP_NOZORDER);
 
 				LVCOLUMN lvc;
 				lvc.mask = LVCF_WIDTH;
@@ -641,13 +650,15 @@ namespace dialogs {
 			break;
 
 			case WM_COMMAND: {
+				WORD cmd = LOWORD(wParam);
+
 				if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == GetDlgItem(hWnd, IDC_DLG_QUERYFILTER) && (HWND)lParam == GetFocus()) {
 					KillTimer(hWnd, IDT_EDIT_DATA);
 					SetTimer(hWnd, IDT_EDIT_DATA, 300, NULL);
 					return true;
 				}
 
-				if (wParam == IDM_QUERY_DELETE) {
+				if (cmd == IDM_QUERY_DELETE) {
 					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 
 					char sql8[256];
@@ -673,7 +684,7 @@ namespace dialogs {
 					sqlite3_exec(prefs::db, "commit;", 0, 0, 0);
 				}
 
-				if (wParam == IDM_QUERY_ADD_NEW || wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_COPY) {
+				if (cmd == IDM_QUERY_ADD_NEW || cmd == IDM_QUERY_ADD_OLD || cmd == IDM_QUERY_COPY) {
 					HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_QUERYLIST);
 					int pos = ListView_GetNextItem(hListWnd, -1, LVNI_SELECTED);
 					if (pos == -1)
@@ -682,8 +693,8 @@ namespace dialogs {
 					TCHAR* query16 = new TCHAR[MAX_TEXT_LENGTH] {0};
 					ListView_GetItemText(hListWnd, pos, 2, query16, MAX_TEXT_LENGTH);
 
-					if (wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_ADD_NEW) {
-						if (wParam == IDM_QUERY_ADD_NEW)
+					if (cmd== IDM_QUERY_ADD_OLD || cmd == IDM_QUERY_ADD_NEW) {
+						if (cmd == IDM_QUERY_ADD_NEW)
 							PostMessage(hMainWnd, WMU_OPEN_NEW_TAB, 0, 0);
 
 						PostMessage(hMainWnd, WMU_APPEND_TEXT, (WPARAM)query16, 0); // query16 will be free there
@@ -693,9 +704,12 @@ namespace dialogs {
 						delete [] query16;
 					}
 
-					if (wParam == IDM_QUERY_ADD_OLD || wParam == IDM_QUERY_ADD_NEW)
+					if (cmd == IDM_QUERY_ADD_OLD || cmd == IDM_QUERY_ADD_NEW)
 						EndDialog(hWnd, DLG_OK);
 				}
+
+				if (cmd == IDC_DLG_CANCEL || cmd == IDCANCEL)
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
 			}
 			break;
 
@@ -934,6 +948,12 @@ namespace dialogs {
 				delete [] schema16;
 
 				char query8[MAX_TEXT_LENGTH]{0};
+				sprintf(query8, "explain select * from \"%s\".\"%s\" limit 0", schema8, tablename8);
+				if (sqlite3_exec(db, query8, 0, 0, 0) != SQLITE_OK) {
+					MessageBox(hWnd, TEXT("The table/view doesn't exist"), NULL, MB_OK);
+					SendMessage(hWnd, WM_CLOSE, 0, 0);
+					return TRUE;
+				}
 
 				sqlite3_stmt *stmt;
 				bool isTable = false;
@@ -1293,17 +1313,34 @@ namespace dialogs {
 						ListView_SetColumnWidth(hListWnd, i, widths[i]);
 					ShowWindow(hListWnd, SW_SHOW);
 
-					int len = strlen(tablename8) + strlen(schema8) + 255;
-					TCHAR buf[len + 1];
-					TCHAR* schema16 = utils::utf8to16(schema8);
-					TCHAR* tablename16 = utils::utf8to16(tablename8);
-					TCHAR* name16 = utils::getFullTableName(schema16, tablename16);
-					_tcsupr(name16);
-					_sntprintf(buf, len, TEXT("%ls %ls [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), _tcscmp(schema16, TEXT("main")) == 0 ? tablename16 : name16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
-					delete [] schema16;
-					delete [] tablename16;
-					delete [] name16;
-					SetWindowText(hWnd, buf);
+					if (strcmp(schema8, "temp") == 0 && strstr(tablename8, "ai_view") == tablename8) {
+						sqlite3_stmt *stmt;
+
+						if (SQLITE_OK == sqlite3_prepare_v2(db, "select 'Query: ' || replace(substring(sql, instr(sql, ' as ') + 4), char(10), ' ') || ' [' || ?2 || ?3 || 'rows ]'from temp.sqlite_master where type = 'view' and tbl_name = ?1 and sql is not null order by 1", -1, &stmt, 0)) {
+							sqlite3_bind_text(stmt, 1, tablename8, -1, SQLITE_TRANSIENT);
+							sqlite3_bind_text(stmt, 2, rowCount < 0 ? "Show only first " : "", -1, SQLITE_TRANSIENT);
+							sqlite3_bind_int(stmt, 3, abs(rowCount));
+							if (SQLITE_ROW == sqlite3_step(stmt)) {
+								TCHAR* query16 = utils::utf8to16((char*)sqlite3_column_text(stmt, 0));
+								SetWindowText(hWnd, query16);
+								delete [] query16;
+							}
+						}
+						sqlite3_finalize(stmt);
+
+					} else {
+						int len = strlen(tablename8) + strlen(schema8) + 255;
+						TCHAR buf[len + 1];
+						TCHAR* schema16 = utils::utf8to16(schema8);
+						TCHAR* tablename16 = utils::utf8to16(tablename8);
+						TCHAR* name16 = utils::getFullTableName(schema16, tablename16);
+						_tcsupr(name16);
+						_sntprintf(buf, len, TEXT("%ls %ls [%ls%i rows]"), isTable ? TEXT("Table") : TEXT("View"), _tcscmp(schema16, TEXT("main")) == 0 ? tablename16 : name16, rowCount < 0 ? TEXT("Show only first ") : TEXT(""), abs(rowCount));
+						delete [] schema16;
+						delete [] tablename16;
+						delete [] name16;
+						SetWindowText(hWnd, buf);
+					}
 				} else {
 					showDbError(hWnd);
 				}
@@ -1949,8 +1986,8 @@ namespace dialogs {
 					if (isBLOB)
 						return false;
 
-					TCHAR* buf16 = new TCHAR[_tcslen(cache[_rowNo][currCol]) + 1];
-					_tcscpy(buf16, cache[_rowNo][currCol]);
+					TCHAR* buf16 = new TCHAR[MAX_TEXT_LENGTH] {0}; // _tcslen(cache[_rowNo][currCol]) + 1
+					_tcsncpy(buf16, cache[_rowNo][currCol], MAX_TEXT_LENGTH - 1);
 					if (DLG_OK == DialogBoxParam(GetModuleHandle(0), MAKEINTRESOURCE(IDD_EDITDATA_VALUE), hWnd, (DLGPROC)cbDlgValueEditor, (LPARAM)buf16)) {
 						char* value8 = utils::utf16to8(buf16);
 						SendMessage(hWnd, WMU_SET_CURRENT_CELL_VALUE, (WPARAM)value8, 0);
@@ -2453,7 +2490,7 @@ namespace dialogs {
 		return false;
 	}
 
-	// lParam, USERDATA = TDlgValueParam
+	// lParam, USERDATA = buffer = TCHAR[MAX_TEXT_LENGTH]
 	BOOL CALLBACK cbDlgValueEditor (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
@@ -2564,14 +2601,20 @@ namespace dialogs {
 			}
 			break;
 
-			case WM_CLOSE:
+			case WM_CLOSE: {
 				EndDialog(hWnd, DLG_CANCEL);
 
 				SendMessage(hMainWnd, WMU_UNREGISTER_DIALOG, (WPARAM)hWnd, 0);
 				HWND hPreviewWnd = GetDlgItem(hWnd, IDC_PREVIEW);
 				DestroyWindow(hPreviewWnd);
 				DestroyWindow((HWND)hWnd);
-				break;
+			}
+			break;
+
+			case WMU_NOTIFY_PLUGIN_CLOASED: {
+				SendMessage(hWnd, WM_CLOSE, 0, 0);
+			}
+			break;
 		}
 
 		return false;
@@ -2614,7 +2657,9 @@ namespace dialogs {
 				delete [] ext16;
 				RemoveProp(hWnd, TEXT("EXT"));
 
+				HWND hParentWnd = GetAncestor(hWnd, GA_ROOT);
 				SendMessage(hWnd, WMU_RESET_PREVIEW, 0, 0);
+				SendMessage(hParentWnd, WMU_NOTIFY_PLUGIN_CLOASED, 0, 0);
 			}
 			break;
 
@@ -3346,6 +3391,7 @@ namespace dialogs {
 				ComboBox_SetCurSel(hColType, 0);
 
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -3450,6 +3496,7 @@ namespace dialogs {
 				sqlite3_finalize(stmt);
 
 				EnumChildWindows(hWnd, (WNDENUMPROC)cbEnumFixEditHeights, (LPARAM)utils::getEditHeight(hWnd));
+				utils::alignDialog(hWnd, hMainWnd);
 			}
 			break;
 
@@ -4077,12 +4124,25 @@ namespace dialogs {
 	BOOL CALLBACK cbDlgAddonManager (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		switch (msg) {
 			case WM_INITDIALOG: {
+				int type = lParam;
+				char* repository8 =
+					type == ADDON_SQLITE_EXTENSION ? prefs::get("extension-repository", EXTENSION_REPOSITORY) :
+					type == ADDON_COLUMN_MODIFIER ? prefs::get("modifier-repository", MODIFIER_REPOSITORY) :
+					type == ADDON_VALUE_VIEWER ? prefs::get("viewer-repository", VIEWER_REPOSITORY) :
+					0;
+				SetProp(hWnd, TEXT("REPOSITORY8"), repository8);
+
+				if (repository8 == 0) {
+					MessageBox(hMainWnd, TEXT("Unsupported plugin type"), 0, 0);
+					EndDialog(hWnd, DLG_CANCEL);
+					return DLG_CANCEL;
+				}
+
 				HWND hListWnd = GetDlgItem(hWnd, IDC_DLG_ADDON_LIST);
 				ListView_SetExtendedListViewStyle(hListWnd, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_CHECKBOXES);
 				SendMessage(hListWnd, WM_SETFONT, (WPARAM)hFont, FALSE);
 				HWND hStatusWnd = CreateStatusWindow(WS_CHILD | WS_VISIBLE, NULL, hWnd, IDC_DLG_STATUSBAR);
 
-				int type = lParam;
 				const TCHAR* type16 = ADDON_EXTS16[type];
 				SetWindowLongPtr(hWnd, GWLP_USERDATA, type);
 
@@ -4097,18 +4157,18 @@ namespace dialogs {
 				SHFileOperation(&fo);
 				SHCreateDirectoryEx(0, uploadPath16, 0);
 
-				char* repository8 = type == ADDON_SQLITE_EXTENSION ? prefs::get("extension-repository", EXTENSION_REPOSITORY) :
-					type == ADDON_COLUMN_MODIFIER ? prefs::get("modifier-repository", MODIFIER_REPOSITORY) :
-					prefs::get("viewer-repository", VIEWER_REPOSITORY);
-				SetProp(hWnd, TEXT("REPOSITORY8"), repository8);
-
 				// Repo
 				char url8[1024];
-				snprintf(url8, 1023, "/%s/main/summary.json", repository8);
-				char* repo8 = utils::httpRequest("GET", "raw.githubusercontent.com", url8);
+				snprintf(url8, 1023, "raw.githubusercontent.com/%s/main/summary.json", repository8);
+				char* repo8 = utils::httpRequest("GET", url8);
 
 				char title8[1024];
-				snprintf(title8, 1023, "%s - github.com/%s", type == ADDON_VALUE_VIEWER ? "Value viewer plugin manager" : type == ADDON_COLUMN_MODIFIER ? "Column modifier plugin manager" : "SQLite extension manager", repository8);
+				snprintf(title8, 1023, "%s - github.com/%s",
+					type == ADDON_SQLITE_EXTENSION ? "SQLite extension manager" :
+					type == ADDON_VALUE_VIEWER ? "Value viewer plugin manager" :
+					type == ADDON_COLUMN_MODIFIER ? "Column modifier plugin manager" :
+					0, repository8);
+
 				TCHAR* title16 = utils::utf8to16(title8);
 				SetWindowText(hWnd, title16);
 				delete [] title16;
@@ -4295,12 +4355,12 @@ namespace dialogs {
 
 								char* name8 = utils::utf16to8(name16);
 								char url8[1024];
-								snprintf(url8, 1023, "%s/releases/latest/download/%s-x%i.zip", repository8, name8, GUI_PLATFORM);
+								snprintf(url8, 1023, "github.com/%s/releases/latest/download/%s-x%i.zip", repository8, name8, GUI_PLATFORM);
 
 								bool isDone = false;
 								int readBytes = 0;
 
-								unsigned char* buf8 = (unsigned char*)utils::httpRequest("GET", "github.com", url8, 0, &readBytes);
+								unsigned char* buf8 = (unsigned char*)utils::httpRequest("GET", url8, 0, 0, &readBytes);
 								if (buf8 && (readBytes > 30) && (buf8[0] == 0x50 && buf8[1] == 0x4B && buf8[2] == 0x03 && buf8[3] == 0x04)) {
 									// Parse first zip local file header
 									unsigned int unpackLen = utils::read_le32(&buf8[22]);
@@ -4352,9 +4412,9 @@ namespace dialogs {
 								if (isDone && type == ADDON_SQLITE_EXTENSION)	{
 									char* name8 = utils::utf16to8(name16);
 									char url8[1024];
-									snprintf(url8, 1023, "/%s/main/%s/help.json", repository8, name8);
+									snprintf(url8, 1023, "raw.githubusercontent.com/%s/main/%s/help.json", repository8, name8);
 									int readBytes = 0;
-									char* buf8 = utils::httpRequest("GET", "raw.githubusercontent.com", url8, 0, &readBytes);
+									char* buf8 = utils::httpRequest("GET", url8, 0, 0, &readBytes);
 
 									if (buf8) {
 										if (!prefs::applyHelp(buf8, name8))
@@ -4443,7 +4503,7 @@ namespace dialogs {
 					char url8[1024];
 					char* name8 = utils::utf16to8(name16);
 					char* repository8 = (char*)GetProp(hWnd, TEXT("REPOSITORY8"));
-					snprintf(url8, 1023, "/%s/main/%s/help.json", repository8, name8);
+					snprintf(url8, 1023, "raw.githubusercontent.com/%s/main/%s/help.json", repository8, name8);
 					delete [] name8;
 
 					sqlite3_stmt* stmt;
@@ -4462,10 +4522,10 @@ namespace dialogs {
 						int readBytes = 0;
 						DWORD statusCode = 0;
 						char* name8 = utils::utf16to8(name16);
-						char* buf8 = utils::httpRequest("GET", "raw.githubusercontent.com", url8, 0, &readBytes, &statusCode);
+						char* buf8 = utils::httpRequest("GET", url8, 0, 0, &readBytes, &statusCode);
 						sqlite3_bind_text(stmt, 1, name8, strlen(name8), SQLITE_TRANSIENT);
 
-						if (buf8 && strcmp(buf8, "[]") && statusCode == 200 ) {
+						if (buf8 && strcmp(buf8, "[]") && statusCode == 200) {
 							sqlite3_bind_text(stmt, 2, buf8, strlen(buf8), SQLITE_TRANSIENT);
 						} else {
 							sqlite3_bind_null(stmt, 2);
@@ -5445,7 +5505,6 @@ namespace dialogs {
 
 		return false;
 	}
-
 
 	#define CHART_LINES     0
 	#define CHART_DOTS      1
@@ -6473,12 +6532,12 @@ namespace dialogs {
 
 						if (IDOK == MessageBox(hWnd, msg16, TEXT("Confirmation"), MB_OKCANCEL)) {
 								char url8[1024];
-								snprintf(url8, 1023, "/little-brother/logger/releases/latest/download/logger-x%i.zip", GUI_PLATFORM);
+								snprintf(url8, 1023, "github.com/little-brother/logger/releases/latest/download/logger-x%i.zip", GUI_PLATFORM);
 
 								bool isDone = false;
 								int readBytes = 0;
 
-								unsigned char* buf8 = (unsigned char*)utils::httpRequest("GET", "github.com", url8, 0, &readBytes);
+								unsigned char* buf8 = (unsigned char*)utils::httpRequest("GET", url8, 0, 0, &readBytes);
 								if (buf8 && (readBytes > 30) && (buf8[0] == 0x50 && buf8[1] == 0x4B && buf8[2] == 0x03 && buf8[3] == 0x04)) {
 									// Parse first zip local file header
 									unsigned int unpackLen = utils::read_le32(&buf8[22]);
@@ -6633,6 +6692,7 @@ namespace dialogs {
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_RETAIN_PASSPHRASE), prefs::get("retain-passphrase") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_FOREIGN_KEYS), prefs::get("use-foreign-keys") ? BST_CHECKED : BST_UNCHECKED);
 				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_LEGACY_RENAME), prefs::get("use-legacy-rename") ? BST_CHECKED : BST_UNCHECKED);
+				Button_SetCheck(GetDlgItem(hTabWnd, IDC_DLG_ENABLE_AI), prefs::get("ai-enable") ? BST_CHECKED : BST_UNCHECKED);
 
 				TCHAR buf[256];
 				_sntprintf(buf, 255, TEXT("%i"), prefs::get("row-limit"));
@@ -6659,27 +6719,6 @@ namespace dialogs {
 				SetDlgItemText(hTabWnd, IDC_DLG_GOOGLE_KEY, googleApiKey16);
 				delete [] googleApiKey16;
 				delete [] googleApiKey8;
-
-				char* viewerRepository8 = prefs::get("viewer-repository", VIEWER_REPOSITORY);
-				TCHAR* viewerRepository16 = utils::utf8to16(viewerRepository8);
-				SetDlgItemText(hTabWnd, IDC_DLG_VIEWER_REPOSITORY, viewerRepository16);
-				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_VIEWER_REPOSITORY), TEXT(VIEWER_REPOSITORY));
-				delete [] viewerRepository16;
-				delete [] viewerRepository8;
-
-				char* modifierRepository8 = prefs::get("modifier-repository", MODIFIER_REPOSITORY);
-				TCHAR* modifierRepository16 = utils::utf8to16(modifierRepository8);
-				SetDlgItemText(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY, modifierRepository16);
-				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY), TEXT(MODIFIER_REPOSITORY));
-				delete [] modifierRepository16;
-				delete [] modifierRepository8;
-
-				char* extensionRepository8 = prefs::get("extension-repository", EXTENSION_REPOSITORY);
-				TCHAR* extensionRepository16 = utils::utf8to16(extensionRepository8);
-				SetDlgItemText(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY, extensionRepository16);
-				Edit_SetCueBannerText(GetDlgItem(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY), TEXT(EXTENSION_REPOSITORY));
-				delete [] extensionRepository16;
-				delete [] extensionRepository8;
 
 				HWND hIndent = GetDlgItem(hTabWnd, IDC_DLG_INDENT);
 				for (int i = 0; i < 3; i++)
@@ -6741,6 +6780,7 @@ namespace dialogs {
 					prefs::set("use-foreign-keys", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_FOREIGN_KEYS)));
 					prefs::set("use-legacy-rename", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_LEGACY_RENAME)));
 					prefs::set("copy-to-clipboard-delimiter", ComboBox_GetCurSel(GetDlgItem(hTabWnd, IDC_DLG_DELIMITER)));
+					prefs::set("ai-enable", Button_GetCheck(GetDlgItem(hTabWnd, IDC_DLG_ENABLE_AI)));
 
 					GetDlgItemText(hTabWnd, IDC_DLG_ROW_LIMIT, buf, 255);
 					prefs::set("row-limit", (int)_tcstod(buf, NULL));
@@ -6764,21 +6804,6 @@ namespace dialogs {
 					char* googleApiKey8 = utils::utf16to8(buf);
 					prefs::set("google-api-key", googleApiKey8);
 					delete [] googleApiKey8;
-
-					GetDlgItemText(hTabWnd, IDC_DLG_VIEWER_REPOSITORY, buf, 254);
-					char* viewerRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(VIEWER_REPOSITORY));
-					prefs::set("viewer-repository", viewerRepository8);
-					delete [] viewerRepository8;
-
-					GetDlgItemText(hTabWnd, IDC_DLG_MODIFIER_REPOSITORY, buf, 254);
-					char* modifierRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(MODIFIER_REPOSITORY));
-					prefs::set("modifier-repository", modifierRepository8);
-					delete [] modifierRepository8;
-
-					GetDlgItemText(hTabWnd, IDC_DLG_EXTENSION_REPOSITORY, buf, 254);
-					char* extensionRepository8 = utils::utf16to8(_tcslen(buf) ? buf : TEXT(EXTENSION_REPOSITORY));
-					prefs::set("extension-repository", extensionRepository8);
-					delete [] extensionRepository8;
 
 					HBRUSH* brushes = (HBRUSH*)GetProp(hWnd, TEXT("BRUSHES"));
 					prefs::set("color-keyword", GetBrushColor(brushes[0]));
@@ -6819,7 +6844,7 @@ namespace dialogs {
 					{
 						IDC_DLG_RESTORE_DB, IDC_DLG_RESTORE_EDITOR, IDC_DLG_WORD_WRAP, IDC_DLG_TAB_AUTOCOMPLETE,
 						IDC_DLG_DISABLE_HELP, IDC_DLG_ASK_DELETE, IDC_DLG_AUTO_FILTERS, IDC_DLG_SYNC_OFF, IDC_DLG_RETAIN_PASSPHRASE,
-						IDC_DLG_HTTP_SERVER, IDC_DLG_HTTP_SERVER_PORT, IDC_DLG_CHECK_UPDATES, IDC_DLG_USE_LOGGER
+						IDC_DLG_HTTP_SERVER, IDC_DLG_HTTP_SERVER_PORT, IDC_DLG_ENABLE_AI, IDC_DLG_CHECK_UPDATES, IDC_DLG_USE_LOGGER
 					},
 					{
 						IDC_DLG_FONT_FAMILY, IDC_DLG_FONT_LABEL, IDC_DLG_FONT_SIZE, IDC_DLG_EDITOR_LABEL, IDC_DLG_COLOR, IDC_DLG_GRID_LABEL,
@@ -6832,10 +6857,7 @@ namespace dialogs {
 					},
 					{
 						IDC_DLG_STARTUP, IDC_DLG_STARTUP_LABEL, IDC_DLG_FOREIGN_KEYS, IDC_DLG_LEGACY_RENAME,
-						IDC_DLG_GOOGLE_KEY_LABEL, IDC_DLG_GOOGLE_KEY,
-						IDC_DLG_VIEWER_REPOSITORY, IDC_DLG_VIEWER_REPOSITORY_LABEL,
-						IDC_DLG_MODIFIER_REPOSITORY, IDC_DLG_MODIFIER_REPOSITORY_LABEL,
-						IDC_DLG_EXTENSION_REPOSITORY, IDC_DLG_EXTENSION_REPOSITORY_LABEL
+						IDC_DLG_GOOGLE_KEY_LABEL, IDC_DLG_GOOGLE_KEY
 					}
 				};
 

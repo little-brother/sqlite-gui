@@ -867,24 +867,54 @@ namespace utils {
 		return buf;
 	}
 
-	char* httpRequest(const char* method, const char* uri, const char* path, const char* data, int* readBytes, DWORD* statusCode) {
+	char* httpRequest(const char* method, const char* uri, const char* headers, const char* data, int* readBytes, DWORD* statusCode, int timeout) {
 		DWORD resSize = 1;
 		char* res8 = 0;
 
-		char headers[1024];
-		char* encoded_data = 0;
-		if (strcmp(method, "PUT") == 0 || strcmp(method, "POST") == 0) {
-			encoded_data = urlEncode(data);
-			strcpy(headers,	"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n");
-		} else {
-			strcpy(headers,	"Accept: application/json\r\n");
+		char* headers8 = new char[1024] {0};
+		strncpy(headers8, headers ? headers : "Accept: application/json\r\n", 1023);
+
+		const char* uri8 = uri;
+		if (strstr(uri, "https://"))
+			uri8 = uri + 8;
+
+		int len = strlen(uri8);
+		char* hostname8 = new char[len + 1] {0};
+		char* path8 = new char[len + 1] {0};
+		int port = INTERNET_DEFAULT_HTTPS_PORT;
+
+		int pos = 0;
+		while (pos < len && (strchr(":/?", uri8[pos]) == 0))
+			pos++;
+
+		strncpy(hostname8, uri8, pos);
+
+		if (uri8[pos] == ':') {
+			pos++;
+			char buf[6] {0};
+			while (pos < len && (isdigit(uri8[pos])) && strlen(buf) < 5) {
+				buf[strlen(buf)] = uri8[pos];
+				pos++;
+			}
+
+			port = atoi(buf);
 		}
 
-		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
-		HINTERNET hSession = InternetConnectA(hInet, uri, INTERNET_DEFAULT_HTTPS_PORT, "", "", INTERNET_SERVICE_HTTP, 0, 0);
-		HINTERNET hRequest = HttpOpenRequestA(hSession, method, path, NULL, uri, 0, INTERNET_FLAG_SECURE | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD, 0);
+		strcpy(path8, uri8 + pos);
 
-		if (hRequest && HttpSendRequestA(hRequest, headers, strlen(headers), encoded_data, encoded_data ? strlen(encoded_data) : 0)) {
+		HINTERNET hInet = InternetOpenA("Mozilla/4.0 (compatible; MSIE 6.0b; Windows NT 5.0; .NET CLR 1.0.2914)", INTERNET_OPEN_TYPE_PRECONFIG, "", "", 0);
+		char timeout8[32];
+		sprintf(timeout8, "%i", timeout);
+		InternetSetOptionA(hInet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+		InternetSetOptionA(hInet, INTERNET_OPTION_CONTROL_SEND_TIMEOUT, &timeout, sizeof(timeout));
+		InternetSetOptionA(hInet, INTERNET_OPTION_CONTROL_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+		InternetSetOptionA(hInet, INTERNET_OPTION_DATA_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+		InternetSetOptionA(hInet, INTERNET_OPTION_DATA_SEND_TIMEOUT, &timeout, sizeof(timeout));
+
+		HINTERNET hSession = InternetConnectA(hInet, hostname8, port, "", "", INTERNET_SERVICE_HTTP, 0, 0);
+		HINTERNET hRequest = HttpOpenRequestA(hSession, method, path8, NULL, NULL, 0, INTERNET_FLAG_SECURE | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD, 0);
+
+		if (hRequest && HttpSendRequestA(hRequest, headers8, strlen(headers8), (char*)data, data ? strlen(data) : 0)) {
 			bool isDone = false;
 
 			while (!isDone) {
@@ -907,12 +937,13 @@ namespace utils {
 			}
 		}
 
+		delete [] headers8;
+		delete [] hostname8;
+		delete [] path8;
+
 		InternetCloseHandle(hRequest);
 		InternetCloseHandle(hSession);
 		InternetCloseHandle(hInet);
-
-		if (encoded_data)
-			free(encoded_data);
 
 		// The last char is 0. Hmmm...
 		if (res8)

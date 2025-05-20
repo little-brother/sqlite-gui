@@ -5,7 +5,7 @@
 namespace prefs {
 	sqlite3* db = NULL;
 
-	const int ICOUNT = 91;
+	const int ICOUNT = 105;
 	const char* iprops[ICOUNT] = {
 		"x", "y", "width", "height", "splitter-position-x", "splitter-position-y",
 		"maximized", "font-size", "max-query-count", "exit-by-escape", "beep-query-duration", "synchronous-off",
@@ -31,7 +31,9 @@ namespace prefs {
 		"show-fk-links", "show-column-types", "show-isolation-reasons",
 		"format-keyword-case", "format-function-case",
 		"transpose-is-first-column", "transpose-is-row-col-names",
-		"use-logger"
+		"use-logger",
+		"ai-enable", "ai-has-db-access", "ai-request-attempt-count", "ai-fix-attempt-count", "ai-delay-between-requests", "ai-request-timeout",
+		"ai-explain-query-error", "ai-do-format", "ai-process-nosql", "ai-show-chat", "ai-chat-width", "ai-chat-sid", "ai-chat-word-wrap", "ai-chat-maximized"
 	};
 
 	int ivalues[ICOUNT] = {
@@ -60,7 +62,9 @@ namespace prefs {
 		1, 1, 1,
 		1, 1,
 		0, 0,
-		0
+		0,
+		1, 1, 3, 3, 2000, 5000,
+		1, 1, 1, 0, 200, 0, 1, 0
 	};
 
 	int get(const char* name) {
@@ -87,7 +91,7 @@ namespace prefs {
 		sqlite3_stmt* stmt;
 		if (SQLITE_OK == sqlite3_prepare_v2(db, "select value from prefs where name = ?1", -1, &stmt, 0)) {
 			sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
-			const char* val = SQLITE_ROW == sqlite3_step(stmt) ? (char*)sqlite3_column_text(stmt, 0) : def;
+			const char* val = SQLITE_ROW == sqlite3_step(stmt) && sqlite3_column_type(stmt, 0) != SQLITE_NULL ? (char*)sqlite3_column_text(stmt, 0) : def;
 			value = new char[strlen(val) + 1]{0};
 			strcpy(value, val);
 		}
@@ -104,8 +108,11 @@ namespace prefs {
 				strict ?
 					"update prefs set value = ?2 where name = ?1" :
 					"replace into prefs (name, value) values (?1, ?2)", -1, &stmt, 0)) {
-			sqlite3_bind_text(stmt, 1, name, strlen(name),  SQLITE_TRANSIENT);
-			sqlite3_bind_text(stmt, 2, value, strlen(value),  SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 1, name, -1,  SQLITE_TRANSIENT);
+			if (value)
+				sqlite3_bind_text(stmt, 2, value, -1,  SQLITE_TRANSIENT);
+			else
+				sqlite3_bind_null(stmt, 2);
 
 			res = SQLITE_DONE == sqlite3_step(stmt) && sqlite3_changes(db) == 1;
 		}

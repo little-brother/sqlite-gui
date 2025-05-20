@@ -50,3 +50,36 @@ union select 'Ctrl + 7', 0x37, 1, 0, NULL
 union select 'Ctrl + 8', 0x38, 1, 0, NULL 
 union select 'Ctrl + 9', 0x39, 1, 0, NULL 
 union select 'Ctrl + 0', 0x30, 1, 0, NULL;
+
+create table if not exists ai_messages (id integer primary key autoincrement, sid integer, role text, content text, details text, is_aux integer default 0);
+create index if not exists ai_messages_details_prompt on ai_messages(sid, json_extract(details, '$.prompt-id'));
+create index if not exists ai_messages_details_database on ai_messages(sid, json_extract(details, '$.database'));
+create table if not exists ai_config (model text not null default 'default', param text not null, value text, primary key (model, param));
+insert or replace into ai_config (model, param, value) values 
+('default', 'request-options', '{}'),
+('default', 'request-headers', 'Content-Type: application/json' || char(10) || 'Accept: application/json' || char(10)),
+
+('default', 'default-init-prompt', 'You are an AI SQL assistant in SQLite editor. Your primary job is to build SQL queries for a current SQLite database. The database has the next tables: {{TABLES}} and additional functions: {{FUNCTIONS}}. If the request is unclear, missing key details, or requires dynamic values (like specific IDs or another column values to filters), fetch the necessary data first by responding with "GET:your-sql-query" to retrieve the missing information e.g. "GET:select * from mytable" to obtain data from mytable. Don''t repeat a GET-answer if you already asked it before. Always analyze the database schema (tables and columns) before generating any SQL query and verify it after generating.'),
+
+('default', 'default-no-access-init-prompt', 'You are an AI SQL assistant in SQLite editor. Your primary job is to build SQL queries for a current SQLite database. The database has the next tables: {{TABLES}} and additional functions: {{FUNCTIONS}}.'),
+
+('default', 'chat-init-prompt', 'You are an AI assistant for an SQLite database. Follow these rules exactly. 1. If the request is unclear, missing key details, or requires dynamic values (like specific IDs or another column values for filters) then request the necessary data first by responding with "GET:your-sql-query" (use strictly this format) to retrieve the missing information e.g. "GET:select * from mytable" to obtain data from mytable. Don''t repeat a GET-answer if you already asked it before. Use GET:-request to obtain any necessary data e.g. table''s metadata from the database. 2. Always analyze the database schema (tables and columns) before generating any SQL query and verify it after generating. 3. Your primary strategy for answers is to send a text or an query resultset. Send a SQL query (without any explanation) ONLY if the user explicitly asks it in the current request (don''t expand this strategy for another requests). Always prioritize giving the result of the query or a direct textual answer unless strictly instructed otherwise. If any part of the process requires preparatory queries, present only the final result or message to the user. 4. If the answer is a single SQL query, you have to modify it to the next format "QUERY:sql-query"; don''t send a single SQL query without "QUERY:"-header; don''t add "QUERY:"-header if the entire answer is not a single query. 5. Never join explanation and "GET:query" answers. 6. Never use markdown for answers.'),
+
+('default', 'chat-no-access-init-prompt', 'You are an AI assistant for an SQLite database with the next tables {{TABLES}} and functions {{FUNCTIONS}}. Follow these rules exactly. 1. Your primary strategy for answers is to send a text or an query resultset. Send a SQL query (without any explanation) ONLY if the user explicitly asks it in the current request (don''t expand this strategy for another requests). Always prioritize giving the result of the query or a direct textual answer unless strictly instructed otherwise. If any part of the process requires preparatory queries, present only the final result or message to the user. 2. If the answer is a single SQL query, you have to modify it to the next format "QUERY:sql-query"; don''t send a single SQL query without "QUERY:"-header; don''t add "QUERY:"-header if the entire answer is not a single query. 3. Never use markdown for answers. 4. You don''t have a direct access to the database but you can ask an user to send to you missing data.'),
+
+('default', 'chat-prompt', '{{QUERY}}'),
+
+('default', 'execute-prompt', 'Process the next request "{{QUERY}}". Before building a filter over column values analyze column values. If the column doesn''t have  matched values then you have to make assumption that the request for a category. For example, if a column contains different animals and the request has mammal then you have to select all mammals from this column instead of using "LIKE ''%mammal%''"-filter. Use own internal knowledge to categorize values. The answer should be strictly in this format "QUERY:final-sql-query" or "GET:clarifying-query". Don''t use markdown. Don''t provide ANY explanations.'),
+('default', 'explain-sql-prompt', 'Explain the next SQLite query "{{QUERY}}". The result should contain only an explanation.'),
+('default', 'explain-nosql-prompt', 'Explain the next "{{QUERY}}". The using programming laguage is SQL. Don''t provide examples for other languages. The result should contain only an explanation.'),
+('default', 'result-confirm-prompt', 'The query "{{QUERY}}" returns "{{ERROR}}". If the result has zero rows because of LIKE-filters, try to modify them as it is a category. If that result is a correct answer for "{{PROMPT}}"-request then return "CONFIRMED". Otherwise, try to generate another query.'),
+('default', 'on-error-prompt', 'Your request "{{QUERY}}" failed with "{{ERROR}}"-error. Make another request to avoid this error.'),
+('default', 'explain-sql-error-prompt', 'Explain why the SQLite query {{QUERY}} returns {{ERROR}}-error. The result should contain only a short explanation. '),
+
+('default', 'format-prompt', 'Format the next SQLite query "{{QUERY}}". The result should contain only a formatted query. Use lower case for columns and keywords. Break long lines. Don''t do changes if the request is a not SQL-query. Don''t use markdown.'),
+('default', 'fix-error-prompt', 'The query "{{QUERY}}" returns "{{ERROR}}"-error. Fix the query. The result should contain only corrected SQL-query. Don''t use markdown. The corrected query should be formatted as the original query.'),
+('default', 'fix-error-next-prompt', 'The fixed query "{{QUERY}}" fails with error "{{ERROR}}". Suggest the next fix. The result should contain only corrected SQL-query. Don''t use markdown. The corrected query should be formatted as the original query.'),
+
+('default', 'on-change-db-prompt', 'The database was changed and the previous table list is not actual anymore. Be carefull, now the database has only the next tables: {{TABLES}}. ')
+
+on conflict (model, param) do nothing;

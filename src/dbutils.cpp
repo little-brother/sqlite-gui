@@ -199,4 +199,189 @@ namespace dbutils {
 		sqlite3_result_text(ctx, res, -1, SQLITE_TRANSIENT);
 		delete [] res;
 	}
+
+	char* removeComments(const char *in8) {
+		if (in8 == 0)
+			return 0;
+
+		int len = strlen(in8);
+
+		char* out8 = new char[len + 1] {0};
+		int pos = 0;
+		int opos = 0;
+
+		while (pos < len) {
+			if (in8[pos] == '/' && in8[pos + 1] == '*') {
+				pos += 2;
+				while (pos < len && !(in8[pos - 2] == '*' && in8[pos - 1] == '/'))
+					pos++;
+			}
+
+			if (in8[pos] == '-' && in8[pos + 1] == '-') {
+				pos += 2;
+				while (pos < len && in8[pos] != '\n')
+					pos++;
+			}
+
+			if (in8[pos] == '"' || in8[pos] == '\'' || in8[pos] == '`') {
+				char q = in8[pos];
+
+				do  {
+					out8[opos] = in8[pos];
+					opos++;
+					pos++;
+				} while (pos < len && in8[pos] != q);
+			}
+
+			if (pos < len) {
+				out8[opos] = in8[pos];
+				opos++;
+				pos++;
+			}
+		}
+
+		return out8;
+	}
+
+	bool isSqlQuery(const char* in8) {
+		if (in8 == 0)
+			return false;
+
+		char* text8 = removeComments(in8);
+
+		int len = strlen(text8);
+		int pos = 0;
+		while (!isprint(text8[pos]) && pos < len)
+			pos++;
+
+		char* txt8 = new char[len + 1];
+		strcpy(txt8, text8 + pos);
+		strlwr(txt8);
+
+		bool res = (strstr(txt8, "with") == txt8 && strstr(txt8, "select")) ||
+			(strstr(txt8, "select") == txt8) ||
+			((strstr(txt8, "insert") == txt8 || strstr(txt8, "replace") == txt8) && strstr(txt8, "into")) ||
+			(strstr(txt8, "update") == txt8 && strstr(txt8, "set") && strstr(txt8, "=")) ||
+			(strstr(txt8, "delete") == txt8 && strstr(txt8, "from")) ||
+			((strstr(txt8, "create") == txt8 || (strstr(txt8, "drop") == txt8)) && (strstr(txt8, "index") || strstr(txt8, "table") || strstr(txt8, "view") || strstr(txt8, "trigger"))) ||
+			(strstr(txt8, "alter") == txt8) ||
+			(strstr(txt8, "begin") == txt8) ||
+			(strstr(txt8, "commit") == txt8) ||
+			(strstr(txt8, "rollback") == txt8) ||
+			(strstr(txt8, "attach") == txt8) ||
+			(strstr(txt8, "detach") == txt8) ||
+			(strstr(txt8, "vacuum") == txt8) ||
+			(strstr(txt8, "pragma") == txt8) ||
+			(strstr(txt8, "explain") == txt8 && strstr(txt8, "plan"));
+
+		delete [] text8;
+		delete [] txt8;
+		return res;
+	}
+
+	char* queryCSV(sqlite3* db, const char* query8, bool isColumns, const char* delimiter8, bool isUnixNewLine, int* rowCount, const char* null8) {
+		int capacity = 1024;
+		char* result8 = new char[capacity] {0};
+		int size = 0;
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK == sqlite3_prepare_v2(db, query8, -1, &stmt, 0)) {
+			int colCount = sqlite3_column_count(stmt);
+			char BLOB8[] = "(BLOB)";
+			char NULL8[] = "";
+
+			while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
+				int len = 0;
+
+				for(int i = 0; i < colCount; i++)
+					len += isColumns ? strlen((char*)sqlite3_column_name(stmt, i)) :
+						sqlite3_column_type(stmt, i) == SQLITE_TEXT ?
+						sqlite3_column_bytes(stmt, i) + 1 :
+						20; // int, real, BLOB and null less 20
+
+				len = 2 * len + 2 * colCount; // a"b --> "a""b". See https://en.wikipedia.org/wiki/Comma-separated_values
+				char* line8 = new char[len + 1] {0};
+				int pos = 0;
+				for(int colNo = 0; colNo < colCount; colNo++) {
+					int type = sqlite3_column_type(stmt, colNo);
+					const char* value8 = isColumns ? (const char *)sqlite3_column_name(stmt, colNo)	:
+						type == SQLITE_BLOB ? BLOB8 :
+						type == SQLITE_NULL ? (null8 ? null8 : NULL8) :
+						(const char *)sqlite3_column_text(stmt, colNo);
+
+
+					bool isQ = strchr(value8, '"') || strchr(value8, '\n');
+
+					if (isQ) {
+						line8[pos] = '"';
+						pos++;
+					}
+
+					for (int i = 0; i < (int)strlen(value8); i++) {
+						line8[pos] = value8[i];
+						pos++;
+
+						if (value8[i] == '"') {
+							line8[pos] = '"';
+							pos++;
+						}
+					}
+
+					if (isQ) {
+						line8[pos] = '"';
+						pos++;
+					}
+
+					if (colNo < colCount - 1) {
+						line8[pos] = ',';
+						pos++;
+					}
+				}
+
+				if (!isUnixNewLine) {
+					line8[pos] = '\r';
+					pos++;
+				}
+				line8[pos] = '\n';
+				pos++;
+
+				*rowCount += !isColumns;
+				isColumns = false;
+
+				int lsize = pos;
+				if (capacity - size < lsize + 100) {
+					capacity *= 2;
+					result8 = (char*) realloc(result8, capacity);
+				}
+
+				for (int i = 0; i < lsize; i++)
+					result8[size + i] = line8[i];
+				size += lsize;
+
+				delete [] line8;
+			}
+		}
+
+		sqlite3_finalize(stmt);
+
+		if (size > 2)
+			result8[size - 1 - !isUnixNewLine] = '\0';
+
+		return result8;
+	}
+
+	TCHAR* getQueryError(sqlite3* db, const TCHAR* query16) {
+		char* query8 = utils::utf16to8(query16);
+
+		TCHAR* err16 = 0;
+
+		sqlite3_stmt* stmt;
+		if (SQLITE_OK != sqlite3_prepare_v2(db, query8, -1, &stmt, 0))
+			err16 = utils::utf8to16(sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+
+		delete [] query8;
+
+		return err16;
+	}
 }

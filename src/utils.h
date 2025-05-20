@@ -61,7 +61,7 @@ namespace utils {
 
 	void mergeSort(int indexes[], void* data, int l, int r, BOOL isBackward, BOOL isNums);
 
-	char* httpRequest(const char* method, const char* uri, const char* path, const char* data = 0, int* readBytes = 0, DWORD* statusCode = 0);
+	char* httpRequest(const char* method, const char* uri, const char* headers = 0, const char* data = 0, int* readBytes = 0, DWORD* statusCode = 0, int timeout = 2000);
 	bool downloadFile(const TCHAR* url16, const TCHAR* path16, bool unpack = false);
 
 	SIZE getTextSize(HFONT hFont, const TCHAR* text);

@@ -13,6 +13,7 @@ Small, simple, [powerfull](https://youtu.be/lctkqWD7HTk), fast, free.
 * Edit multiple tables at the same time
 * Colorized data grid
 * Store an execution history and user scripts
+* [AI Assistance](https://github.com/little-brother/sqlite-gui/wiki#ai-assistance)
 * Export/Import data
 * Database comparison
 * Search text in the whole database

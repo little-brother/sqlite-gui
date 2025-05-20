@@ -18,6 +18,7 @@
 				<Linker>
 					<Add library="lib/x32/libsqlite3.a" />
 					<Add library="lib/x32/libtinf.a" />
+					<Add library="lib/x32/dmp.a" />
 				</Linker>
 			</Target>
 			<Target title="Release">
@@ -32,6 +33,7 @@
 					<Add option="-s" />
 					<Add library="lib/x32/libsqlite3.a" />
 					<Add library="lib/x32/libtinf.a" />
+					<Add library="lib/x32/dmp.a" />
 				</Linker>
 			</Target>
 			<Target title="Release x64">
@@ -48,6 +50,7 @@
 					<Add option="-m64" />
 					<Add library="lib/x64/libsqlite3.a" />
 					<Add library="lib/x64/libtinf.a" />
+					<Add library="lib/x64/dmp.a" />
 				</Linker>
 			</Target>
 		</Build>
@@ -74,7 +77,6 @@
 			<Add library="ole32" />
 			<Add library="uuid" />
 			<Add library="uxtheme" />
-			<Add library="advapi32" />
 			<Add directory="lib" />
 		</Linker>
 		<Unit filename="ToDo.txt" />

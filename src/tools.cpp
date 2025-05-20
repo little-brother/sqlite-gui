@@ -725,11 +725,11 @@ namespace tools {
 					char path8[1024];
 					char* sheetId8 = utils::utf16to8(sheetId16);
 					char* googleApiKey8 = prefs::get("google-api-key", "");
-					sprintf(path8, "v4/spreadsheets/%s?key=%s", sheetId8, googleApiKey8);
+					sprintf(path8, "sheets.googleapis.com/v4/spreadsheets/%s?key=%s", sheetId8, googleApiKey8);
 					delete [] sheetId8;
 					delete [] googleApiKey8;
 
-					char* data8 = utils::httpRequest("GET", "sheets.googleapis.com", path8);
+					char* data8 = utils::httpRequest("GET", path8);
 					if (data8) {
 						sqlite3_stmt *stmt;
 						if (SQLITE_OK == sqlite3_prepare_v2(db, "select json_extract(value, '$.properties.title') from json_each(?1, '$.sheets')", -1, &stmt, 0)) {
@@ -843,14 +843,14 @@ namespace tools {
 				char* sheet8 = utils::utf16to8(sheet16);
 				char* range8 = utils::utf16to8(range16);
 				char* googleApiKey8 = prefs::get("google-api-key", "");
-				sprintf(path8, "v4/spreadsheets/%s/values/%s%s%s?key=%s", sheetId8, sheet8, strlen(range8) ? "!" : "", range8, googleApiKey8);
+				sprintf(path8, "sheets.googleapis.com/v4/spreadsheets/%s/values/%s%s%s?key=%s", sheetId8, sheet8, strlen(range8) ? "!" : "", range8, googleApiKey8);
 				delete [] sheetId8;
 				delete [] sheet8;
 				delete [] range8;
 				delete [] googleApiKey8;
 
 				char* create8 = new char[MAX_TEXT_LENGTH]{0};
-				char* data8 = utils::httpRequest("GET", "sheets.googleapis.com", path8);
+				char* data8 = utils::httpRequest("GET", path8);
 				if (data8) {
 					if (SQLITE_OK != sqlite3_exec(db, "drop table if exists temp.googlesheet", NULL, NULL, NULL))
 						showDbError(hWnd);
@@ -4656,12 +4656,6 @@ namespace tools {
 	}
 
 	int exportCSV(TCHAR* path16, TCHAR* query16, TCHAR* err16) {
-		bool isColumns = prefs::get("csv-export-is-columns");
-		int iDelimiter = prefs::get("csv-export-delimiter");
-		int isUnixNewLine = prefs::get("csv-export-is-unix-line");
-
-		const TCHAR* delimiter16 = DELIMITERS[iDelimiter];
-
 		// Use binary mode
 		// https://stackoverflow.com/questions/32143707/how-do-i-stop-fprintf-from-printing-rs-to-file-along-with-n-in-windows
 		FILE* f = _tfopen(path16, TEXT("wb"));
@@ -4671,55 +4665,25 @@ namespace tools {
 		}
 
 		int rowCount = 0;
-		char* sql8 = utils::utf16to8(query16);
-		sqlite3_stmt *stmt;
-		if (SQLITE_OK == sqlite3_prepare_v2(db, sql8, -1, &stmt, 0)) {
-			while (isColumns || (SQLITE_ROW == sqlite3_step(stmt))) {
-				int colCount = sqlite3_column_count(stmt);
-				int size = 0;
-				for(int i = 0; i < colCount; i++)
-					size += sqlite3_column_type(stmt, i) == SQLITE_TEXT ? sqlite3_column_bytes(stmt, i) + 1 : 20;
+		int iDelimiter = prefs::get("csv-export-delimiter");
 
-				// https://en.wikipedia.org/wiki/Comma-separated_values
-				size += colCount + 64; // add place for quotes
-				TCHAR line16[size] = {0};
-				for(int i = 0; i < colCount; i++) {
-					if (i != 0)
-						_tcscat(line16, delimiter16);
+		char* query8 = utils::utf16to8(query16);
+		char* delimiter8 = utils::utf16to8(DELIMITERS[iDelimiter]);
+        char* data8 = dbutils::queryCSV(db, query8, prefs::get("csv-export-is-columns"), delimiter8, prefs::get("csv-export-is-unix-line"), &rowCount);
+        if (rowCount >= 0)
+			fprintf(f, data8 ? data8 : "");
 
-					TCHAR* value16 = utils::utf8to16(
-						isColumns ? (char *)sqlite3_column_name(stmt, i) :
-						sqlite3_column_type(stmt, i) != SQLITE_BLOB ? (char *)sqlite3_column_text(stmt, i) : "(BLOB)");
-					TCHAR* qvalue16 = utils::replaceAll(value16, TEXT("\""), TEXT("\"\""));
-					if (_tcschr(qvalue16, TEXT(',')) || _tcschr(qvalue16, TEXT('"')) || _tcschr(qvalue16, TEXT('\n'))) {
-						int len = _tcslen(qvalue16) + 3;
-						TCHAR val16[len + 1]{0};
-						_sntprintf(val16, len, TEXT("\"%ls\""), qvalue16);
-						_tcscat(line16, val16);
-					} else {
-						_tcscat(line16, qvalue16);
-					}
-					delete [] value16;
-					delete [] qvalue16;
-				}
-
-				_tcscat(line16, isUnixNewLine ? TEXT("\n") : TEXT("\r\n"));
-				char* line8 = utils::utf16to8(line16);
-				fprintf(f, line8);
-				delete [] line8;
-				rowCount += !isColumns;
-				isColumns = false;
-			}
-		} else {
+        if (rowCount == -1 && err16) {
 			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
 			_sntprintf(err16, 1023, _err16);
 			delete [] _err16;
-			rowCount = -1;
-		}
+        }
 
-		sqlite3_finalize(stmt);
-		fclose(f);
-		delete [] sql8;
+        fclose(f);
+        delete [] query8;
+        delete [] delimiter8;
+        if (data8)
+			delete [] data8;
 
 		return rowCount;
 	}
