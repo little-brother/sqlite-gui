@@ -279,8 +279,12 @@ namespace tools {
 		while (!feof(f)) {
 			if (_fgetts(buf, bsize + 1, f)) {
 				if (_tcslen(line) + bsize > size) {
+					// grow by new[]: line is deleted by callers with delete [], and realloc took bytes, not TCHARs
+					TCHAR* line2 = new TCHAR[size * 2 + 1] {0};
+					_tcscpy(line2, line);
+					delete [] line;
+					line = line2;
 					size *= 2;
-					line = (TCHAR*)realloc(line, size + 1);
 				}
 				_tcscat(line, buf);
 
@@ -417,7 +421,7 @@ namespace tools {
 						delimiter = DELIMITERS[ComboBox_GetCurSel(GetDlgItem(hWnd, IDC_DLG_DELIMITER))];
 					}
 
-					TCHAR value[_tcslen(line)];
+					TCHAR value[_tcslen(line) + 1];
 					bool inQuotes = false;
 					int valuePos = 0;
 					int i = 0;
@@ -4577,15 +4581,18 @@ namespace tools {
 			sqlite3_stmt *stmt;
 			rc = SQLITE_OK == sqlite3_prepare_v2(db, insert8, -1, &stmt, 0);
 			if (rc) {
-				while(!feof (f) && rc) {
+				while(!feof (f) && !ferror (f) && rc) { // a read error (broken UTF-8) is not EOF: without ferror the loop never ends
 					TCHAR* line16 = csvReadLine(f);
 					if (lineNo == 0 && isColumns) {
 						lineNo++;
+						delete [] line16;
 						continue;
 					}
 
-					if (_tcslen(line16) == 0)
+					if (_tcslen(line16) == 0) {
+						delete [] line16;
 						continue;
+					}
 
 					int colNo = 0;
 
@@ -4641,9 +4648,13 @@ namespace tools {
 		delete [] create8;
 		delete [] insert8;
 		delete [] delete8;
+		bool isReadError = ferror(f);
 		fclose(f);
 
-		if (!rc) {
+		if (rc && isReadError) {
+			rc = false;
+			_sntprintf(err16, 1023, TEXT("Error: can't read the file. Check the encoding."));
+		} else if (!rc) {
 			TCHAR* _err16 = utils::utf8to16(sqlite3_errmsg(db));
 			_sntprintf(err16, 1023, TEXT("Error: %s"), _err16);
 			delete [] _err16;
