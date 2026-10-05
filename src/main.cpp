@@ -587,7 +587,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			EnumChildWindows(hTabWnd, (WNDENUMPROC)cbEnumChildren, ACTION_RESIZETAB);
 		}
 
-		SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, prefs::get("editor-tab-current"), 0);
+		SendMessage(hMainTabWnd, WMU_TAB_SET_CURRENT, MAX(prefs::get("editor-tab-current"), 0), 0); // -1 disables shortcuts
 	}
 
 	hAiChatWnd = CreateWindowEx(0, WC_STATIC, NULL, WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | SS_NOTIFY, 0, 0, 0, 0, hMainWnd, (HMENU)0, GetModuleHandle(0), NULL);
@@ -659,7 +659,7 @@ LRESULT CALLBACK cbMainWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 			if (prefs::get("restore-editor")) {
 				int tabCurrent = SendMessage(hMainTabWnd, WMU_TAB_GET_CURRENT, 0, 0);
-				prefs::set("editor-tab-current", tabCurrent);
+				prefs::set("editor-tab-current", MAX(tabCurrent, 0));
 
 				int len = GetWindowTextLength(cli.hEditorWnd);
 				TCHAR* text16 = new TCHAR[len + 1]{0};
@@ -5379,8 +5379,8 @@ int executeEditorQuery(char flags, int vkKey) {
 	bool isEmpty = true;
 
 	for (int i = 0; i < size; i++) {
-		if (buf[i] == TEXT('"') || buf[i] == TEXT('\''))
-			quote = (quote == 0) && (buf[i] != quote) ? buf[i] : 0;
+		if (!inComment && (buf[i] == TEXT('"') || buf[i] == TEXT('\''))) // an apostrophe in a comment is not a quote
+			quote = quote == 0 ? buf[i] : buf[i] == quote ? 0 : quote; // a quote closes only the same quote
 
 		if (inComment == 1 && buf[i] == TEXT('\n'))
 			inComment = 0;
@@ -10746,7 +10746,7 @@ bool pasteText (HWND hEditorWnd, bool detectCSV) {
 				return false;
 			}
 			char* clipboard8 = utils::utf16to8(clipboard);
-			fwrite(clipboard8, len, 1, f);
+			fwrite(clipboard8, strlen(clipboard8), 1, f); // len counts UTF-16 chars, UTF-8 needs more bytes
 			delete [] clipboard8;
 			fclose(f);
 
