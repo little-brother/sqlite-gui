@@ -4448,7 +4448,7 @@ LRESULT CALLBACK cbNewTree(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			openDb(path16, HIWORD(GetKeyState(VK_CONTROL)));
 		} else if (_tcscmp(ext16, TEXT(".sql")) == 0) {
 			TCHAR msg16[1024];
-			_stprintf(msg16, 1023, TEXT("Are you sure you want to execute \"%ls\"?"), path16);
+			_sntprintf(msg16, 1023, TEXT("Are you sure you want to execute \"%ls\"?"), path16);
 			if (IDOK == MessageBox(hWnd, msg16, TEXT("Confirmation"), MB_OK) && tools::importSqlFile(path16)) {
 				updateTree();
 				MessageBox(hWnd, TEXT("Done"), TEXT("Info"), MB_OK);
@@ -4907,7 +4907,7 @@ int executeCLIQuery(bool isPlan) {
 	} else {
 		int len = _tcslen(inja16) + 255;
 		TCHAR* res16 =  new TCHAR[len + 1];
-		_stprintf(res16, len, TEXT("Inja script result\n------------------------------------------------------------\n%ls"), inja16);
+		_sntprintf(res16, len, TEXT("Inja script result\n------------------------------------------------------------\n%ls"), inja16);
 
 		if (prefs::get("cli-preserve-inja")) {
 			onCLIQueryEnd(TEXT(""), res16, false, 0);
